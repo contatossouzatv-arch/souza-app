@@ -41,18 +41,18 @@ const ICON_OPTIONS = [
 
 const DEFAULT_REWARD = {
   id: "",
-  title: "Prêmio garantido",
-  subtitle: "Todo mundo sai com alguma recompensa.",
-  reward_type: "points_balance",
-  reward_amount: 25,
-  reward_unit: "saldo",
+  title: "",
+  subtitle: "",
+  reward_type: "xp_total",
+  reward_amount: 0,
+  reward_unit: "xp",
   rarity: "rare",
-  special_label: "Fallback",
+  special_label: "",
   visual_theme: "aurora",
   icon: "sparkles",
   stock_total: 0,
   claimed_count: 0,
-  weight: 100,
+  weight: 1,
   grant_mode: "auto",
   gallery_image_url: "",
   active_from: "",
@@ -60,24 +60,14 @@ const DEFAULT_REWARD = {
   applies_on: "",
   auto_apply: true,
   active: true,
-  is_default: true,
-  is_fallback: true,
+  is_default: false,
+  is_fallback: false,
   daily_cap: 0,
   sort_order: 100,
   asset_ref: "",
 };
 
-const EMPTY_REWARD = {
-  ...DEFAULT_REWARD,
-  title: "",
-  subtitle: "",
-  reward_type: "xp_total",
-  reward_amount: 0,
-  reward_unit: "xp",
-  special_label: "",
-  is_default: false,
-  is_fallback: false,
-};
+const EMPTY_REWARD = { ...DEFAULT_REWARD };
 
 function normalizeRewardRecord(raw = {}) {
   return {

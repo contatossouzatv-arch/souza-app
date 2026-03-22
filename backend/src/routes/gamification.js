@@ -1308,6 +1308,23 @@ function buildCompetitionBoard(entries, cycle, config) {
 }
 
 function normalizeChestRewardDraft(entry = {}) {
+  const allowedRewardTypes = new Set(["xp_total", "weekly_points", "engagement_points", "tickets_active", "points_balance"]);
+  const rewardTypeRaw = String(entry.reward_type || "").trim().toLowerCase();
+  const rewardType = allowedRewardTypes.has(rewardTypeRaw) ? rewardTypeRaw : "xp_total";
+  const rewardUnitByType = {
+    xp_total: "xp",
+    weekly_points: "pontos",
+    engagement_points: "pontos",
+    tickets_active: "bilhetes",
+    points_balance: "saldo",
+  };
+  const titleByType = {
+    xp_total: "XP do Baú",
+    weekly_points: "Pontos semanais",
+    engagement_points: "Pontos de engajamento",
+    tickets_active: "Bilhetes",
+    points_balance: "Saldo do Baú",
+  };
   return {
     id: String(entry.id || ""),
     title: String(entry.title || "Prêmio do Baú").trim() || "Prêmio do Baú",
@@ -1335,6 +1352,46 @@ function normalizeChestRewardDraft(entry = {}) {
     sort_order: clampInt(entry.sort_order, 100, 0, 10000),
     asset_ref: String(entry.asset_ref || "").trim(),
   };
+}
+
+function sanitizeChestRewardDraft(entry = {}) {
+  const allowedRewardTypes = new Set(["xp_total", "weekly_points", "engagement_points", "tickets_active", "points_balance"]);
+  const rewardTypeRaw = String(entry.reward_type || "").trim().toLowerCase();
+  const rewardType = allowedRewardTypes.has(rewardTypeRaw) ? rewardTypeRaw : "xp_total";
+  const rewardUnitByType = {
+    xp_total: "xp",
+    weekly_points: "pontos",
+    engagement_points: "pontos",
+    tickets_active: "bilhetes",
+    points_balance: "saldo",
+  };
+  const titleByType = {
+    xp_total: "XP do Bau",
+    weekly_points: "Pontos semanais",
+    engagement_points: "Pontos de engajamento",
+    tickets_active: "Bilhetes",
+    points_balance: "Saldo do Bau",
+  };
+  return {
+    ...entry,
+    title: String(entry.title || "").trim() || titleByType[rewardType] || "Premio do Bau",
+    reward_type: rewardType,
+    reward_unit: String(entry.reward_unit || "").trim() || rewardUnitByType[rewardType] || "",
+  };
+}
+
+function validateChestRewardDraft(entry = {}) {
+  const allowedRewardTypes = new Set(["xp_total", "weekly_points", "engagement_points", "tickets_active", "points_balance"]);
+  if (!String(entry.title || "").trim()) {
+    const error = new Error("Informe o nome do premio.");
+    error.status = 400;
+    throw error;
+  }
+  if (!allowedRewardTypes.has(String(entry.reward_type || "").trim().toLowerCase())) {
+    const error = new Error("Tipo de premio invalido.");
+    error.status = 400;
+    throw error;
+  }
 }
 
 async function listChestDailyUsage(chestDayKey = "") {
@@ -2837,6 +2894,7 @@ router.get("/admin/daily-chest/config", requireAuth, requireAdmin, async (_req, 
   const settingsMap = await listAppSettingsMap();
   const rewards = (await listEntity("DailyChestRewardConfig", "-updated_date", 200))
     .map(normalizeChestRewardDraft)
+    .map(sanitizeChestRewardDraft)
     .sort((a, b) => a.sort_order - b.sort_order || a.title.localeCompare(b.title));
   const chestDayKey = buildDailyChestWindowKey(settingsMap);
   const dailyUsage = await listChestDailyUsage(chestDayKey);
@@ -2966,7 +3024,8 @@ router.post("/admin/daily-chest/access-code/generate", requireAuth, requireAdmin
 });
 
 router.post("/admin/daily-chest/rewards", requireAuth, requireAdmin, async (req, res) => {
-  const reward = normalizeChestRewardDraft(req.body || {});
+  const reward = sanitizeChestRewardDraft(normalizeChestRewardDraft(req.body || {}));
+  validateChestRewardDraft(reward);
   const created = await createEntity("DailyChestRewardConfig", reward);
   await appendAdminAudit({
     domain: "daily_chest_reward",
@@ -2987,7 +3046,8 @@ router.patch("/admin/daily-chest/rewards/:id", requireAuth, requireAdmin, async 
   if (!existing) {
     return res.status(404).json({ error: "Prêmio não encontrado." });
   }
-  const next = normalizeChestRewardDraft({ ...existing, ...(req.body || {}) });
+  const next = sanitizeChestRewardDraft(normalizeChestRewardDraft({ ...existing, ...(req.body || {}) }));
+  validateChestRewardDraft(next);
   const updated = await updateEntity("DailyChestRewardConfig", rewardId, next);
   await appendAdminAudit({
     domain: "daily_chest_reward",
