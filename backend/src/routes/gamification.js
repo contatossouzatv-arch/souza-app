@@ -1730,8 +1730,8 @@ router.get("/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
   const enrichedUser = {
     ...item,
     avatar_url: user.profile_image_url || "",
-    created_at: user.created_at ? toIso(user.created_at) : null,
-    updated_at: user.updated_at ? toIso(user.updated_at) : null,
+    created_at: user.created_at || user.created_date || null,
+    updated_at: user.updated_at || user.updated_date || null,
     login_count: Number(loginCountResult.rows[0]?.total || 0),
     ips: ipList.map((entry) => ({
       ...entry,

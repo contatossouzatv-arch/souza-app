@@ -456,6 +456,8 @@ export async function ensureDevAdmin(config) {
 
 export function normalizeUser(row) {
   if (!row) return null;
+  const createdAt = row.created_at ? toIso(row.created_at) : null;
+  const updatedAt = row.updated_at ? toIso(row.updated_at) : null;
   return {
     id: row.id,
     email: row.email,
@@ -481,8 +483,10 @@ export function normalizeUser(row) {
     terms_accepted: Boolean(row.terms_accepted),
     privacy_accepted: Boolean(row.privacy_accepted),
     onboarding_completed: Boolean(row.onboarding_completed),
-    created_date: toIso(row.created_at),
-    updated_date: toIso(row.updated_at),
+    created_at: createdAt,
+    updated_at: updatedAt,
+    created_date: createdAt,
+    updated_date: updatedAt,
   };
 }
 

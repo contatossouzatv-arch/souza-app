@@ -94,7 +94,25 @@ export default function Login() {
             await checkAppState();
             navigate("/");
           } catch (err) {
-            setError(err?.message || "Falha ao entrar com Google");
+            const message = String(err?.message || "");
+            if (message.toUpperCase().includes("2FA_REQUIRED")) {
+              try {
+                window.sessionStorage.setItem(
+                  LOGIN_2FA_PENDING_KEY,
+                  JSON.stringify({
+                    provider: "google",
+                    credential: response.credential,
+                    email: "",
+                    created_at: Date.now(),
+                  })
+                );
+              } catch {
+                // ignore sessionStorage errors
+              }
+              navigate("/login-2fa");
+              return;
+            }
+            setError(message || "Falha ao entrar com Google");
           } finally {
             const elapsed = Date.now() - startedAt;
             if (elapsed < MIN_LOADING_MS) {

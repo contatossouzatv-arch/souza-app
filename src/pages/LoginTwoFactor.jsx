@@ -31,12 +31,17 @@ export default function LoginTwoFactor() {
         navigate("/login", { replace: true });
         return;
       }
+
       const parsed = JSON.parse(raw);
-      if (!parsed?.email || !parsed?.password) {
+      const isPasswordFlow = parsed?.provider !== "google" && parsed?.email && parsed?.password;
+      const isGoogleFlow = parsed?.provider === "google" && parsed?.credential;
+
+      if (!isPasswordFlow && !isGoogleFlow) {
         window.sessionStorage.removeItem(LOGIN_2FA_PENDING_KEY);
         navigate("/login", { replace: true });
         return;
       }
+
       setPendingLogin(parsed);
     } catch {
       window.sessionStorage.removeItem(LOGIN_2FA_PENDING_KEY);
@@ -62,12 +67,19 @@ export default function LoginTwoFactor() {
     const startedAt = Date.now();
     setLoading(true);
     setError("");
+
     try {
-      await base44.auth.login({
-        email: pendingLogin.email,
-        password: pendingLogin.password,
-        otp: String(otp || "").replace(/\D/g, "").slice(0, 8),
-      });
+      const normalizedOtp = String(otp || "").replace(/\D/g, "").slice(0, 8);
+      if (pendingLogin.provider === "google") {
+        await base44.auth.loginWithGoogle(pendingLogin.credential, normalizedOtp);
+      } else {
+        await base44.auth.login({
+          email: pendingLogin.email,
+          password: pendingLogin.password,
+          otp: normalizedOtp,
+        });
+      }
+
       window.sessionStorage.removeItem(LOGIN_2FA_PENDING_KEY);
       await checkAppState();
       navigate("/");
@@ -125,7 +137,9 @@ export default function LoginTwoFactor() {
           <p className="mt-2 text-center text-sm text-slate-300">
             Digite o código do autenticador para concluir o login.
           </p>
-          <p className="mt-1 text-center text-xs text-cyan-300">{pendingLogin?.email || ""}</p>
+          <p className="mt-1 text-center text-xs text-cyan-300">
+            {pendingLogin?.provider === "google" ? "Login com Google" : pendingLogin?.email || ""}
+          </p>
 
           <form onSubmit={handleVerify} className="mt-5 space-y-3">
             <div className="space-y-1.5">

@@ -996,6 +996,7 @@ export default function Profile() {
   const uploadImageMutation = useMutation({
     mutationFn: (file) => base44.auth.uploadProfileImage(file),
     onSuccess: (response) => {
+      const isPendingStatus = response?.user?.profile_image_status === "manual_review" || response?.user?.profile_image_status === "pending";
       if (response?.user) {
         setUser(response.user);
         setEditData((prev) => ({ ...prev, imageMode: "photo" }));
@@ -1003,6 +1004,13 @@ export default function Profile() {
       queryClient.invalidateQueries({ queryKey: ["inicio-users"] });
       setSelectedEditPhotoFile(null);
       setSelectedEditPhotoPreview((prev) => {
+        if (isPendingStatus) {
+          setPrivatePhotoPreview((current) => {
+            if (current && current !== prev) URL.revokeObjectURL(current);
+            return prev || "";
+          });
+          return "";
+        }
         if (prev) URL.revokeObjectURL(prev);
         return "";
       });

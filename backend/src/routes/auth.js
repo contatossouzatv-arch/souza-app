@@ -379,7 +379,7 @@ router.post("/login", loginRateLimiter, async (req, res) => {
 });
 
 router.post("/google", async (req, res) => {
-  const { credential } = req.body || {};
+  const { credential, otp } = req.body || {};
   if (!credential) {
     return res.status(400).json({ error: "credential is required" });
   }
@@ -389,6 +389,7 @@ router.post("/google", async (req, res) => {
   }
 
   try {
+    const meta = requestMeta(req);
     const ticket = await googleClient.verifyIdToken({
       idToken: credential,
       audience: env.googleClientId,
@@ -399,6 +400,12 @@ router.post("/google", async (req, res) => {
     const googleId = payload?.sub;
 
     if (!email || !googleId) {
+      await createLoginAttempt({
+        identifier: email || googleId || "google",
+        ip: meta.ip,
+        user_agent: meta.user_agent,
+        success: false,
+      });
       return res.status(400).json({ error: "Token Google inválido" });
     }
 
@@ -420,7 +427,39 @@ router.post("/google", async (req, res) => {
       }
     }
 
+    const userRow = await findUserRowById(user.id);
+    if (Boolean(userRow?.two_factor_enabled) && userRow?.two_factor_secret) {
+      if (!String(otp || "").trim()) {
+        await createLoginAttempt({
+          identifier: email,
+          ip: meta.ip,
+          user_agent: meta.user_agent,
+          success: false,
+        });
+        await auditEvent(req, "LOGIN_2FA_REQUIRED", user.id, { method: "google" });
+        return res.status(401).json({ error: "2FA_REQUIRED" });
+      }
+
+      const otpOk = verifyTotp(userRow.two_factor_secret, otp);
+      if (!otpOk) {
+        await createLoginAttempt({
+          identifier: email,
+          ip: meta.ip,
+          user_agent: meta.user_agent,
+          success: false,
+        });
+        await auditEvent(req, "LOGIN_2FA_FAILED", user.id, { method: "google" });
+        return res.status(401).json({ error: "Código 2FA inválido." });
+      }
+    }
+
     const activeUser = await reactivateIfNeeded(user.id);
+    await createLoginAttempt({
+      identifier: email,
+      ip: meta.ip,
+      user_agent: meta.user_agent,
+      success: true,
+    });
     const session = await issueSession(req, activeUser);
     await auditEvent(req, "USER_LOGGED_IN", activeUser.id, { method: "google" });
     return res.json(session);

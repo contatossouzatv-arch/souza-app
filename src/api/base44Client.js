@@ -164,10 +164,26 @@ async function requestBlob(path, options = {}) {
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(buildUrl(path), {
+  let response = await fetch(buildUrl(path), {
     ...options,
     headers,
   });
+
+  const skipRefresh =
+    Boolean(options.__skipAuthRefresh) || path === "/api/auth/refresh" || path === "/api/auth/login";
+
+  if (response.status === 401 && !skipRefresh && hasToken() && getRefreshToken()) {
+    const refreshed = await tryRefreshSession();
+    if (refreshed) {
+      const retryHeaders = { ...(options.headers || {}) };
+      const retryToken = getToken();
+      if (retryToken) retryHeaders.Authorization = `Bearer ${retryToken}`;
+      response = await fetch(buildUrl(path), {
+        ...options,
+        headers: retryHeaders,
+      });
+    }
+  }
 
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
@@ -290,11 +306,11 @@ export const base44 = {
       return data;
     },
 
-    async loginWithGoogle(credential) {
+    async loginWithGoogle(credential, otp) {
       const data = await request("/api/auth/google", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ credential }),
+        body: JSON.stringify({ credential, otp }),
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
