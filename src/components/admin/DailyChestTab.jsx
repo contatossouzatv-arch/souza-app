@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Card } from "@/components/ui/card";
@@ -338,6 +338,7 @@ export default function DailyChestTab() {
   const queryClient = useQueryClient();
   const [settingsDraft, setSettingsDraft] = React.useState({});
   const [rewardDraft, setRewardDraft] = React.useState(DEFAULT_REWARD);
+  const [selectedRewardId, setSelectedRewardId] = React.useState("");
   const [simulation, setSimulation] = React.useState(null);
   const [planner, setPlanner] = React.useState({
     people: 200,
@@ -362,9 +363,29 @@ export default function DailyChestTab() {
   }, [data?.settings]);
 
   React.useEffect(() => {
-    const first = Array.isArray(data?.rewards) ? normalizeRewardRecord(data.rewards[0]) : null;
-    setRewardDraft(first || DEFAULT_REWARD);
-  }, [data?.rewards]);
+    const rewards = Array.isArray(data?.rewards) ? data.rewards.map((entry) => normalizeRewardRecord(entry)) : [];
+    if (rewards.length === 0) {
+      setRewardDraft(DEFAULT_REWARD);
+      setSelectedRewardId("");
+      return;
+    }
+
+    const selected = rewards.find((entry) => entry.id === selectedRewardId);
+    if (selected) {
+      setRewardDraft(selected);
+      return;
+    }
+
+    const current = rewards.find((entry) => entry.id === rewardDraft.id);
+    if (current) {
+      setRewardDraft(current);
+      setSelectedRewardId(current.id || "");
+      return;
+    }
+
+    setRewardDraft(rewards[0]);
+    setSelectedRewardId(rewards[0]?.id || "");
+  }, [data?.rewards, rewardDraft.id, selectedRewardId]);
 
   const saveSettingsMutation = useMutation({
     mutationFn: () => base44.adminDailyChest.saveSettings(settingsDraft),
@@ -379,17 +400,36 @@ export default function DailyChestTab() {
 
   const saveRewardMutation = useMutation({
     mutationFn: () => {
+      const payload = normalizeRewardRecord(rewardDraft);
       if (rewardDraft.id) {
-        return base44.adminDailyChest.updateReward(rewardDraft.id, rewardDraft);
+        return base44.adminDailyChest.updateReward(rewardDraft.id, payload);
       }
-      return base44.adminDailyChest.createReward(rewardDraft);
+      return base44.adminDailyChest.createReward(payload);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      const normalized = normalizeRewardRecord(result || rewardDraft);
+      setRewardDraft(normalized);
+      setSelectedRewardId(normalized.id || "");
       queryClient.invalidateQueries({ queryKey: ["admin-daily-chest-config-v2"] });
       toast({ title: "Prêmio salvo", description: "O pool do Baú Diário foi persistido no backend." });
     },
     onError: (error) => {
       toast({ variant: "destructive", title: "Falha ao salvar prêmio", description: error?.message || "Tente novamente." });
+    },
+  });
+
+  const deleteRewardMutation = useMutation({
+    mutationFn: (rewardId) => base44.adminDailyChest.deleteReward(rewardId),
+    onSuccess: (_result, rewardId) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-daily-chest-config-v2"] });
+      if (String(selectedRewardId || "") === String(rewardId || "")) {
+        setRewardDraft(DEFAULT_REWARD);
+        setSelectedRewardId("");
+      }
+      toast({ title: "Prêmio excluído", description: "O prêmio do Baú Diário foi removido do pool." });
+    },
+    onError: (error) => {
+      toast({ variant: "destructive", title: "Falha ao excluir prêmio", description: error?.message || "Tente novamente." });
     },
   });
 
@@ -724,7 +764,7 @@ export default function DailyChestTab() {
                       <p className="font-semibold text-white">{entry.user_label}</p>
                       <p className="mt-1 text-sm text-slate-200">
                         {entry.title}
-                        {entry.reward_amount ? ` • ${entry.reward_amount} ${entry.reward_unit || ""}` : ""}
+                        {entry.reward_amount ? ` â€¢ ${entry.reward_amount} ${entry.reward_unit || ""}` : ""}
                       </p>
                       {entry.subtitle ? <p className="mt-1 text-xs text-slate-400">{entry.subtitle}</p> : null}
                     </div>
@@ -969,7 +1009,7 @@ export default function DailyChestTab() {
 
         <Button onClick={() => saveSettingsMutation.mutate()} disabled={saveSettingsMutation.isPending} className="mt-6 bg-cyan-500 font-bold text-slate-950 hover:bg-cyan-400">
           {saveSettingsMutation.isPending ? "Salvando..." : "Salvar configurações do baú"}
-        </Button>
+          </Button>
       </Card>
 
       <Card className="border-slate-800 bg-slate-900/80 p-6">
@@ -1113,7 +1153,7 @@ export default function DailyChestTab() {
                       <div>
                         <p className="font-semibold text-white">{entry.title}</p>
                         <p className="mt-1 text-sm text-slate-400">
-                          Cap sugerido: {formatNumber(entry.suggestedCap)} por dia • Peso sugerido: {formatNumber(entry.suggestedWeight)}
+                          Cap sugerido: {formatNumber(entry.suggestedCap)} por dia â€¢ Peso sugerido: {formatNumber(entry.suggestedWeight)}
                         </p>
                       </div>
                       <div className="rounded-xl bg-white/5 px-3 py-2 text-right text-xs text-slate-200">
@@ -1141,7 +1181,7 @@ export default function DailyChestTab() {
               Monte prêmios limitados, especiais e um fallback garantido. O formulário se adapta ao tipo escolhido.
             </p>
           </div>
-          <Button type="button" variant="outline" onClick={() => setRewardDraft(DEFAULT_REWARD)} className="border-slate-700 bg-slate-950/60 text-white">
+          <Button type="button" variant="outline" onClick={() => { setRewardDraft(DEFAULT_REWARD); setSelectedRewardId(""); }} className="border-slate-700 bg-slate-950/60 text-white">
             Novo prêmio
           </Button>
         </div>
@@ -1336,9 +1376,22 @@ export default function DailyChestTab() {
           </SectionCard>
         </div>
 
-        <Button onClick={() => saveRewardMutation.mutate()} disabled={saveRewardMutation.isPending} className="mt-6 bg-emerald-400 font-bold text-slate-950 hover:bg-emerald-300">
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Button onClick={() => saveRewardMutation.mutate()} disabled={saveRewardMutation.isPending} className="bg-emerald-400 font-bold text-slate-950 hover:bg-emerald-300">
           {saveRewardMutation.isPending ? "Salvando..." : "Salvar prêmio"}
         </Button>
+          {rewardDraft.id ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => deleteRewardMutation.mutate(rewardDraft.id)}
+              disabled={deleteRewardMutation.isPending}
+              className="border-red-500/40 bg-red-500/10 text-red-100 hover:bg-red-500/20"
+            >
+              {deleteRewardMutation.isPending ? "Excluindo..." : "Excluir prêmio"}
+            </Button>
+          ) : null}
+        </div>
       </Card>
 
       <Card className="border-slate-800 bg-slate-900/80 p-6">
@@ -1371,7 +1424,10 @@ export default function DailyChestTab() {
               <button
                 type="button"
                 key={entry.id}
-                  onClick={() => setRewardDraft(normalizeRewardRecord(entry))}
+                  onClick={() => {
+                    setRewardDraft(normalizeRewardRecord(entry));
+                    setSelectedRewardId(String(entry.id || ""));
+                  }}
                 className="block w-full rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-left transition hover:border-emerald-400/40"
               >
                 <div className="flex items-start justify-between gap-3">
@@ -1385,10 +1441,10 @@ export default function DailyChestTab() {
                 </div>
                 <div className="mt-3 grid gap-2 text-sm text-slate-400">
                   <p>
-                    {entry.reward_amount} {entry.reward_unit || typeMeta.unitPlaceholder} • {entry.rarity || "rare"}
+                    {entry.reward_amount} {entry.reward_unit || typeMeta.unitPlaceholder} â€¢ {entry.rarity || "rare"}
                   </p>
                   <p>
-                    Hoje: {usage?.claimed_count ?? 0}/{entry.daily_cap || "ilimitado"} • Estoque: {entry.claimed_count ?? 0}/{entry.stock_total || "ilimitado"}
+                    Hoje: {usage?.claimed_count ?? 0}/{entry.daily_cap || "ilimitado"} â€¢ Estoque: {entry.claimed_count ?? 0}/{entry.stock_total || "ilimitado"}
                   </p>
                   <p>
                     Peso {entry.weight} • {entry.active ? "ativo" : "inativo"} • {entry.auto_apply ? "entrega automática" : "entrega manual"}

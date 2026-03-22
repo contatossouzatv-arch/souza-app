@@ -1219,6 +1219,12 @@ export const base44 = {
         body: JSON.stringify(payload),
       });
     },
+
+    async deleteReward(id) {
+      return request(`/api/admin/daily-chest/rewards/${id}`, {
+        method: "DELETE",
+      });
+    },
   },
 
   adminUsers: {

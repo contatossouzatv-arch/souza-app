@@ -3,6 +3,7 @@ import { requireAdmin, requireAuth } from "../middleware/auth.js";
 import {
   createEntity,
   createSecurityEvent,
+  deleteEntity,
   getEntityById,
   listEntity,
   pool,
@@ -1050,6 +1051,81 @@ async function persistSnapshots(byUser, cycleKey = "") {
   }
 }
 
+async function reconcileSnapshotsWithAuthoritativeBalances(byUser, cycleKey = "") {
+  const scopedCycleKey = String(cycleKey || "");
+  const authoritativeLedgerRows = await pool.query(
+    `SELECT user_id, metric_key, cycle_key, amount, source_type, source_ref, occurred_at, metadata
+       FROM user_metric_ledger
+      WHERE metric_key = ANY($1::text[])
+        AND source_type = ANY($2::text[])
+        AND (
+          (metric_key = 'weekly_points' AND cycle_key = $3)
+          OR (metric_key <> 'weekly_points' AND cycle_key = '')
+        )
+      ORDER BY occurred_at ASC, created_at ASC`,
+    [["xp_total", "engagement_points", "weekly_points"], ["daily_chest_reward", "admin_adjustment"], scopedCycleKey]
+  );
+
+  authoritativeLedgerRows.rows.forEach((row) => {
+    const userId = String(row.user_id || "").trim();
+    const metricKey = String(row.metric_key || "").trim();
+    if (!userId || !metricKey) return;
+    const userState = byUser[userId];
+    if (!userState) return;
+
+    const sourceType = String(row.source_type || "").trim() || "authoritative";
+    const sourceRef = String(row.source_ref || "").trim() || "unknown";
+    addMetric(
+      userState,
+      metricKey,
+      Number(row.amount || 0),
+      `authoritative.${sourceType}:${sourceRef}`,
+      row.occurred_at || new Date().toISOString(),
+      {
+        type: "authoritative_ledger_reconciliation",
+        source_type: sourceType,
+        source_ref: sourceRef,
+        ...(row.metadata && typeof row.metadata === "object" ? row.metadata : {}),
+      }
+    );
+  });
+
+  const balanceRows = await pool.query(
+    `SELECT user_id, metric_key, cycle_key, amount
+       FROM user_metric_balances
+      WHERE metric_key = ANY($1::text[])
+        AND (
+          (metric_key = 'weekly_points' AND cycle_key = $2)
+          OR (metric_key <> 'weekly_points' AND cycle_key = '')
+        )`,
+    [["xp_total", "engagement_points", "weekly_points"], scopedCycleKey]
+  );
+
+  balanceRows.rows.forEach((row) => {
+    const userId = String(row.user_id || "").trim();
+    const metricKey = String(row.metric_key || "").trim();
+    if (!userId || !metricKey) return;
+    const userState = byUser[userId];
+    if (!userState) return;
+
+    const authoritativeAmount = Math.max(0, Number(row.amount || 0));
+    const currentAmount = Math.max(0, Number(userState[metricKey] || 0));
+    if (authoritativeAmount <= currentAmount) return;
+
+    if (!userState.metricBreakdown[metricKey]) userState.metricBreakdown[metricKey] = {};
+    if (!userState.metricBreakdownMeta[metricKey]) userState.metricBreakdownMeta[metricKey] = {};
+    userState[metricKey] = authoritativeAmount;
+    userState.metricBreakdown[metricKey].authoritative_balance_floor = authoritativeAmount;
+    userState.metricBreakdownMeta[metricKey].authoritative_balance_floor = {
+      type: "authoritative_balance_floor",
+      metric_key: metricKey,
+      latestOccurredAt: new Date().toISOString(),
+    };
+  });
+
+  return byUser;
+}
+
 function computeAchievements(metrics, badgeRules = []) {
   return (Array.isArray(badgeRules) ? badgeRules : [])
     .filter((rule) => {
@@ -1148,6 +1224,7 @@ async function buildGamificationStateFresh() {
     cycle,
     dailyCheckInConfig,
   });
+  await reconcileSnapshotsWithAuthoritativeBalances(snapshots, cycle.cycle_key);
   await persistSnapshots(snapshots, cycle.cycle_key);
 
   const leaderboardEntries = Object.values(snapshots)
@@ -2923,6 +3000,34 @@ router.patch("/admin/daily-chest/rewards/:id", requireAuth, requireAdmin, async 
   });
   emitEntityChanged(req, "DailyChestRewardConfig", rewardId, "updated");
   res.json(updated);
+});
+
+router.delete("/admin/daily-chest/rewards/:id", requireAuth, requireAdmin, async (req, res) => {
+  const rewardId = String(req.params.id || "");
+  const existing = await getEntityById("DailyChestRewardConfig", rewardId);
+  if (!existing) {
+    return res.status(404).json({ error: "Prêmio não encontrado." });
+  }
+
+  await pool.query(
+    `DELETE FROM daily_chest_reward_daily_usage
+      WHERE reward_config_id = $1`,
+    [rewardId]
+  );
+  await deleteEntity("DailyChestRewardConfig", rewardId);
+
+  await appendAdminAudit({
+    domain: "daily_chest_reward",
+    action: "delete_reward",
+    targetKey: rewardId,
+    beforeData: existing,
+    afterData: {},
+    adminUserId: req.auth.sub,
+    adminEmail: req.auth.email,
+  });
+
+  emitEntityChanged(req, "DailyChestRewardConfig", rewardId, "deleted");
+  res.json({ ok: true, id: rewardId });
 });
 
 export default router;
