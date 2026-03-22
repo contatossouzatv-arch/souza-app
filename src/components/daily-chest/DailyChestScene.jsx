@@ -897,7 +897,7 @@ export default function DailyChestScene({
       return Math.hypot(dx, dy);
     }
 
-    renderer.domElement.style.willChange = "filter, transform";
+    renderer.domElement.style.willChange = "transform";
     renderer.domElement.style.touchAction = "none";
 
     function handlePointerDown(event) {
@@ -1153,7 +1153,6 @@ export default function DailyChestScene({
         : stateRef.spinTargetRotation;
       stateRef.spinVelocity = (spinAngle - stateRef.lastSpinAngle) / Math.max(dt, 0.001);
       stateRef.lastSpinAngle = spinAngle;
-      const spinBlur = clamp(Math.abs(stateRef.spinVelocity) * 0.055, 0, 1.6);
       stateRef.revealElapsed = clamp(stateRef.revealElapsed + (shouldOpen ? dt * 1.9 : -dt * 3.5), 0, 1.4);
       const revealProgress = clamp(stateRef.revealElapsed, 0, 1);
       const revealEase = 1 - Math.pow(1 - revealProgress, 3);
@@ -1187,7 +1186,7 @@ export default function DailyChestScene({
 
       renderer.domElement.style.filter = runtime.stageState === "locked"
         ? "grayscale(1) brightness(0.72)"
-        : `blur(${spinBlur.toFixed(2)}px) saturate(${(1 + spinBlur * 0.08).toFixed(2)})`;
+        : "none";
 
       closedChest.visible = true;
       closedChest.scale.setScalar(1 - revealEase * 0.74);
