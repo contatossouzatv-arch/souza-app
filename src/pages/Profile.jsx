@@ -99,6 +99,10 @@ const DEFAULT_AVATAR_ID =
   avatarOptions.find((item) => item.id.toLowerCase().includes("avatar padrao perfil sem foto"))?.id ||
   avatarOptions[0]?.id ||
   "";
+const defaultAvatar =
+  avatarOptions.find((item) => item.id === DEFAULT_AVATAR_ID)?.src ||
+  avatarOptions[0]?.src ||
+  "";
 const SUPPORTED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp|gif)$/i;
 const SUPPORTED_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
 const BADGE_RULES_KEY = "achievement_badge_rules_v1";
