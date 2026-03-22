@@ -85,6 +85,10 @@ export function createApp(io) {
   app.use(express.urlencoded({ extended: true }));
   app.use(buildRateLimiter());
 
+  app.get("/", (_req, res) => {
+    res.type("text/plain").send("API SOUZA ONLINE");
+  });
+
   app.get("/health", (_req, res) => {
     res.json({
       ok: true,
