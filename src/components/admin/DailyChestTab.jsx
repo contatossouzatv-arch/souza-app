@@ -317,6 +317,7 @@ export default function DailyChestTab() {
     cashWinsPerUserDay: 1,
   });
   const accessLinkReadyRef = React.useRef(false);
+  const lastPersistedAccessLinkRef = React.useRef("");
 
   const { data } = useQuery({
     queryKey: ["admin-daily-chest-config-v2"],
@@ -326,6 +327,7 @@ export default function DailyChestTab() {
 
   React.useEffect(() => {
     setSettingsDraft(data?.settings || {});
+    lastPersistedAccessLinkRef.current = String(data?.settings?.daily_chest_access_group_link ?? "");
   }, [data?.settings]);
 
   React.useEffect(() => {
@@ -389,6 +391,7 @@ export default function DailyChestTab() {
         daily_chest_access_group_link: link,
       }),
     onSuccess: () => {
+      lastPersistedAccessLinkRef.current = String(settingsDraft.daily_chest_access_group_link ?? "");
       queryClient.invalidateQueries({ queryKey: ["admin-daily-chest-config-v2"] });
     },
     onError: (error) => {
@@ -557,12 +560,20 @@ export default function DailyChestTab() {
       return;
     }
 
+    if (currentLink === lastPersistedAccessLinkRef.current) {
+      return;
+    }
+
+    if (saveAccessGroupLinkMutation.isPending) {
+      return;
+    }
+
     const timeoutId = window.setTimeout(() => {
       saveAccessGroupLinkMutation.mutate(currentLink);
-    }, 700);
+    }, 1200);
 
     return () => window.clearTimeout(timeoutId);
-  }, [saveAccessGroupLinkMutation, settingsDraft.daily_chest_access_group_link]);
+  }, [saveAccessGroupLinkMutation, saveAccessGroupLinkMutation.isPending, settingsDraft.daily_chest_access_group_link]);
 
   return (
     <div className="mt-6 space-y-6">
