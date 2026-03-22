@@ -67,6 +67,18 @@ const DEFAULT_REWARD = {
   asset_ref: "",
 };
 
+const EMPTY_REWARD = {
+  ...DEFAULT_REWARD,
+  title: "",
+  subtitle: "",
+  reward_type: "xp_total",
+  reward_amount: 0,
+  reward_unit: "xp",
+  special_label: "",
+  is_default: false,
+  is_fallback: false,
+};
+
 function normalizeRewardRecord(raw = {}) {
   return {
     ...DEFAULT_REWARD,
@@ -369,7 +381,7 @@ export default function DailyChestTab() {
   React.useEffect(() => {
     const rewards = Array.isArray(data?.rewards) ? data.rewards.map((entry) => normalizeRewardRecord(entry)) : [];
     if (rewards.length === 0) {
-      setRewardDraft(DEFAULT_REWARD);
+      setRewardDraft(EMPTY_REWARD);
       setSelectedRewardId("");
       return;
     }
@@ -427,7 +439,7 @@ export default function DailyChestTab() {
     onSuccess: (_result, rewardId) => {
       queryClient.invalidateQueries({ queryKey: ["admin-daily-chest-config-v2"] });
       if (String(selectedRewardId || "") === String(rewardId || "")) {
-        setRewardDraft(DEFAULT_REWARD);
+        setRewardDraft(EMPTY_REWARD);
         setSelectedRewardId("");
       }
       toast({ title: "Prêmio excluído", description: "O prêmio do Baú Diário foi removido do pool." });
@@ -1185,7 +1197,7 @@ export default function DailyChestTab() {
               Monte prêmios limitados, especiais e um fallback garantido. O formulário se adapta ao tipo escolhido.
             </p>
           </div>
-          <Button type="button" variant="outline" onClick={() => { setRewardDraft(DEFAULT_REWARD); setSelectedRewardId(""); }} className="border-slate-700 bg-slate-950/60 text-white">
+          <Button type="button" variant="outline" onClick={() => { setRewardDraft(EMPTY_REWARD); setSelectedRewardId(""); }} className="border-slate-700 bg-slate-950/60 text-white">
             Novo prêmio
           </Button>
         </div>
