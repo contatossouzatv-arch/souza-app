@@ -11,6 +11,7 @@ import {
   countFailedLoginAttemptsSince,
   createLoginAttempt,
   createPasswordResetToken,
+  createUserProfileImageVersion,
   createRefreshToken,
   createSecurityEvent,
   findUserRowById,
@@ -20,7 +21,9 @@ import {
   findUserById,
   findUserPrivateById,
   findUserRowByEmail,
+  getUserProfileImageVersion,
   listUsersByProfileImageStatus,
+  listUserProfileImageVersions,
   markPasswordResetTokenUsed,
   getUserProfileImages,
   revokeRefreshTokenById,
@@ -38,6 +41,7 @@ import {
   signAccessToken,
 } from "../auth.js";
 import { env } from "../config/env.js";
+import { sendPasswordResetEmail } from "../lib/mailer.js";
 
 const router = Router();
 const googleClient = new OAuth2Client();
@@ -181,6 +185,23 @@ function buildProfileImageUrl(req, userId) {
   }
 
   return `${configuredBase}${relativePath}`;
+}
+
+function buildProfileImageVersionUrl(req, versionId) {
+  const configuredBase = String(env.uploadsBaseUrl || "").trim().replace(/\/$/, "");
+  const relativePath = `/api/auth/profile-image-version/${versionId}`;
+  if (!configuredBase) return relativePath;
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(configuredBase)) {
+    return relativePath;
+  }
+  return `${configuredBase}${relativePath}`;
+}
+
+function extractProfileImageVersionId(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  const match = text.match(/\/api\/auth\/profile-image-version\/([^/?#]+)/i);
+  return match?.[1] || "";
 }
 
 function evaluateImageModeration(originalname = "") {
@@ -633,8 +654,14 @@ router.post("/forgot-password", forgotRateLimiter, async (req, res) => {
   });
 
   const resetLink = `${env.appBaseUrl}/reset-password?token=${rawToken}`;
-  if (env.mailMode === "console") {
-    console.log("[MAIL:console] Password reset link:", resetLink);
+  try {
+    await sendPasswordResetEmail({
+      to: email,
+      resetLink,
+    });
+  } catch (error) {
+    console.error("[MAIL] Password reset send failed:", error);
+    return res.status(500).json({ error: "Não foi possível enviar o e-mail de recuperação agora." });
   }
 
   await auditEvent(req, "PASSWORD_RESET_REQUESTED", userRow.id, { email });
@@ -795,6 +822,7 @@ router.post(
 
     const moderation = evaluateImageModeration(req.file.originalname);
     removePendingFileByName(user.profile_image_pending_name);
+    const currentPublicUrl = String(user.profile_image_url || "").trim();
     const updatePayload = {
       profile_image_mode: "photo",
       profile_image_status: moderation.status,
@@ -805,7 +833,11 @@ router.post(
     };
 
     if (moderation.status === "approved") {
-      removePublicFileByUrl(user.profile_image_url);
+      const approvedVersion = await createUserProfileImageVersion(req.auth.sub, {
+        mime_type: req.file.mimetype,
+        file_name: req.file.originalname || `profile-${req.auth.sub}`,
+        data: req.file.buffer,
+      });
       await upsertUserProfileImages(req.auth.sub, {
         approved_mime_type: req.file.mimetype,
         approved_file_name: req.file.originalname || `profile-${req.auth.sub}`,
@@ -814,7 +846,7 @@ router.post(
         pending_file_name: null,
         pending_data: null,
       });
-      updatePayload.profile_image_url = buildProfileImageUrl(req, req.auth.sub);
+      updatePayload.profile_image_url = buildProfileImageVersionUrl(req, approvedVersion.id);
       updatePayload.profile_image_reject_reason = "";
     } else if (moderation.status === "rejected") {
       await upsertUserProfileImages(req.auth.sub, {
@@ -822,15 +854,14 @@ router.post(
         pending_file_name: null,
         pending_data: null,
       });
-      updatePayload.profile_image_url = "";
+      updatePayload.profile_image_url = currentPublicUrl;
     } else {
-      // manual_review: keep file private and hide from public profile until approval
       await upsertUserProfileImages(req.auth.sub, {
         pending_mime_type: req.file.mimetype,
         pending_file_name: req.file.originalname || `pending-${req.auth.sub}`,
         pending_data: req.file.buffer,
       });
-      updatePayload.profile_image_url = "";
+      updatePayload.profile_image_url = currentPublicUrl;
       updatePayload.profile_image_pending_name = req.file.originalname || `pending-${req.auth.sub}`;
     }
 
@@ -862,7 +893,7 @@ router.delete("/me/profile-image/pending", requireAuth, async (req, res) => {
   });
 
   const updated = await updateUserById(req.auth.sub, {
-    profile_image_status: "none",
+    profile_image_status: user.profile_image_url ? "approved" : "none",
     profile_image_pending_name: "",
     profile_image_reject_reason: "",
     profile_image_moderation_score: null,
@@ -889,6 +920,22 @@ router.get("/me/profile-image/private", requireAuth, async (req, res) => {
 
   const pendingPath = path.resolve(profilePendingDir, user.profile_image_pending_name);
   return res.sendFile(pendingPath);
+});
+
+router.get("/me/profile-images", requireAuth, async (req, res) => {
+  const user = await findUserPrivateById(req.auth.sub);
+  if (!user) return res.status(401).json({ error: "User not found" });
+
+  const versions = await listUserProfileImageVersions(req.auth.sub);
+  const approved_urls = versions.map((item) => buildProfileImageVersionUrl(req, item.id));
+  const current_url = String(user.profile_image_url || "").trim();
+
+  return res.json({
+    current_url: current_url || "",
+    approved_urls: current_url && !approved_urls.includes(current_url)
+      ? [current_url, ...approved_urls]
+      : approved_urls,
+  });
 });
 
 router.get("/admin/profile-images", requireAuth, requireAdmin, async (req, res) => {
@@ -930,7 +977,7 @@ router.get("/admin/profile-images/:userId/preview", requireAuth, requireAdmin, a
     return res.sendFile(pendingPath);
   }
 
-  if (user.profile_image_status === "approved" && profileImages?.approved_data) {
+  if (profileImages?.approved_data) {
     res.setHeader("Content-Type", profileImages.approved_mime_type || "image/jpeg");
     res.setHeader("Cache-Control", "public, max-age=300");
     return res.send(profileImages.approved_data);
@@ -962,8 +1009,13 @@ router.post("/admin/profile-images/:userId/approve", requireAuth, requireAdmin, 
   }
 
   const profileImages = await getUserProfileImages(user.id);
+  let approvedVersion = null;
   if (profileImages?.pending_data) {
-    removePublicFileByUrl(user.profile_image_url);
+    approvedVersion = await createUserProfileImageVersion(user.id, {
+      mime_type: profileImages.pending_mime_type || "image/jpeg",
+      file_name: profileImages.pending_file_name || `profile-${user.id}`,
+      data: profileImages.pending_data,
+    });
     await upsertUserProfileImages(user.id, {
       approved_mime_type: profileImages.pending_mime_type || "image/jpeg",
       approved_file_name: profileImages.pending_file_name || `profile-${user.id}`,
@@ -984,12 +1036,26 @@ router.post("/admin/profile-images/:userId/approve", requireAuth, requireAdmin, 
     const targetPath = path.resolve(profilePublicDir, publicFilename);
 
     await fs.promises.rename(sourcePath, targetPath);
+    const fileBuffer = await fs.promises.readFile(targetPath);
+    approvedVersion = await createUserProfileImageVersion(user.id, {
+      mime_type: safeExt === ".png" ? "image/png" : safeExt === ".webp" ? "image/webp" : "image/jpeg",
+      file_name: user.profile_image_pending_name || publicFilename,
+      data: fileBuffer,
+    });
+    await upsertUserProfileImages(user.id, {
+      approved_mime_type: safeExt === ".png" ? "image/png" : safeExt === ".webp" ? "image/webp" : "image/jpeg",
+      approved_file_name: user.profile_image_pending_name || publicFilename,
+      approved_data: fileBuffer,
+      pending_mime_type: null,
+      pending_file_name: null,
+      pending_data: null,
+    });
   }
   removePublicFileByUrl(user.profile_image_url);
 
   const updated = await updateUserById(user.id, {
     profile_image_status: "approved",
-    profile_image_url: buildProfileImageUrl(req, user.id),
+    profile_image_url: approvedVersion ? buildProfileImageVersionUrl(req, approvedVersion.id) : buildProfileImageUrl(req, user.id),
     profile_image_pending_name: "",
     profile_image_reject_reason: "",
     profile_image_mode: "photo",
@@ -1015,8 +1081,8 @@ router.post("/admin/profile-images/:userId/reject", requireAuth, requireAdmin, a
   });
 
   const updated = await updateUserById(user.id, {
-    profile_image_status: "rejected",
-    profile_image_url: "",
+    profile_image_status: user.profile_image_url ? "approved" : "rejected",
+    profile_image_url: user.profile_image_url || "",
     profile_image_pending_name: "",
     profile_image_reject_reason: reason,
   });
@@ -1026,8 +1092,18 @@ router.post("/admin/profile-images/:userId/reject", requireAuth, requireAdmin, a
 
 router.get("/profile-image/:userId", async (req, res) => {
   const user = await findUserPrivateById(req.params.userId);
-  if (!user || user.profile_image_status !== "approved") {
+  if (!user) {
     return res.status(404).json({ error: "Imagem nao encontrada." });
+  }
+
+  const currentVersionId = extractProfileImageVersionId(user.profile_image_url);
+  if (currentVersionId) {
+    const version = await getUserProfileImageVersion(currentVersionId);
+    if (version?.data) {
+      res.setHeader("Content-Type", version.mime_type || "image/jpeg");
+      res.setHeader("Cache-Control", "public, max-age=300");
+      return res.send(version.data);
+    }
   }
 
   const profileImages = await getUserProfileImages(user.id);
@@ -1052,6 +1128,17 @@ router.get("/profile-image/:userId", async (req, res) => {
   }
 
   return res.status(404).json({ error: "Imagem nao encontrada." });
+});
+
+router.get("/profile-image-version/:imageId", async (req, res) => {
+  const version = await getUserProfileImageVersion(req.params.imageId);
+  if (!version?.data) {
+    return res.status(404).json({ error: "Imagem nao encontrada." });
+  }
+
+  res.setHeader("Content-Type", version.mime_type || "image/jpeg");
+  res.setHeader("Cache-Control", "public, max-age=300");
+  return res.send(version.data);
 });
 
 router.patch("/me", requireAuth, async (req, res) => {

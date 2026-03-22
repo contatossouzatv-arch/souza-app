@@ -143,6 +143,21 @@ export async function ensureDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_profile_image_versions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      mime_type TEXT,
+      file_name TEXT,
+      data BYTEA NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_user_profile_image_versions_user_created
+      ON user_profile_image_versions (user_id, created_at DESC)
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS user_metric_ledger (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -471,10 +486,10 @@ export function normalizeUser(row) {
   if (!row) return null;
   const createdAt = row.created_at ? toIso(row.created_at) : null;
   const updatedAt = row.updated_at ? toIso(row.updated_at) : null;
-  const approvedProfileImageUrl =
-    String(row.profile_image_status || "none") === "approved" && row.id
+  const approvedProfileImageUrl = String(row.profile_image_url || "").trim()
+    || (String(row.profile_image_status || "none") === "approved" && row.id
       ? `/api/auth/profile-image/${row.id}`
-      : row.profile_image_url || "";
+      : "");
   return {
     id: row.id,
     email: row.email,
@@ -656,6 +671,49 @@ export async function upsertUserProfileImages(userId, payload = {}) {
     ]
   );
   return result.rows[0] || null;
+}
+
+export async function createUserProfileImageVersion(userId, payload = {}) {
+  const result = await pool.query(
+    `INSERT INTO user_profile_image_versions (user_id, mime_type, file_name, data)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, user_id, mime_type, file_name, created_at`,
+    [
+      userId,
+      payload.mime_type || "image/jpeg",
+      payload.file_name || `profile-${userId}`,
+      payload.data,
+    ]
+  );
+  return result.rows[0] || null;
+}
+
+export async function getUserProfileImageVersion(versionId) {
+  const result = await pool.query(
+    `SELECT id, user_id, mime_type, file_name, data, created_at
+       FROM user_profile_image_versions
+      WHERE id = $1
+      LIMIT 1`,
+    [versionId]
+  );
+  return result.rows[0] || null;
+}
+
+export async function listUserProfileImageVersions(userId) {
+  const result = await pool.query(
+    `SELECT id, user_id, mime_type, file_name, created_at
+       FROM user_profile_image_versions
+      WHERE user_id = $1
+      ORDER BY created_at DESC`,
+    [userId]
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    user_id: row.user_id,
+    mime_type: row.mime_type || "image/jpeg",
+    file_name: row.file_name || "",
+    created_at: row.created_at ? toIso(row.created_at) : toIso(new Date()),
+  }));
 }
 
 export async function createRefreshToken(payload) {

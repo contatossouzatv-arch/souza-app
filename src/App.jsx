@@ -17,6 +17,7 @@ import { warmAppShell } from '@/lib/appBoot';
 
 const Login = lazy(() => import('@/pages/Login'));
 const LoginTwoFactor = lazy(() => import('@/pages/LoginTwoFactor'));
+const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
 const TermsOfUse = lazy(() => import('@/pages/TermsOfUse'));
 const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'));
 const Onboarding = lazy(() => import('@/pages/Onboarding'));
@@ -133,6 +134,7 @@ const AuthenticatedApp = () => {
       <Routes>
       <Route path="/termos-de-uso" element={<TermsOfUse />} />
       <Route path="/politica-de-privacidade" element={<PrivacyPolicy />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       <Route
         path="/login"

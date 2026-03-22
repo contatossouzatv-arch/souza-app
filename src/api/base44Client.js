@@ -360,6 +360,10 @@ export const base44 = {
       return requestBlob("/api/auth/me/profile-image/private");
     },
 
+    async listMyProfileImages() {
+      return request("/api/auth/me/profile-images");
+    },
+
     async cancelMyPendingProfileImage() {
       return request("/api/auth/me/profile-image/pending", {
         method: "DELETE",

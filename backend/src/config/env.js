@@ -49,6 +49,9 @@ export const env = {
   lockoutMinutes: Number(process.env.LOCKOUT_MINUTES || 10),
   appBaseUrl: readEnv("APP_BASE_URL", isProd ? "" : "http://localhost:3000"),
   mailMode: process.env.MAIL_MODE || "console",
+  resendApiKey: readEnv("RESEND_API_KEY", ""),
+  resendFromEmail: readEnv("RESEND_FROM_EMAIL", ""),
+  resendFromName: readEnv("RESEND_FROM_NAME", "SouzaTV"),
   uploadsBaseUrl: process.env.UPLOADS_BASE_URL || "",
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",
   adminEmail: readEnv("ADMIN_EMAIL", isProd ? "" : "admin@local.dev"),
@@ -103,3 +106,11 @@ assertProductionEnv(isStrongSecret(env.jwtAccessSecret), "JWT_ACCESS_SECRET must
 assertProductionEnv(Boolean(env.jwtRefreshSecret), "JWT_REFRESH_SECRET is required in production");
 assertProductionEnv(isStrongSecret(env.jwtRefreshSecret), "JWT_REFRESH_SECRET must have at least 32 characters in production");
 assertProductionEnv(Boolean(String(env.appBaseUrl || "").trim()), "APP_BASE_URL is required in production");
+assertProductionEnv(
+  env.mailMode !== "resend" || Boolean(env.resendApiKey),
+  "RESEND_API_KEY is required when MAIL_MODE=resend in production"
+);
+assertProductionEnv(
+  env.mailMode !== "resend" || Boolean(env.resendFromEmail),
+  "RESEND_FROM_EMAIL is required when MAIL_MODE=resend in production"
+);

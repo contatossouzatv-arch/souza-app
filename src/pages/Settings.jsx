@@ -165,6 +165,13 @@ export default function SettingsPage() {
     staleTime: 30000,
   });
 
+  const { data: profileImagesData } = useQuery({
+    queryKey: ["my-profile-images", user?.id],
+    queryFn: () => base44.auth.listMyProfileImages(),
+    enabled: !!user?.id,
+    staleTime: 30000,
+  });
+
   const photoPreviewMetrics = useMemo(() => {
     const width = Number(selectedPhotoNaturalSize.width || 0);
     const height = Number(selectedPhotoNaturalSize.height || 0);
@@ -201,13 +208,29 @@ export default function SettingsPage() {
       handle: prefs.handle || authUser.nick?.toLowerCase().replace(/\s+/g, "") || "usuario",
       avatarId: prefs.avatarId || authUser.profile_avatar_id || DEFAULT_AVATAR_ID,
     });
-    setApprovedPhotoUrls(Array.isArray(prefs.approvedPhotoUrls) ? prefs.approvedPhotoUrls : []);
-    setSelectedApprovedPhotoUrl(prefs.selectedPhotoUrl || "");
+    setApprovedPhotoUrls([]);
+    setSelectedApprovedPhotoUrl("");
     setRemovedApprovedPhotoUrls(
       Array.isArray(prefs.removedApprovedPhotoUrls) ? prefs.removedApprovedPhotoUrls : []
     );
     setImageMode(authUser.profile_image_mode || "avatar");
   }, [authUser]);
+
+  useEffect(() => {
+    if (!user?.id || !profileImagesData) return;
+    const fetchedUrls = Array.isArray(profileImagesData.approved_urls)
+      ? profileImagesData.approved_urls.map((url) => resolveAssetUrl(url)).filter(Boolean)
+      : [];
+    const currentUrl = profileImagesData.current_url ? resolveAssetUrl(profileImagesData.current_url) : "";
+    const nextApproved = fetchedUrls.filter((url) => !removedApprovedPhotoUrls.includes(url));
+
+    setApprovedPhotoUrls(nextApproved);
+    setSelectedApprovedPhotoUrl((prevSelected) => {
+      if (prevSelected && nextApproved.includes(prevSelected)) return prevSelected;
+      if (currentUrl && nextApproved.includes(currentUrl)) return currentUrl;
+      return nextApproved[0] || "";
+    });
+  }, [profileImagesData, removedApprovedPhotoUrls, user?.id]);
 
   useEffect(() => {
     try {
@@ -499,6 +522,7 @@ export default function SettingsPage() {
         setImageMode(response.user.profile_image_mode || "photo");
       }
       queryClient.invalidateQueries({ queryKey: ["inicio-users"] });
+      queryClient.invalidateQueries({ queryKey: ["my-profile-images", user?.id] });
       setSelectedPhotoFile(null);
       setSelectedPhotoPreview((prev) => {
         if (isPendingStatus) {
@@ -540,6 +564,7 @@ export default function SettingsPage() {
         if (prev) URL.revokeObjectURL(prev);
         return "";
       });
+      queryClient.invalidateQueries({ queryKey: ["my-profile-images", user?.id] });
       toast({
         title: "Envio cancelado",
         description: "Você pode selecionar outra foto.",
@@ -1067,7 +1092,11 @@ export default function SettingsPage() {
   };
   const profilePreviewSrc =
     user.profile_image_status === "manual_review" || user.profile_image_status === "pending"
-      ? privatePhotoPreview || pendingPhotoPreview || selectedPhotoPreview || selectedAvatar?.src
+      ? privatePhotoPreview ||
+        pendingPhotoPreview ||
+        selectedPhotoPreview ||
+        resolveAssetUrl(selectedApprovedPhotoUrl || user.profile_image_url) ||
+        selectedAvatar?.src
       : imageMode === "photo"
       ? selectedPhotoPreview ||
         (user.profile_image_status === "approved" && (selectedApprovedPhotoUrl || user.profile_image_url)
