@@ -1131,7 +1131,9 @@ export default function DailyChestScene({
       camera.position.z = viewportState.cameraZ + stateRef.cameraZoomOffset;
       camera.lookAt(viewportState.sceneCenterX * 0.2, viewportState.lookAtY, 0);
 
-      const shouldOpen = runtime.stageState === "opened" || runtime.stageState === "claimed";
+      const shouldOpen =
+        (runtime.stageState === "opened" || runtime.stageState === "claimed") &&
+        stateRef.spinElapsed >= stateRef.spinDuration;
       const openTarget = shouldOpen ? 1 : 0;
       stateRef.openProgress += (openTarget - stateRef.openProgress) * Math.min(1, dt * (shouldOpen ? 2.4 : 4.2));
 

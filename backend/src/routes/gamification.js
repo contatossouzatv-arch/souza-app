@@ -2214,7 +2214,7 @@ router.post("/admin/users/:id/reset-metrics", requireAuth, requireAdmin, async (
     await resetClient.query("DELETE FROM daily_checkins WHERE user_id = $1", [userId]);
     await resetClient.query("DELETE FROM engagement_processing_events WHERE user_id = $1", [userId]);
     await resetClient.query("DELETE FROM user_follows WHERE follower_user_id = $1 OR target_user_id = $1", [userId]);
-    await resetClient.query("DELETE FROM profile_likes WHERE user_id = $1 OR target_user_id = $1", [userId]);
+    await resetClient.query("DELETE FROM profile_likes WHERE actor_user_id = $1 OR target_user_id = $1", [userId]);
     await resetClient.query("DELETE FROM entity_records WHERE entity_name = 'Deposit' AND COALESCE(data->>'user_id', '') = $1", [userId]);
     await resetClient.query("DELETE FROM entity_records WHERE entity_name = 'LiveDrawParticipant' AND COALESCE(data->>'user_id', '') = $1", [userId]);
     await resetClient.query("DELETE FROM entity_records WHERE entity_name = 'GameCallParticipant' AND COALESCE(data->>'user_id', '') = $1", [userId]);

@@ -79,14 +79,22 @@ export default function DailyChestHub() {
   React.useEffect(() => {
     if (!state) return;
     const backendState = String(state.state || "available");
-    setDisplayState(backendState);
+    setDisplayState((current) => {
+      if (current === "opening" && !["opened", "claimed", "cooldown"].includes(backendState)) {
+        return current;
+      }
+      return backendState;
+    });
     setViewMode("main");
+    if (displayState === "opening" && !["opened", "claimed", "cooldown"].includes(backendState)) {
+      return;
+    }
     if (backendState === "available") {
       setTapCount(0);
       return;
     }
     setTapCount(Number(state.tapGoal || 0));
-  }, [state]);
+  }, [displayState, state]);
 
   React.useEffect(() => {
     if (displayState !== "opened" || lastRevealStateRef.current === "opened") return;

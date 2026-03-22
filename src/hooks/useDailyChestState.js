@@ -16,6 +16,8 @@ export function useDailyChestState() {
     onSuccess: (data) => {
       queryClient.setQueryData(["daily-chest-state"], data);
       queryClient.invalidateQueries({ queryKey: ["profile-daily-chest-xp"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative"] });
     },
   });
 
@@ -24,6 +26,8 @@ export function useDailyChestState() {
     onSuccess: (data) => {
       queryClient.setQueryData(["daily-chest-state"], data);
       queryClient.invalidateQueries({ queryKey: ["profile-daily-chest-xp"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative"] });
     },
   });
 
@@ -35,6 +39,9 @@ export function useDailyChestState() {
       queryClient.invalidateQueries({ queryKey: ["user-prize-gallery"] });
       queryClient.invalidateQueries({ queryKey: ["profile-competition-bonus-events"] });
       queryClient.invalidateQueries({ queryKey: ["profile-daily-chest-xp"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative"] });
+      queryClient.invalidateQueries({ queryKey: ["current-user"] });
     },
   });
 
