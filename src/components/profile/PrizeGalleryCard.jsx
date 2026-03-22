@@ -117,13 +117,13 @@ function PrizeDetailsDialog({ item, viewer, open, onOpenChange }) {
       window.setTimeout(() => setCopied(false), 1800);
       toast({
         title: "Codigo copiado",
-        description: "Envie esse codigo ao admin para confirmar o resgate.",
+        description: "Envie esse código ao admin para confirmar o resgate.",
       });
     } catch {
       toast({
         variant: "destructive",
-        title: "Nao foi possivel copiar",
-        description: "Tente selecionar o codigo manualmente.",
+        title: "Não foi possível copiar",
+        description: "Tente selecionar o código manualmente.",
       });
     }
   }, [validationCode]);
@@ -188,7 +188,7 @@ function PrizeDetailsDialog({ item, viewer, open, onOpenChange }) {
               <div className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/5 px-3 py-3">
                 <ShieldCheck className="h-4 w-4 text-cyan-300" />
                 <div className="min-w-0">
-                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Telefone para confirmacao</p>
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Telefone para confirmação</p>
                   <p className="truncate font-semibold text-white">{winnerPhone}</p>
                 </div>
               </div>
@@ -396,7 +396,7 @@ export default function PrizeGalleryCard({
             </div>
             {remainingGalleryItems > 0 ? (
               <div className="pt-4 text-center text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                Role para carregar mais premios ({remainingGalleryItems} restantes)
+                Role para carregar mais prêmios ({remainingGalleryItems} restantes)
               </div>
             ) : null}
           </div>

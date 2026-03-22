@@ -14,21 +14,21 @@ export default function MainGameComingSoon() {
           </div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200/85">Modo Principal</p>
           <h1 className="mt-3 text-3xl font-black leading-tight text-white">
-            Em breve: o modo de jogo completo sera liberado
+            Em breve: o modo de jogo completo será liberado
           </h1>
           <p className="mt-4 text-sm leading-6 text-slate-300">
-            O mapa completo e a experiencia runner continuam preservados na base do app, mas estao temporariamente
-            desativados para o lancamento inicial.
+            O mapa completo e a experiência runner continuam preservados na base do app, mas estão temporariamente
+            desativados para o lançamento inicial.
           </p>
 
           <div className="mt-6 grid gap-3">
             <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-emerald-200">
                 <Sparkles className="h-4 w-4" />
-                Lancamento focado em estabilidade
+                Lançamento focado em estabilidade
               </div>
               <p className="mt-2 text-sm text-slate-400">
-                Premios, perfil, depositos, feed e painel continuam operando normalmente enquanto o jogo principal
+                Prêmios, perfil, depósitos, feed e painel continuam operando normalmente enquanto o jogo principal
                 finaliza os detalhes.
               </p>
             </div>
@@ -37,10 +37,10 @@ export default function MainGameComingSoon() {
               <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/8 p-4">
                 <div className="flex items-center gap-2 text-sm font-semibold text-emerald-200">
                   <Stars className="h-4 w-4" />
-                  Baú Diario ativo
+                  Baú Diário ativo
                 </div>
                 <p className="mt-2 text-sm text-slate-300">
-                  A experiencia separada do Bau Diario segue como trilha dedicada e sera expandida sem misturar com o
+                  A experiência separada do Baú Diário segue como trilha dedicada e será expandida sem misturar com o
                   runner principal.
                 </p>
               </div>
@@ -50,7 +50,7 @@ export default function MainGameComingSoon() {
           <div className="mt-6 flex flex-col gap-3">
             {FEATURE_FLAGS.DAILY_CHEST_3D_ENABLED ? (
               <Button asChild className="h-12 bg-emerald-500 font-bold text-slate-950 hover:bg-emerald-400">
-                <Link to={DAILY_CHEST_ROUTE_PATH}>Ir para o Bau Diario</Link>
+                <Link to={DAILY_CHEST_ROUTE_PATH}>Ir para o Baú Diário</Link>
               </Button>
             ) : null}
             <Button asChild variant="outline" className="h-12 border-slate-700 bg-slate-900/70 text-white hover:bg-slate-800">

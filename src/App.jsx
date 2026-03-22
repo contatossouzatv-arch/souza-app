@@ -101,7 +101,7 @@ const AuthenticatedApp = () => {
   }, [hasBootMinDurationElapsed, isBootReady, isLoadingAuth, isLoadingPublicSettings]);
 
   const bootStatus = useMemo(() => {
-    if (isLoadingPublicSettings) return "Sincronizando configuracoes publicas";
+    if (isLoadingPublicSettings) return "Sincronizando configurações públicas";
     if (isLoadingAuth) return "Validando sessao e preparando dados";
     if (!isBootReady) return "Aquecendo menus, sons e telas principais";
     if (!hasBootMinDurationElapsed) return "Finalizando entrada";

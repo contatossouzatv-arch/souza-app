@@ -61,7 +61,7 @@ function KeyRankingOverlayComponent({ open, onClose, rankingSnapshot }) {
                 ) : (
                   <>
                     <p className="mt-1 text-sm font-black text-white">Meta maxima atingida</p>
-                    <p className="mt-1 text-sm text-slate-200">Voce ja passou por todas as metas configuradas desta temporada.</p>
+                    <p className="mt-1 text-sm text-slate-200">Você já passou por todas as metas configuradas desta temporada.</p>
                   </>
                 )}
               </div>

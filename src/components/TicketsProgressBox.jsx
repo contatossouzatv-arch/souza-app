@@ -213,7 +213,7 @@ export default function TicketsProgressBox({
       toast({
         variant: "destructive",
         title: "Registro desabilitado",
-        description: "Os depositos estao temporariamente indisponiveis.",
+        description: "Os depósitos estão temporariamente indisponíveis.",
       });
       return;
     }
@@ -221,7 +221,7 @@ export default function TicketsProgressBox({
     if (!amount || parseFloat(amount) <= 0) {
       toast({
         variant: "destructive",
-        title: "Valor invalido",
+        title: "Valor inválido",
         description: "Digite um valor de deposito valido.",
       });
       return;
@@ -400,7 +400,7 @@ export default function TicketsProgressBox({
           <div className="space-y-2 text-center">
             <div className="px-3 py-2 bg-indigo-900/30 border border-indigo-600/50 rounded-lg">
               <p className="text-sm font-bold text-indigo-200">
-                Faltam R$ {remainingForNext.toFixed(2)} para completar a proxima meta de R$ {ticketsGoalAmount.toFixed(2)}
+                Faltam R$ {remainingForNext.toFixed(2)} para completar a próxima meta de R$ {ticketsGoalAmount.toFixed(2)}
               </p>
             </div>
 
@@ -408,14 +408,14 @@ export default function TicketsProgressBox({
               <div className="px-3 py-2 bg-blue-900/30 border border-blue-600/50 rounded-lg">
                 <p className="text-sm font-bold text-blue-300 flex items-center justify-center gap-2">
                   <AlertCircle className="w-4 h-4" />
-                  Aguardando liberacao de R$ {pendingAmount.toFixed(2)}
+                  Aguardando liberação de R$ {pendingAmount.toFixed(2)}
                 </p>
               </div>
             ) : null}
 
             {!depositsEnabled ? (
               <div className="px-3 py-2 bg-red-900/30 border border-red-600/50 rounded-lg">
-                <p className="text-xs text-red-200">Novos depositos temporariamente indisponiveis</p>
+                <p className="text-xs text-red-200">Novos depósitos temporariamente indisponíveis</p>
               </div>
             ) : null}
           </div>
@@ -444,7 +444,7 @@ export default function TicketsProgressBox({
               toast({
                 variant: "destructive",
                 title: "Sem ciclo ativo",
-                description: "Aguarde a abertura de um novo ciclo para registrar depositos.",
+                description: "Aguarde a abertura de um novo ciclo para registrar depósitos.",
               });
               return;
             }
@@ -467,7 +467,7 @@ export default function TicketsProgressBox({
         {!activeCycle ? (
           <div className="mx-4 mb-4 rounded-lg border border-amber-600/50 bg-amber-900/30 px-3 py-2">
             <p className="text-xs font-medium text-amber-200">
-              Sem ciclo ativo no momento. O preenchimento de novos depositos foi bloqueado.
+              Sem ciclo ativo no momento. O preenchimento de novos depósitos foi bloqueado.
             </p>
           </div>
         ) : null}

@@ -134,7 +134,7 @@ export default function DailyChestHub() {
       setDisplayState("available");
       setTapCount(0);
       toast({
-        title: "Nao foi possivel abrir",
+        title: "Não foi possível abrir",
         description: openError?.message || "Tente novamente em instantes.",
       });
     }
@@ -145,13 +145,13 @@ export default function DailyChestHub() {
       const nextState = await unlockChest(code);
       setDisplayState(String(nextState?.state || "available"));
       toast({
-        title: "Bau liberado",
-        description: "O giro diario foi destravado com sucesso.",
+        title: "Baú liberado",
+        description: "O giro diário foi destravado com sucesso.",
       });
     } catch (unlockError) {
       toast({
-        title: "Nao foi possivel liberar",
-        description: unlockError?.message || "Confira o codigo e tente novamente.",
+        title: "Não foi possível liberar",
+        description: unlockError?.message || "Confira o código e tente novamente.",
       });
       throw unlockError;
     }
@@ -163,13 +163,13 @@ export default function DailyChestHub() {
       const nextState = await claimChest();
       setDisplayState(String(nextState?.state || "claimed"));
       toast({
-        title: "Premio resgatado",
-        description: "O Bau Diario foi concluido com sucesso.",
+        title: "Prêmio resgatado",
+        description: "O Baú Diário foi concluído com sucesso.",
       });
     } catch (claimError) {
       toast({
         title: "Falha ao resgatar",
-        description: claimError?.message || "O premio continua salvo. Tente novamente.",
+        description: claimError?.message || "O prêmio continua salvo. Tente novamente.",
       });
     }
   }, [claimChest, playAudio]);
@@ -182,8 +182,8 @@ export default function DailyChestHub() {
     return (
       <div className="flex h-[100dvh] max-h-[100dvh] items-center justify-center overflow-hidden bg-slate-950 px-4 text-white">
         <div className="max-w-sm rounded-[2rem] border border-white/10 bg-slate-950/80 p-6 text-center">
-          <p className="text-lg font-black">Falha ao carregar o Bau Diario</p>
-          <p className="mt-2 text-sm text-slate-400">A experiencia continua salva no backend. Tente novamente.</p>
+          <p className="text-lg font-black">Falha ao carregar o Baú Diário</p>
+          <p className="mt-2 text-sm text-slate-400">A experiência continua salva no backend. Tente novamente.</p>
           <button
             type="button"
             onClick={() => refetch()}
@@ -226,28 +226,28 @@ export default function DailyChestHub() {
               statusInfo={{
                 title:
                   displayState === "opening"
-                    ? "Girando o bau"
+                    ? "Girando o baú"
                     : displayState === "opened"
-                    ? "Premio liberado"
+                    ? "Prêmio liberado"
                     : displayState === "claimed"
-                    ? "Bau concluido hoje"
+                    ? "Baú concluído hoje"
                     : displayState === "cooldown"
                     ? "Sem giros restantes"
                     : displayState === "locked"
-                    ? "Bau temporariamente desativado"
-                    : "Bau Diario",
+                    ? "Baú temporariamente desativado"
+                    : "Baú Diário",
                 body:
                   displayState === "opening"
-                    ? "O giro ja comecou e o resultado esta sendo liberado."
+                    ? "O giro já começou e o resultado está sendo liberado."
                     : displayState === "opened"
-                    ? "Seu resultado ja saiu. Agora e so resgatar."
+                    ? "Seu resultado já saiu. Agora é só resgatar."
                     : displayState === "claimed"
                     ? `Novo reset em ${state?.resetAt ? new Date(state.resetAt).toLocaleString("pt-BR") : "-"}.`
                     : displayState === "cooldown"
-                    ? `Seu proximo bau volta em ${state?.resetAt ? new Date(state.resetAt).toLocaleString("pt-BR") : "-"}.`
+                    ? `Seu próximo baú volta em ${state?.resetAt ? new Date(state.resetAt).toLocaleString("pt-BR") : "-"}.`
                     : displayState === "locked"
-                    ? "A abertura esta travada por enquanto."
-                    : "Gire o bau para revelar a recompensa do dia.",
+                    ? "A abertura está travada por enquanto."
+                    : "Gire o baú para revelar a recompensa do dia.",
               }}
             />
           </Suspense>

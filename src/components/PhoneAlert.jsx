@@ -174,7 +174,7 @@ export default function PhoneAlert({ user, onUpdate, platformModalVisible }) {
               <div className="p-4 md:p-6 space-y-3 md:space-y-4 overflow-y-auto max-h-[calc(90vh-120px)]">
                 <div className="bg-yellow-100 border-2 border-yellow-400 rounded-lg md:rounded-xl p-3 md:p-4">
                   <p className="text-sm md:text-base font-bold text-yellow-900 mb-1 md:mb-2 text-center">
-                     Telefone obrigatorio para resgatar premios!
+                     Telefone obrigatório para resgatar prêmios!
                   </p>
                   <p className="text-xs md:text-sm text-yellow-800 text-center">
                     Caso você ganhe algum sorteio, precisaremos do seu telefone para entrar em contato e liberar o prêmio.

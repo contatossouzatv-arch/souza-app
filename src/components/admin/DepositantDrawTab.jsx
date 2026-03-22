@@ -72,7 +72,7 @@ export default function DepositantDrawTab() {
     queryFn: () => base44.entities.AppSettings.list(),
   });
 
-  const depositantDrawActive = settings.find(s => s.key === 'depositant_draw_active')?.value !== 'false';
+  const depositantDrawActive = settings.find(s => s.key === 'depositant_draw_active')?.value === 'true';
 
   // Gerar particulas e icones flutuantes
   useEffect(() => {

@@ -1097,7 +1097,7 @@ async function loadDailyChestDepositBonusSettings() {
   const settings = await listEntity("AppSettings");
   const map = getDailyChestSettingsMap(settings);
   return {
-    depositBonusEnabled: readBooleanSetting(map.get("daily_chest_deposit_bonus_enabled"), true),
+    depositBonusEnabled: readBooleanSetting(map.get("daily_chest_deposit_bonus_enabled"), false),
     chestsPerApprovedDeposit: readNumberSetting(map.get("daily_chest_bonus_chests_per_approved"), 1, 0, 20),
     amountStep: readNumberSetting(map.get("daily_chest_bonus_amount_step"), 0, 0, 1_000_000),
     chestsPerAmountStep: readNumberSetting(map.get("daily_chest_bonus_chests_per_step"), 0, 0, 20),
@@ -3083,14 +3083,15 @@ export async function seedDefaults() {
   if (settings.length > 0) return;
 
   const defaults = [
-    { key: "deposits_enabled", value: "true", description: "Ativar registro de depósitos" },
-    { key: "tickets_box_active", value: "true", description: "Ativar caixa de bilhetes" },
-    { key: "social_bar_active", value: "true", description: "Ativar redes sociais" },
+    { key: "deposits_enabled", value: "false", description: "Ativar registro de depósitos" },
+    { key: "tickets_box_active", value: "false", description: "Ativar caixa de bilhetes" },
+    { key: "social_bar_active", value: "false", description: "Ativar redes sociais" },
+    { key: "depositant_draw_active", value: "false", description: "Ativar sorteio dos depositantes" },
     { key: "use_carousel_banner", value: "false", description: "Usar carrossel no topo" },
     { key: "deposit_check_link", value: "https://wa.me/", description: "Link para conferência" },
     { key: "tickets_goal_amount", value: "100", description: "Meta de depósitos para progresso" },
     { key: "tickets_reward_per_goal", value: "10", description: "Recompensa padrão" },
-    { key: "daily_chest_enabled", value: "true", description: "Ativa o Baú Diário 3D" },
+    { key: "daily_chest_enabled", value: "false", description: "Ativa o Baú Diário 3D" },
     { key: "daily_chest_tap_goal", value: "4", description: "Quantidade de toques para abrir o baú diário" },
     { key: "daily_chest_message_of_day", value: "Toque no baú para abrir", description: "Mensagem principal do Baú Diário" },
     { key: "daily_chest_reset_hour", value: "0", description: "Hora de reset do Baú Diário" },
@@ -3102,7 +3103,7 @@ export async function seedDefaults() {
     { key: "daily_chest_xp_per_open", value: "18", description: "XP ganho ao abrir um baú" },
     { key: "daily_chest_schedule_start_at", value: "", description: "Data inicial opcional para ativar o Baú Diário" },
     { key: "daily_chest_schedule_end_at", value: "", description: "Data final opcional para encerrar o Baú Diário" },
-    { key: "daily_chest_deposit_bonus_enabled", value: "true", description: "Permite ganhar baús extras por depósitos aprovados" },
+    { key: "daily_chest_deposit_bonus_enabled", value: "false", description: "Permite ganhar baús extras por depósitos aprovados" },
     { key: "daily_chest_bonus_chests_per_approved", value: "1", description: "Baús extras por depósito aprovado" },
     { key: "daily_chest_bonus_amount_step", value: "0", description: "Valor para gerar baús extras por faixa de depósito" },
     { key: "daily_chest_bonus_chests_per_step", value: "0", description: "Quantidade extra de baús por faixa de depósito" }
@@ -3112,31 +3113,4 @@ export async function seedDefaults() {
     await createEntity("AppSettings", item);
   }
 
-  await createEntity("DepositantDrawCycle", {
-    cycle_number: 1,
-    title: "Ciclo 1",
-    active: true,
-    draw_date: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString()
-  });
-
-  await createEntity("DailyChestRewardConfig", {
-    title: "Saldo Diário",
-    subtitle: "Recompensa diária pronta para resgatar",
-    reward_type: "points_balance",
-    reward_amount: 25,
-    reward_unit: "saldo",
-    rarity: "rare",
-    special_label: "Recompensa base",
-    auto_apply: true,
-    visual_theme: "aurora",
-    icon: "sparkles",
-    active: true,
-    is_default: true,
-    stock_total: 0,
-    claimed_count: 0,
-    weight: 100,
-    grant_mode: "auto",
-    gallery_image_url: "",
-    applies_on: "",
-  });
 }

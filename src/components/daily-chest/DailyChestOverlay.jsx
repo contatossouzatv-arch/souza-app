@@ -180,7 +180,7 @@ export default function DailyChestOverlay({
               </Button>
             </div>
             <div className="mt-4 rounded-2xl border border-white/8 bg-white/5 px-4 py-3 text-center text-xs leading-5 text-slate-300">
-              <p>O codigo diario e liberado na comunidade do WhatsApp.</p>
+              <p>O código diário é liberado na comunidade do WhatsApp.</p>
               {accessGate.groupLink ? (
                 <a
                   href={accessGate.groupLink}

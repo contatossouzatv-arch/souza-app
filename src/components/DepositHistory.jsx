@@ -9,9 +9,9 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 function formatBrazilDate(input) {
-  if (!input) return "Data indisponivel";
+  if (!input) return "Data indisponível";
   const date = input instanceof Date ? input : new Date(input);
-  if (Number.isNaN(date.getTime())) return "Data indisponivel";
+  if (Number.isNaN(date.getTime())) return "Data indisponível";
   return format(date, "dd/MM/yyyy 'as' HH:mm", { locale: ptBR });
 }
 
@@ -182,8 +182,8 @@ export default function DepositHistory() {
             >
               <span>
                 {showOlderDeposits
-                  ? "Ocultar depositos anteriores"
-                  : `Ver mais ${olderDeposits.length} depositos`}
+                  ? "Ocultar depósitos anteriores"
+                  : `Ver mais ${olderDeposits.length} depósitos`}
               </span>
               <ChevronDown className={`w-4 h-4 transition-transform ${showOlderDeposits ? "rotate-180" : ""}`} />
             </button>

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 import { Eye, EyeOff } from "lucide-react";
 import caricaturaSouza from "../../assets-para-app/13a71c5e4_caricatura-001.png";
 import profileCoverTile from "../../assets-para-app/profile-cover-tile.png";
@@ -265,6 +266,7 @@ export default function Login() {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden overflow-y-auto bg-slate-950 text-slate-100">
+      <PWAInstallPrompt blocking />
       {loading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-sm">
           <div className="mx-4 w-full max-w-sm rounded-2xl border border-cyan-300/25 bg-slate-900/85 p-6">

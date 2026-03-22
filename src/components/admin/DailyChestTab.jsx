@@ -742,7 +742,7 @@ export default function DailyChestTab() {
               <Field label="Baú Diário ativo">
                 <div className="flex h-11 items-center rounded-xl border border-slate-700 bg-slate-950/70 px-3">
                   <Switch
-                    checked={parseBooleanString(settingsDraft.daily_chest_enabled, true)}
+                    checked={parseBooleanString(settingsDraft.daily_chest_enabled, false)}
                     onCheckedChange={(checked) => updateSetting("daily_chest_enabled", checked ? "true" : "false")}
                   />
                 </div>
@@ -864,7 +864,7 @@ export default function DailyChestTab() {
               <Field label="Bônus por depósito ligado">
                 <div className="flex h-11 items-center rounded-xl border border-slate-700 bg-slate-950/70 px-3">
                   <Switch
-                    checked={parseBooleanString(settingsDraft.daily_chest_deposit_bonus_enabled, true)}
+                    checked={parseBooleanString(settingsDraft.daily_chest_deposit_bonus_enabled, false)}
                     onCheckedChange={(checked) => updateSetting("daily_chest_deposit_bonus_enabled", checked ? "true" : "false")}
                   />
                 </div>
@@ -1016,7 +1016,7 @@ export default function DailyChestTab() {
                 <span className="font-semibold text-white">Fallback atual:</span> {plannerSuggestion.fallbackTitle}
               </p>
               <p className="mt-2">
-                <span className="font-semibold text-white">Regra de banca por pessoa:</span> atÃ© {planner.cashWinsPerUserDay} no dia
+                <span className="font-semibold text-white">Regra de banca por pessoa:</span> até {planner.cashWinsPerUserDay} no dia
               </p>
               <p className="mt-2">
                 O planejador só sugere uma base. Você continua com o controle final dos limites, pesos e do custo diário.

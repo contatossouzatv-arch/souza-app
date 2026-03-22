@@ -22,7 +22,7 @@ import {
 const router = Router();
 
 const DEFAULT_DAILY_CHEST_SETTINGS = {
-  enabled: true,
+  enabled: false,
   tapGoal: 4,
   messageOfDay: "Toque no baú para abrir",
   resetHour: 0,
@@ -30,11 +30,11 @@ const DEFAULT_DAILY_CHEST_SETTINGS = {
   timezone: "America/Sao_Paulo",
   rarityVisual: "rare",
   sceneTheme: "aurora",
-  baseDailyChests: 1,
-  xpPerOpen: 18,
+  baseDailyChests: 0,
+  xpPerOpen: 0,
   scheduleStartAt: "",
   scheduleEndAt: "",
-  depositBonusEnabled: true,
+  depositBonusEnabled: false,
   bonusChestsPerApproved: 1,
   bonusAmountStep: 0,
   bonusChestsPerStep: 0,

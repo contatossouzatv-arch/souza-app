@@ -13925,7 +13925,7 @@ export default function DailyEvent() {
                       <div className="mt-8 rounded-[2rem] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.02))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                         <div className="flex items-center justify-between gap-4">
                           <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Acao rapida</p>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Ação rápida</p>
                             <p className="mt-2 text-[1rem] font-black text-white">{MAP_MENU_POPUP_COPY[item.id]?.action}</p>
                           </div>
                           <button
@@ -15064,7 +15064,7 @@ export default function DailyEvent() {
 
                   {loadoutDevStudioTab === "camera" ? (
                     <div className="pointer-events-auto rounded-[1.5rem] border border-amber-400/30 bg-slate-950/84 p-4 text-white shadow-[0_18px_48px_rgba(2,6,23,0.34)]">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200">Guia rapido</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200">Guia rápido</p>
                       <div className="mt-3 space-y-2 text-[11px] leading-5 text-slate-300">
                         <p>Ajuste primeiro a mira no peito ou rosto.</p>
                         <p>Depois refine profundidade e altura da camera.</p>
@@ -15185,7 +15185,7 @@ export default function DailyEvent() {
 
           <div className="absolute bottom-20 left-1/2 w-[86%] max-w-sm -translate-x-1/2 rounded-xl border border-cyan-300/30 bg-slate-900/75 p-3 text-center">
             <p className="text-xs uppercase tracking-[0.18em] text-cyan-200">Navegando para a ilha</p>
-            <p className="mt-1 text-sm font-bold text-white">Preparando cenario do nivel...</p>
+            <p className="mt-1 text-sm font-bold text-white">Preparando cenário do nível...</p>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-700/70">
               <div className="h-full bg-gradient-to-r from-emerald-400 to-cyan-300" style={{ width: `${Math.round(travelProgress * 100)}%` }} />
             </div>
@@ -15209,7 +15209,7 @@ export default function DailyEvent() {
             <p className="mt-2 text-sm text-slate-200">
               Runner 2.5D prototipo. Colete blocos e desvie dos obstaculos.
             </p>
-            <p className="mt-1 text-xs text-cyan-100/90">Ilha diaria destacada hoje: {dailyIslandDay}</p>
+            <p className="mt-1 text-xs text-cyan-100/90">Ilha diária destacada hoje: {dailyIslandDay}</p>
             {challengeError ? <p className="mt-2 text-xs font-semibold text-amber-300">{challengeError}</p> : null}
             <Button className="mt-4 bg-cyan-400 text-slate-950 hover:bg-cyan-300" onClick={startChallengeIntro}>
               JOGAR AGORA
@@ -16393,7 +16393,7 @@ export default function DailyEvent() {
                       <input type="number" step="0.1" value={String(devRoadSculptDraft.gradeGlobal)} onChange={(e) => handleRoadSculptDraftChange("gradeGlobal", e.target.value)} className="h-7 rounded border border-slate-600 bg-slate-900 px-2 text-[10px] text-slate-100" />
                       <button type="button" onPointerDown={(e) => startRoadSculptHold("gradeGlobal", 0.5, e)} onPointerUp={(e) => stopRoadSculptHold(e.pointerId)} onPointerCancel={(e) => stopRoadSculptHold(e.pointerId)} onPointerLeave={(e) => stopRoadSculptHold(e.pointerId)} className="h-7 rounded border border-cyan-500/60 bg-cyan-900/35 text-[11px]">+</button>
                     </div>
-                    <p className="pt-1 text-[10px] font-semibold text-cyan-200">Inclinacao no horizonte</p>
+                    <p className="pt-1 text-[10px] font-semibold text-cyan-200">Inclinação no horizonte</p>
                     <div className="grid grid-cols-[34px_1fr_34px] gap-1">
                       <button type="button" onPointerDown={(e) => startRoadSculptHold("gradeHorizonBoost", -0.2, e)} onPointerUp={(e) => stopRoadSculptHold(e.pointerId)} onPointerCancel={(e) => stopRoadSculptHold(e.pointerId)} onPointerLeave={(e) => stopRoadSculptHold(e.pointerId)} className="h-7 rounded border border-cyan-500/60 bg-cyan-900/35 text-[11px]">-</button>
                       <input type="number" step="0.1" value={String(devRoadSculptDraft.gradeHorizonBoost)} onChange={(e) => handleRoadSculptDraftChange("gradeHorizonBoost", e.target.value)} className="h-7 rounded border border-slate-600 bg-slate-900 px-2 text-[10px] text-slate-100" />
@@ -16557,7 +16557,7 @@ export default function DailyEvent() {
                       </div>
                     </div>
                     <div className="rounded border border-lime-500/25 bg-lime-950/10 p-2">
-                      <p className="text-[10px] font-semibold text-lime-200">Bloco procedural rapido</p>
+                      <p className="text-[10px] font-semibold text-lime-200">Bloco procedural rápido</p>
                       <p className="mt-1 text-[10px] text-lime-200/80">
                         Gera borda lateral de grama elevada por codigo para testar sem arquivo 3D.
                       </p>
@@ -17701,7 +17701,7 @@ export default function DailyEvent() {
                               </button>
                             ))
                           ) : (
-                            <p className="px-1 py-2 text-[9px] text-slate-400">Sem historico ainda.</p>
+                            <p className="px-1 py-2 text-[9px] text-slate-400">Sem histórico ainda.</p>
                           )}
                         </div>
                       </div>
@@ -17768,7 +17768,7 @@ export default function DailyEvent() {
                           onChange={(event) => handleSelectModelPart(event.target.value)}
                           className="h-7 w-full rounded border border-slate-600 bg-slate-900 px-2 text-[10px] text-slate-100"
                         >
-                          <option value="">Parte atual (nao salva)</option>
+                          <option value="">Parte atual (não salva)</option>
                           {buildResolvedModelParts().map((part) => (
                             <option key={part.id} value={part.id}>
                               {part.name}
@@ -18702,7 +18702,7 @@ export default function DailyEvent() {
                         </div>
                       </div>
                       <div className="space-y-1 rounded border border-fuchsia-500/20 bg-slate-900/40 p-2">
-                        <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-fuchsia-200">Rotacao do visual</p>
+                        <p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-fuchsia-200">Rotação do visual</p>
                         <div className="grid grid-cols-3 gap-1">
                           <input
                             type="number"
@@ -19358,7 +19358,7 @@ export default function DailyEvent() {
             <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-slate-950/88">
               <div className="rounded-xl border border-cyan-300/30 bg-slate-900/80 px-4 py-3 text-center">
                 <p className="text-xs uppercase tracking-[0.16em] text-cyan-200">Preparando cenario</p>
-                <p className="mt-1 text-sm font-semibold text-white">Carregando texturas e vegetacao...</p>
+                <p className="mt-1 text-sm font-semibold text-white">Carregando texturas e vegetação...</p>
               </div>
             </div>
           ) : null}
@@ -19644,7 +19644,7 @@ export default function DailyEvent() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-200/80">Colecao do jogador</p>
-                  <h2 className="mt-2 text-2xl font-black text-white">Seus premios</h2>
+                  <h2 className="mt-2 text-2xl font-black text-white">Seus prêmios</h2>
                   <p className="mt-2 text-sm text-slate-300">
                     Cada baú coletado entra aqui. O visual segue clima de jogo mobile, com slots e destaque do drop mais recente.
                   </p>
@@ -19659,7 +19659,7 @@ export default function DailyEvent() {
                   <div className="rounded-[1.6rem] bg-slate-950/86 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-100/80">Ultimo coletado</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-100/80">Último coletado</p>
                         <h3 className="mt-2 text-lg font-black text-white">{latestCollectedReward.title}</h3>
                         <p className="mt-1 text-sm text-slate-300">{latestCollectedReward.subtitle}</p>
                       </div>
@@ -19696,15 +19696,15 @@ export default function DailyEvent() {
               ) : (
                 <div className="mt-5 rounded-[1.5rem] border border-dashed border-white/12 bg-white/[0.03] px-4 py-8 text-center">
                   <Sparkles className="mx-auto h-7 w-7 text-cyan-200/70" />
-                  <p className="mt-3 text-sm font-semibold text-white">Sua galeria ainda esta vazia</p>
-                  <p className="mt-1 text-xs text-slate-400">Abra um baú, colete a recompensa e os cards vao aparecer aqui.</p>
+                  <p className="mt-3 text-sm font-semibold text-white">Sua galeria ainda está vazia</p>
+                  <p className="mt-1 text-xs text-slate-400">Abra um baú, colete a recompensa e os cards vão aparecer aqui.</p>
                 </div>
               )}
             </div>
 
             <div className="mt-5">
               <div className="mb-3 flex items-center justify-between px-1">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Slots da colecao</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Slots da coleção</p>
                 <p className="text-xs text-slate-400">{rewardGallery.length} desbloqueados</p>
               </div>
               <div className="grid grid-cols-3 gap-3">
@@ -19895,7 +19895,7 @@ export default function DailyEvent() {
                 <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-900/70 px-3 py-3">
                   <div>
                     <p className="text-sm font-semibold text-white">Sons de menus</p>
-                    <p className="mt-1 text-[11px] text-slate-400">Toques de navegacao e mudanca de aba.</p>
+                    <p className="mt-1 text-[11px] text-slate-400">Toques de navegação e mudança de aba.</p>
                   </div>
                   <Switch
                     checked={soundPrefs.menu}
@@ -19908,8 +19908,8 @@ export default function DailyEvent() {
 
                 <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-900/70 px-3 py-3">
                   <div>
-                    <p className="text-sm font-semibold text-white">Sons de interacao</p>
-                    <p className="mt-1 text-[11px] text-slate-400">Cliques, acoes e pequenos efeitos dentro das telas.</p>
+                    <p className="text-sm font-semibold text-white">Sons de interação</p>
+                    <p className="mt-1 text-[11px] text-slate-400">Cliques, ações e pequenos efeitos dentro das telas.</p>
                   </div>
                   <Switch
                     checked={soundPrefs.interaction}
@@ -19936,7 +19936,7 @@ export default function DailyEvent() {
             </div>
 
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Presets rapidos</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Presets rápidos</p>
               <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {Object.values(GRAPHICS_PRESET_LIBRARY).map((preset) => {
                   const active = runnerGraphicsSettings.presetId === preset.id;
@@ -19995,7 +19995,7 @@ export default function DailyEvent() {
               </label>
 
               <label className="block space-y-2">
-                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Suavizacao de borda</span>
+                <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Suavização de borda</span>
                 <select
                   value={runnerGraphicsSettings.antiAlias}
                   onChange={(event) => handleRunnerGraphicsSettingChange("antiAlias", event.target.value)}

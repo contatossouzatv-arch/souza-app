@@ -24,7 +24,7 @@ export default function TicketsDisplay({
     queryFn: () => base44.entities.DepositantDrawCycle.list("-created_date"),
   });
 
-  const depositantDrawActive = settings.find((s) => s.key === "depositant_draw_active")?.value !== "false";
+  const depositantDrawActive = settings.find((s) => s.key === "depositant_draw_active")?.value === "true";
   const activeCycle = cycles.find((c) => c.active);
 
   const approvedDeposits = deposits.filter(

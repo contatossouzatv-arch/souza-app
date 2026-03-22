@@ -457,7 +457,7 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["inicio-users"] });
       setIsEditDataModalOpen(false);
       toast({
-        title: "Configura��es salvas",
+        title: "Configurações salvas",
         description: "Seus dados foram atualizados com sucesso.",
       });
     },
@@ -466,7 +466,7 @@ export default function SettingsPage() {
       toast({
         variant: "destructive",
         title: "Falha ao salvar",
-        description: error?.message || "N�o foi poss�vel salvar agora.",
+        description: error?.message || "Não foi possível salvar agora.",
       });
     },
   });
@@ -517,7 +517,7 @@ export default function SettingsPage() {
       setSelectedPhotoOffsetY(0);
       toast({
         title: "Foto enviada",
-        description: "Acompanhe o status de modera��o abaixo.",
+        description: "Acompanhe o status de moderação abaixo.",
       });
     },
     onError: (error) => {
@@ -542,14 +542,14 @@ export default function SettingsPage() {
       });
       toast({
         title: "Envio cancelado",
-        description: "Voc� pode selecionar outra foto.",
+        description: "Você pode selecionar outra foto.",
       });
     },
     onError: (error) => {
       toast({
         variant: "destructive",
         title: "Falha ao cancelar",
-        description: error?.message || "N�o foi poss�vel cancelar o envio agora.",
+        description: error?.message || "Não foi possível cancelar o envio agora.",
       });
     },
   });
@@ -582,7 +582,7 @@ export default function SettingsPage() {
       toast({
         variant: "destructive",
         title: "Falha ao atualizar",
-        description: error?.message || "N�o foi poss�vel atualizar o ID.",
+        description: error?.message || "Não foi possível atualizar o ID.",
       });
     },
   });
@@ -606,7 +606,7 @@ export default function SettingsPage() {
       toast({
         variant: "destructive",
         title: "Falha ao excluir",
-        description: error?.message || "N�o foi poss�vel excluir o ID.",
+        description: error?.message || "Não foi possível excluir o ID.",
       });
     },
   });
@@ -617,7 +617,7 @@ export default function SettingsPage() {
       const nextId = newHistoryForm.platform_id.trim();
 
       if (!user?.id) {
-        throw new Error("Usu�rio n�o encontrado.");
+        throw new Error("Usuário não encontrado.");
       }
       if (!nextName || !nextId) {
         throw new Error("Preencha plataforma e ID.");
@@ -641,7 +641,7 @@ export default function SettingsPage() {
       toast({
         variant: "destructive",
         title: "Falha ao adicionar",
-        description: error?.message || "N�o foi poss�vel adicionar o ID.",
+        description: error?.message || "Não foi possível adicionar o ID.",
       });
     },
   });
@@ -663,7 +663,7 @@ export default function SettingsPage() {
     onSuccess: () => {
       toast({
         title: "Conta desativada",
-        description: "Sua conta foi desativada. Ao fazer login novamente, ela ser� reativada.",
+        description: "Sua conta foi desativada. Ao fazer login novamente, ela será reativada.",
       });
       setIsDeleteModalOpen(false);
       base44.auth.logout("/login");
@@ -672,7 +672,7 @@ export default function SettingsPage() {
       toast({
         variant: "destructive",
         title: "Falha ao desativar",
-        description: error?.message || "N�o foi poss�vel desativar a conta agora.",
+        description: error?.message || "Não foi possível desativar a conta agora.",
       });
     },
   });
@@ -691,7 +691,7 @@ export default function SettingsPage() {
       toast({
         variant: "destructive",
         title: "Falha ao excluir",
-        description: error?.message || "N�o foi poss�vel excluir a conta agora.",
+        description: error?.message || "Não foi possível excluir a conta agora.",
       });
     },
   });
@@ -716,14 +716,14 @@ export default function SettingsPage() {
       }
       toast({
         title: "2FA configurado",
-        description: "Agora confirme com o c�digo do app autenticador.",
+        description: "Agora confirme com o código do app autenticador.",
       });
     },
     onError: (error) => {
       toast({
         variant: "destructive",
         title: "Falha no 2FA",
-        description: error?.message || "N�o foi poss�vel iniciar a configura��o do 2FA.",
+        description: error?.message || "Não foi possível iniciar a configuração do 2FA.",
       });
     },
   });
@@ -739,14 +739,14 @@ export default function SettingsPage() {
       setIsTwoFactorModalOpen(false);
       toast({
         title: "2FA ativado",
-        description: "No pr�ximo login ser� solicitado o c�digo do autenticador.",
+        description: "No próximo login será solicitado o código do autenticador.",
       });
     },
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "C�digo inv�lido",
-        description: error?.message || "N�o foi poss�vel ativar o 2FA.",
+        title: "Código inválido",
+        description: error?.message || "Não foi possível ativar o 2FA.",
       });
     },
   });
@@ -768,7 +768,7 @@ export default function SettingsPage() {
       toast({
         variant: "destructive",
         title: "Falha ao desativar",
-        description: error?.message || "N�o foi poss�vel desativar o 2FA.",
+        description: error?.message || "Não foi possível desativar o 2FA.",
       });
     },
   });
@@ -778,15 +778,15 @@ export default function SettingsPage() {
     onSuccess: (data) => {
       setTwoFactorDiag(data || null);
       toast({
-        title: data?.is_valid ? "Diagn�stico: c�digo v�lido" : "Diagn�stico: c�digo inv�lido",
-        description: data?.hint || "Diagn�stico conclu�do.",
+        title: data?.is_valid ? "Diagnóstico: código válido" : "Diagnóstico: código inválido",
+        description: data?.hint || "Diagnóstico concluído.",
       });
     },
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "Falha no diagn�stico",
-        description: error?.message || "N�o foi poss�vel diagnosticar o 2FA agora.",
+        title: "Falha no diagnóstico",
+        description: error?.message || "Não foi possível diagnosticar o 2FA agora.",
       });
     },
   });
@@ -800,7 +800,7 @@ export default function SettingsPage() {
       if (!currentPassword) throw new Error("Digite sua senha atual.");
       if (!newPassword) throw new Error("Digite a nova senha.");
       if (newPassword.length < 8) throw new Error("A nova senha deve ter ao menos 8 caracteres.");
-      if (newPassword !== confirmPassword) throw new Error("A confirma��o da nova senha n�o confere.");
+      if (newPassword !== confirmPassword) throw new Error("A confirmação da nova senha não confere.");
       if (newPassword === currentPassword) throw new Error("A nova senha deve ser diferente da atual.");
 
       await base44.auth.changePassword(currentPassword, newPassword);
@@ -821,7 +821,7 @@ export default function SettingsPage() {
       toast({
         variant: "destructive",
         title: "Falha ao alterar senha",
-        description: error?.message || "N�o foi poss�vel alterar a senha agora.",
+        description: error?.message || "Não foi possível alterar a senha agora.",
       });
     },
   });
@@ -833,7 +833,7 @@ export default function SettingsPage() {
       setTimeout(() => setCopiedField(""), 1200);
       toast({
         title: "Copiado",
-        description: "Texto copiado para a �rea de transfer�ncia.",
+        description: "Texto copiado para a área de transferência.",
       });
     } catch {
       toast({
@@ -856,7 +856,7 @@ export default function SettingsPage() {
     if (!isSupportedType) {
       toast({
         variant: "destructive",
-        title: "Formato n�o suportado",
+        title: "Formato não suportado",
         description: "Use uma imagem JPG, PNG, WEBP ou GIF.",
       });
       event.target.value = "";
@@ -992,7 +992,7 @@ export default function SettingsPage() {
       toast({
         variant: "destructive",
         title: "Falha ao preparar imagem",
-        description: error?.message || "N�o foi poss�vel preparar a foto.",
+        description: error?.message || "Não foi possível preparar a foto.",
       });
     } finally {
       setIsPreparingPhoto(false);
@@ -1026,8 +1026,8 @@ export default function SettingsPage() {
   const statusLabelMap = {
     none: "Nenhuma foto enviada",
     approved: "Foto aprovada",
-    manual_review: "Em an�lise de modera��o",
-    pending: "Em an�lise de modera��o",
+    manual_review: "Em análise de moderação",
+    pending: "Em análise de moderação",
     rejected: "Foto rejeitada",
   };
   const profilePreviewSrc =
@@ -1058,7 +1058,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-slate-800 bg-gradient-to-r from-indigo-500/15 to-slate-900 px-4 py-4">
-        <h1 className="text-lg font-bold">Configura��es da Conta</h1>
+        <h1 className="text-lg font-bold">Configurações da Conta</h1>
         <p className="text-sm text-slate-400">Edite seus dados completos e privados aqui.</p>
       </div>
 
@@ -1123,7 +1123,7 @@ export default function SettingsPage() {
             className="aspect-square rounded-2xl border border-violet-500/40 bg-violet-500/10 p-3 text-left transition hover:bg-violet-500/20"
           >
             <ShieldCheck className="mb-2 h-5 w-5 text-violet-200" />
-            <p className="text-sm font-semibold text-white">Verifica��o em 2 etapas</p>
+            <p className="text-sm font-semibold text-white">Verificação em 2 etapas</p>
             <p className="mt-1 text-xs text-slate-300">Ative e gerencie seu 2FA.</p>
           </button>
         </div>
@@ -1133,7 +1133,7 @@ export default function SettingsPage() {
         <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-3">
           <p className="text-sm font-semibold text-white">Sons do aplicativo</p>
           <p className="mt-1 text-xs text-slate-400">
-            Controle separado para navega��o de menu e intera��es nas p�ginas.
+            Controle separado para navegação de menu e interações nas páginas.
           </p>
           <div className="mt-3 space-y-2">
             <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2">
@@ -1151,8 +1151,8 @@ export default function SettingsPage() {
             </div>
             <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2">
               <div>
-                <p className="text-sm font-medium text-slate-100">Sons de intera��es</p>
-                <p className="text-[11px] text-slate-400">Toques em a��es dentro das p�ginas (ex.: selos).</p>
+                <p className="text-sm font-medium text-slate-100">Sons de interações</p>
+                <p className="text-[11px] text-slate-400">Toques em ações dentro das páginas (ex.: selos).</p>
               </div>
               <Switch
                 checked={soundPrefs.interaction}
@@ -1170,7 +1170,7 @@ export default function SettingsPage() {
           className="w-full justify-start gap-2 bg-slate-800 hover:bg-slate-700"
         >
           <UserCog className="h-4 w-4" />
-          Ver perfil p�blico
+          Ver perfil público
         </Button>
 
         {user?.role === "admin" ? (
@@ -1244,7 +1244,7 @@ export default function SettingsPage() {
                 {selectedPhotoPreview ? (
                   <div className="space-y-2">
                     <div
-                      className="relative mx-auto h-52 w-52 touch-none overflow-hidden rounded-full border border-slate-700 bg-slate-950"
+                      className="relative mx-auto h-52 w-52 touch-none overflow-hidden rounded-[1.75rem] border border-slate-700 bg-slate-950"
                       onPointerDown={handlePhotoPreviewPointerDown}
                       onPointerMove={handlePhotoPreviewPointerMove}
                       onPointerUp={handlePhotoPreviewPointerUp}
@@ -1262,8 +1262,10 @@ export default function SettingsPage() {
                           transform: `translate(calc(-50% + ${selectedPhotoOffsetX}px), calc(-50% + ${selectedPhotoOffsetY}px))`,
                         }}
                       />
+                      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0,transparent_42%,rgba(2,6,23,0.48)_43%,rgba(2,6,23,0.78)_58%,rgba(2,6,23,0.94)_100%)]" />
+                      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[78%] w-[78%] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-cyan-300/80 shadow-[0_0_24px_rgba(34,211,238,0.22)]" />
                     </div>
-                    <p className="text-center text-[11px] text-slate-400">Arraste a foto com o dedo ou mouse para enquadrar.</p>
+                    <p className="text-center text-[11px] text-slate-400">Arraste e dê zoom com a foto inteira ao fundo. O círculo mostra como ela vai aparecer no perfil.</p>
                     <div>
                       <Label className="mb-1 block text-xs text-slate-300">Zoom</Label>
                       <Input
@@ -1288,7 +1290,7 @@ export default function SettingsPage() {
                           Enviando...
                         </>
                       ) : (
-                        "Enviar foto para an�lise"
+                        "Enviar foto para análise"
                       )}
                     </Button>
                     <Button
@@ -1314,9 +1316,9 @@ export default function SettingsPage() {
 
                 {(profileImageStatus === "manual_review" || profileImageStatus === "pending") && pendingPhotoSrc ? (
                   <div className="rounded-xl border border-amber-500/40 bg-amber-950/25 p-3">
-                    <p className="mb-2 text-xs font-medium text-amber-100">Foto aguardando aprova��o</p>
+                    <p className="mb-2 text-xs font-medium text-amber-100">Foto aguardando aprovação</p>
                     <div className="mx-auto h-24 w-24 overflow-hidden rounded-full border border-amber-300/50">
-                      <img src={pendingPhotoSrc} alt="Foto aguardando aprova��o" className="h-full w-full object-cover" />
+                      <img src={pendingPhotoSrc} alt="Foto aguardando aprovação" className="h-full w-full object-cover" />
                     </div>
                   </div>
                 ) : null}
@@ -1434,11 +1436,11 @@ export default function SettingsPage() {
                 <Input value={formData.phone} onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))} className="border-slate-700 bg-slate-900 text-white" />
               </div>
               <div>
-                <Label className="mb-1 block text-slate-300">Nome p�blico</Label>
+                <Label className="mb-1 block text-slate-300">Nome público</Label>
                 <Input value={formData.alias} onChange={(e) => setFormData((prev) => ({ ...prev, alias: e.target.value }))} className="border-slate-700 bg-slate-900 text-white" />
               </div>
               <div>
-                <Label className="mb-1 block text-slate-300">@ usu�rio</Label>
+                <Label className="mb-1 block text-slate-300">@ usuário</Label>
                 <Input
                   value={formData.handle}
                   onChange={(e) => setFormData((prev) => ({ ...prev, handle: normalizeHandle(e.target.value).slice(0, 24) }))}
@@ -1450,7 +1452,7 @@ export default function SettingsPage() {
             <div className="sticky bottom-0 -mx-1 mt-1 bg-gradient-to-t from-slate-950 via-slate-950/95 to-transparent px-1 pt-3">
               <Button type="button" onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} className="w-full bg-cyan-700 text-white hover:bg-cyan-600">
                 {updateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                Salvar altera��es
+                Salvar alterações
               </Button>
             </div>
           </div>
@@ -1523,7 +1525,7 @@ export default function SettingsPage() {
                 );
               })
             ) : (
-              <p className="rounded-lg border border-slate-700 bg-slate-900/70 p-3 text-sm text-slate-300">Voc� ainda n�o adicionou IDs extras.</p>
+              <p className="rounded-lg border border-slate-700 bg-slate-900/70 p-3 text-sm text-slate-300">Você ainda não adicionou IDs extras.</p>
             )}
           </div>
         </DialogContent>
@@ -1592,7 +1594,7 @@ export default function SettingsPage() {
                   type="button"
                   onClick={() => setShowPasswordFields((prev) => ({ ...prev, confirm: !prev.confirm }))}
                   className="absolute inset-y-0 right-0 inline-flex w-10 items-center justify-center text-slate-400 hover:text-slate-200"
-                  aria-label={showPasswordFields.confirm ? "Ocultar confirma��o de senha" : "Mostrar confirma��o de senha"}
+                  aria-label={showPasswordFields.confirm ? "Ocultar confirmação de senha" : "Mostrar confirmação de senha"}
                 >
                   {showPasswordFields.confirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -1614,12 +1616,12 @@ export default function SettingsPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-violet-200">
               <ShieldCheck className="h-5 w-5" />
-              Verifica��o em 2 etapas (2FA)
+              Verificação em 2 etapas (2FA)
             </DialogTitle>
           </DialogHeader>
           <div className="hide-scrollbar space-y-3 overflow-y-auto pr-1">
             <p className="text-xs text-slate-300">
-              {user?.two_factor_enabled ? "Prote��o ativa. Voc� precisa do c�digo do autenticador para entrar." : "Adicione uma camada extra de seguran�a com c�digo de 6 d�gitos."}
+              {user?.two_factor_enabled ? "Proteção ativa. Você precisa do código do autenticador para entrar." : "Adicione uma camada extra de segurança com código de 6 dígitos."}
             </p>
             {!user?.two_factor_enabled ? (
               <div className="space-y-2">
@@ -1652,9 +1654,9 @@ export default function SettingsPage() {
                     {twoFactorDiag ? (
                       <div className="rounded-md border border-slate-700 bg-slate-900/80 p-2 text-[11px]">
                         <p className={twoFactorDiag.is_valid ? "text-emerald-300" : "text-rose-300"}>
-                          {twoFactorDiag.is_valid ? "C�digo v�lido" : "C�digo inv�lido"} � {twoFactorDiag.hint}
+                          {twoFactorDiag.is_valid ? "Código válido" : "Código inválido"} • {twoFactorDiag.hint}
                         </p>
-                        <p className="text-slate-400">Hora servidor: {twoFactorDiag.server_time_iso} � janela: {twoFactorDiag.seconds_remaining}s</p>
+                        <p className="text-slate-400">Hora servidor: {twoFactorDiag.server_time_iso} • janela: {twoFactorDiag.seconds_remaining}s</p>
                         {twoFactorDiag.clock_drift_warning ? <p className="text-amber-300">{twoFactorDiag.clock_drift_warning}</p> : null}
                       </div>
                     ) : null}
@@ -1663,7 +1665,7 @@ export default function SettingsPage() {
               </div>
             ) : (
               <div className="space-y-2 rounded-lg border border-amber-700/40 bg-amber-950/20 p-2.5">
-                <p className="text-[11px] text-amber-100">Para desativar, confirme com um c�digo atual do autenticador.</p>
+                <p className="text-[11px] text-amber-100">Para desativar, confirme com um código atual do autenticador.</p>
                 <div className="flex gap-2">
                   <Input value={twoFactorDisableOtp} onChange={(e) => setTwoFactorDisableOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" placeholder="000000" className="border-amber-800/70 bg-slate-900 text-white" />
                   <Button type="button" onClick={() => disableTwoFactorMutation.mutate(twoFactorDisableOtp)} disabled={disableTwoFactorMutation.isPending || twoFactorDisableOtp.length !== 6} className="h-10 bg-rose-700 px-3 text-xs font-semibold text-white hover:bg-rose-600">
@@ -1687,7 +1689,7 @@ export default function SettingsPage() {
 
           <div className="hide-scrollbar space-y-3 overflow-y-auto pr-1 text-sm">
             <p className="rounded-lg border border-slate-700 bg-slate-900/70 p-3 text-slate-200">
-              Excluir conta � permanente. Se quiser apenas dar um tempo, use a desativa��o tempor�ria.
+              Excluir conta é permanente. Se quiser apenas dar um tempo, use a desativação temporária.
             </p>
 
             <Button
@@ -1701,7 +1703,7 @@ export default function SettingsPage() {
               ) : (
                 <AlertTriangle className="h-4 w-4" />
               )}
-              Voc� n�o prefere apenas desativar por enquanto?
+              Você não prefere apenas desativar por enquanto?
             </Button>
 
             <div className="space-y-2 rounded-lg border border-rose-800/80 bg-rose-950/40 p-3">
@@ -1728,7 +1730,7 @@ export default function SettingsPage() {
                   ) : (
                     <Trash2 className="h-4 w-4" />
                   )}
-                  Confirmar exclus�o
+                  Confirmar exclusão
                 </Button>
                 <Button
                   type="button"

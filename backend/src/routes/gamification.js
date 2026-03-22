@@ -29,7 +29,7 @@ const DEFAULT_POINTS_RULES = {
 };
 
 const DEFAULT_WEEKLY_CONFIG = {
-  enabled: true,
+  enabled: false,
   title: "Top Semanal",
   subtitle: "Acumule pontos durante o ciclo para subir no ranking.",
   instructions:
@@ -46,7 +46,7 @@ const DEFAULT_WEEKLY_CONFIG = {
   ],
   fallback_reward_type: "cash_prize",
   fallback_reward_value: 20,
-  active: true,
+  active: false,
 };
 
 let gamificationStateCache = {
@@ -57,13 +57,13 @@ let gamificationStateCache = {
 let gamificationStatePromise = null;
 
 const DEFAULT_DAILY_CHECKIN_CONFIG = {
-  enabled: true,
+  enabled: false,
   streak_days: 7,
   rewards: Array.from({ length: 7 }, (_, index) => ({
     day: index + 1,
     weekly_points: 0,
     label: `Dia ${index + 1}`,
-    active: true,
+    active: false,
   })),
 };
 

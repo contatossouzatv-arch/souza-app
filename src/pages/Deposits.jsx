@@ -275,7 +275,7 @@ export default function Deposits() {
     >
       <div className="rounded-2xl border border-slate-800 bg-gradient-to-r from-cyan-500/15 to-slate-900 px-4 py-4">
         <h1 className="text-lg font-bold">Área de Depósitos</h1>
-        <p className="text-sm text-slate-400">Tudo separado em uma tela so para deposito e bilhetes.</p>
+        <p className="text-sm text-slate-400">Tudo separado em uma tela só para depósito e bilhetes.</p>
       </div>
 
       <Card className="overflow-hidden border-slate-800 bg-slate-900/60 p-0">

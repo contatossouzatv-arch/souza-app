@@ -24,15 +24,15 @@ function mapSourceLabel(entry) {
   const source = String(entry?.source_type || "").toLowerCase();
   const ref = String(entry?.source_ref || "").toLowerCase();
 
-  if (source.includes("daily_checkin") || ref.includes("daily_checkin")) return "check-in diario";
+  if (source.includes("daily_checkin") || ref.includes("daily_checkin")) return "check-in diário";
   if (source.includes("follow") || ref.includes("follow")) return "seguir um perfil";
   if (source.includes("like") || ref.includes("like")) return "curtir um perfil";
-  if (source.includes("daily_chest") || ref.includes("daily_chest")) return "Bau Diario";
-  if (source.includes("approved_deposit") || ref.includes("approved_deposit")) return "deposito aprovado";
-  if (source.includes("live_participation") || ref.includes("live_participation")) return "participacao no Sorteio Live";
-  if (source.includes("game_call") || ref.includes("game_call")) return "participacao no Call Jogo";
-  if (source.includes("instant_raffle") || ref.includes("instant_raffle")) return "participacao no Sorteio Rapido";
-  if (source.includes("validated_win") || ref.includes("validated_win")) return "premio confirmado";
+  if (source.includes("daily_chest") || ref.includes("daily_chest")) return "Baú Diário";
+  if (source.includes("approved_deposit") || ref.includes("approved_deposit")) return "depósito aprovado";
+  if (source.includes("live_participation") || ref.includes("live_participation")) return "participação no Sorteio Live";
+  if (source.includes("game_call") || ref.includes("game_call")) return "participação no Call Jogo";
+  if (source.includes("instant_raffle") || ref.includes("instant_raffle")) return "participação no Sorteio Rápido";
+  if (source.includes("validated_win") || ref.includes("validated_win")) return "prêmio confirmado";
   if (source.includes("admin")) return "ajuste administrativo";
   return "sua atividade no app";
 }
@@ -43,7 +43,7 @@ function uniqueNonEmpty(values = []) {
 
 function buildPopupHeadline(groupCount) {
   if (groupCount <= 1) return "Ganhos liberados agora";
-  return `Ganhos liberados em ${groupCount} acoes`;
+  return `Ganhos liberados em ${groupCount} ações`;
 }
 
 function resolveEntryTitle(entry) {
@@ -78,7 +78,7 @@ function buildGroupedRewards(entries = [], fallbackDeltas = {}) {
     return [
       {
         id: "fallback",
-        title: "Atualizacao recente",
+        title: "Atualização recente",
         subtitle: "Ganhos detectados sem detalhamento individual no ledger.",
         metrics: fallbackMetrics,
       },

@@ -142,7 +142,7 @@ export default function DepositProgress({ totalApproved, pendingAmount, user, on
       toast({
         variant: "destructive",
         title: "Registro desabilitado",
-        description: "Os depositos estao temporariamente indisponiveis.",
+        description: "Os depósitos estão temporariamente indisponíveis.",
       });
       return;
     }
@@ -150,7 +150,7 @@ export default function DepositProgress({ totalApproved, pendingAmount, user, on
     if (!amount || parseFloat(amount) <= 0) {
       toast({
         variant: "destructive",
-        title: "Valor invalido",
+        title: "Valor inválido",
         description: "Digite um valor de deposito valido.",
       });
       return;
@@ -337,14 +337,14 @@ export default function DepositProgress({ totalApproved, pendingAmount, user, on
               <div className="px-3 py-2 bg-blue-900/30 border border-blue-600/50 rounded-lg">
                 <p className="text-sm font-bold text-blue-300 flex items-center justify-center gap-2">
                   <AlertCircle className="w-4 h-4" />
-                  Aguardando liberacao de R$ {pendingAmount.toFixed(2)}
+                  Aguardando liberação de R$ {pendingAmount.toFixed(2)}
                 </p>
               </div>
             ) : null}
 
             {!depositsEnabled ? (
               <div className="px-3 py-2 bg-red-900/30 border border-red-600/50 rounded-lg">
-                <p className="text-xs text-red-200">Novos depositos temporariamente indisponiveis</p>
+                <p className="text-xs text-red-200">Novos depósitos temporariamente indisponíveis</p>
               </div>
             ) : null}
           </div>
