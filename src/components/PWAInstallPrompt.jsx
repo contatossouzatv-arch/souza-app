@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, Download, ExternalLink, Smartphone, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import caricaturaSouza from "../../assets-para-app/13a71c5e4_caricatura-001.png";
+import souzaTitleAnimado from "../../assets-para-app/souza title animado.webm";
 
 function isMobileDevice() {
   if (typeof window === "undefined") return false;
@@ -19,6 +21,7 @@ export default function PWAInstallPrompt({ blocking = false }) {
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
   const [showPrompt, setShowPrompt] = useState(() => (blocking ? isMobileDevice() && !isStandaloneMode() : false));
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
+  const [installStarted, setInstallStarted] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState(() =>
     typeof Notification === "undefined" ? "unsupported" : Notification.permission
@@ -43,6 +46,8 @@ export default function PWAInstallPrompt({ blocking = false }) {
       setInstalled(true);
       setShowPrompt(false);
       setDeferredPrompt(null);
+      setInstallStarted(false);
+      setInstallHelpOpen(false);
     };
 
     syncState();
@@ -65,6 +70,7 @@ export default function PWAInstallPrompt({ blocking = false }) {
       setNotificationStatus("unsupported");
       return;
     }
+
     try {
       const permission = await Notification.requestPermission();
       setNotificationStatus(permission);
@@ -74,16 +80,20 @@ export default function PWAInstallPrompt({ blocking = false }) {
   };
 
   const handleInstall = async () => {
+    setInstallStarted(true);
+    setInstallHelpOpen(true);
+
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const result = await deferredPrompt.userChoice;
       if (result?.outcome === "accepted") {
         await requestNotifications();
+        return;
       }
+      setInstallStarted(false);
       return;
     }
 
-    setInstallHelpOpen(true);
     await requestNotifications();
   };
 
@@ -95,13 +105,19 @@ export default function PWAInstallPrompt({ blocking = false }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className={blocking ? "fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/92 p-4 backdrop-blur-md" : "fixed inset-x-0 top-0 z-[120] p-4"}
+        className={
+          blocking
+            ? "fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/92 p-4 backdrop-blur-md"
+            : "fixed inset-x-0 top-0 z-[120] p-4"
+        }
       >
         <motion.div
           initial={{ opacity: 0, y: 24, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 16, scale: 0.98 }}
-          className={`w-full ${blocking ? "max-w-md" : "max-w-lg mx-auto"} overflow-hidden rounded-[2rem] border border-cyan-400/30 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_36%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-6 shadow-[0_24px_90px_rgba(8,145,178,0.28)]`}
+          className={`relative w-full ${
+            blocking ? "max-w-md" : "mx-auto max-w-lg"
+          } overflow-hidden rounded-[2rem] border border-cyan-400/30 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_36%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-6 shadow-[0_24px_90px_rgba(8,145,178,0.28)]`}
         >
           <button
             type="button"
@@ -111,15 +127,41 @@ export default function PWAInstallPrompt({ blocking = false }) {
           >
             <X className="h-3.5 w-3.5" />
           </button>
+
+          <div className="mb-5 flex justify-center">
+            <div className="relative overflow-visible rounded-3xl border border-cyan-300/30 bg-slate-900/60 p-2 shadow-xl shadow-cyan-950/40">
+              <img
+                src={caricaturaSouza}
+                alt="Caricatura do Souza"
+                className="h-24 w-24 rounded-2xl object-cover"
+              />
+              <video
+                className="pointer-events-none absolute left-1/2 z-20 h-14 w-auto -translate-x-1/2 drop-shadow-[0_6px_10px_rgba(0,0,0,0.55)]"
+                style={{ top: "-26px" }}
+                src={souzaTitleAnimado}
+                autoPlay
+                loop
+                muted
+                playsInline
+              />
+            </div>
+          </div>
+
           <div className="flex items-start gap-4">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-cyan-500/14 text-cyan-200">
               <Smartphone className="h-7 w-7" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200/80">Experiência Recomendada</p>
-              <h3 className="mt-2 text-2xl font-black text-white">Instale o app para continuar</h3>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200/80">
+                Experiência Recomendada
+              </p>
+              <h3 className="mt-2 text-2xl font-black text-white">
+                {installStarted ? "Instalação iniciada" : "Instale o app para continuar"}
+              </h3>
               <p className="mt-3 text-sm leading-6 text-slate-300">
-                Para usar o App do Souza com mais estabilidade, abertura rápida e notificações, o acesso no celular deve ser feito pelo app instalado.
+                {installStarted
+                  ? "Conclua a instalação no navegador e depois abra o App do Souza pela tela inicial do celular."
+                  : "Para usar o App do Souza com mais estabilidade, abertura rápida e notificações, o acesso no celular deve ser feito pelo app instalado."}
               </p>
             </div>
           </div>
@@ -137,18 +179,26 @@ export default function PWAInstallPrompt({ blocking = false }) {
           </div>
 
           <div className="mt-5 flex flex-col gap-3">
-            <Button onClick={handleInstall} className="h-12 rounded-2xl bg-cyan-400 font-bold text-slate-950 hover:bg-cyan-300">
+            <Button
+              onClick={handleInstall}
+              className="h-12 rounded-2xl bg-cyan-400 font-bold text-slate-950 hover:bg-cyan-300"
+              disabled={installStarted}
+            >
               <Download className="mr-2 h-4 w-4" />
-              Instalar agora
+              {installStarted ? "Aguardando instalação" : "Instalar agora"}
             </Button>
             <p className="text-center text-xs text-slate-400">
-              Depois de instalar, abra o app pela tela inicial do celular para liberar login e cadastro.
+              {installStarted
+                ? "Se nada abrir, use o menu do navegador para instalar manualmente. Esta tela só some sozinha depois da instalação."
+                : "Depois de instalar, abra o app pela tela inicial do celular para liberar login e cadastro."}
             </p>
           </div>
 
           {installHelpOpen ? (
             <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-sm text-slate-200">
-              <p className="font-semibold text-white">{isIOS ? "Como instalar no iPhone" : "Como instalar no Android"}</p>
+              <p className="font-semibold text-white">
+                {isIOS ? "Como instalar no iPhone" : "Como instalar no Android"}
+              </p>
               {isIOS ? (
                 <ol className="mt-2 list-decimal space-y-1 pl-5 text-slate-300">
                   <li>Toque no botão de compartilhar do Safari.</li>
@@ -164,7 +214,14 @@ export default function PWAInstallPrompt({ blocking = false }) {
               )}
               <div className="mt-3 flex items-center gap-2 text-xs text-cyan-200">
                 <ExternalLink className="h-3.5 w-3.5" />
-                Notificações: {notificationStatus === "granted" ? "ativadas" : notificationStatus === "denied" ? "bloqueadas" : notificationStatus === "unsupported" ? "não suportadas neste aparelho" : "aguardando permissão"}
+                Notificações:{" "}
+                {notificationStatus === "granted"
+                  ? "ativadas"
+                  : notificationStatus === "denied"
+                    ? "bloqueadas"
+                    : notificationStatus === "unsupported"
+                      ? "não suportadas neste aparelho"
+                      : "aguardando permissão"}
               </div>
             </div>
           ) : null}

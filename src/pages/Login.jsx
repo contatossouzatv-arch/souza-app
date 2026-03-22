@@ -81,6 +81,7 @@ export default function Login() {
 
     const initGoogle = () => {
       if (!window.google || !googleButtonRef.current) return;
+      const buttonWidth = Math.min(googleButtonRef.current.clientWidth || 320, 320);
       window.google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
         callback: async (response) => {
@@ -112,7 +113,7 @@ export default function Login() {
         size: "large",
         shape: "pill",
         text: "continue_with",
-        width: 320,
+        width: buttonWidth,
       });
     };
 
@@ -127,6 +128,18 @@ export default function Login() {
     } else if (window.google) {
       initGoogle();
     }
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined" && googleButtonRef.current
+        ? new ResizeObserver(() => initGoogle())
+        : null;
+
+    if (resizeObserver && googleButtonRef.current) {
+      resizeObserver.observe(googleButtonRef.current);
+    }
+
+    return () => {
+      resizeObserver?.disconnect();
+    };
   }, [checkAppState, navigate]);
 
   useEffect(() => {
@@ -555,7 +568,9 @@ export default function Login() {
           <div className="my-5 h-px bg-gradient-to-r from-transparent via-slate-500/70 to-transparent" />
 
           {GOOGLE_CLIENT_ID ? (
-            <div ref={googleButtonRef} className="flex justify-center overflow-hidden rounded-lg" />
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-white px-2 py-2 shadow-inner shadow-slate-950/5">
+              <div ref={googleButtonRef} className="w-full overflow-hidden" />
+            </div>
           ) : (
             <p className="mb-2 text-xs text-amber-300">
                Defina `VITE_GOOGLE_CLIENT_ID` para habilitar login com Google.
