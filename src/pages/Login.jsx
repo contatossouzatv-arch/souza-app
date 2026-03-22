@@ -128,18 +128,6 @@ export default function Login() {
     } else if (window.google) {
       initGoogle();
     }
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined" && googleButtonRef.current
-        ? new ResizeObserver(() => initGoogle())
-        : null;
-
-    if (resizeObserver && googleButtonRef.current) {
-      resizeObserver.observe(googleButtonRef.current);
-    }
-
-    return () => {
-      resizeObserver?.disconnect();
-    };
   }, [checkAppState, navigate]);
 
   useEffect(() => {
@@ -569,7 +557,7 @@ export default function Login() {
 
           {GOOGLE_CLIENT_ID ? (
             <div className="overflow-hidden rounded-2xl border border-white/10 bg-white px-2 py-2 shadow-inner shadow-slate-950/5">
-              <div ref={googleButtonRef} className="w-full overflow-hidden" />
+              <div ref={googleButtonRef} className="mx-auto w-full max-w-[320px] overflow-hidden" />
             </div>
           ) : (
             <p className="mb-2 text-xs text-amber-300">
