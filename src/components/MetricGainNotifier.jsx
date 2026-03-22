@@ -8,6 +8,9 @@ import { isInteractionSoundEnabled } from "@/lib/soundPrefs";
 import { toast } from "@/components/ui/use-toast";
 import commonRewardCollectSound from "../../assets-para-app/Songs/Song Coleta coisa comum no final da partida ou de baus no lobby.mp3";
 
+const SEEN_GAIN_STORAGE_PREFIX = "metric_gain_notifier_seen_v1:";
+const MAX_SEEN_GAIN_KEYS = 400;
+
 function formatNumber(value) {
   return new Intl.NumberFormat("pt-BR").format(Number(value || 0));
 }
@@ -156,6 +159,35 @@ function pickLatestEventEntries(entries = []) {
   return sorted.filter((entry) => buildEventKey(entry) === latestKey);
 }
 
+function getSeenGainStorageKey(userId) {
+  return `${SEEN_GAIN_STORAGE_PREFIX}${userId}`;
+}
+
+function readSeenGainKeys(userId) {
+  if (!userId || typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(getSeenGainStorageKey(userId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((value) => String(value || "").trim()).filter(Boolean).slice(-MAX_SEEN_GAIN_KEYS);
+  } catch {
+    return [];
+  }
+}
+
+function persistSeenGainKeys(userId, keys) {
+  if (!userId || typeof window === "undefined") return;
+  try {
+    const normalized = Array.from(
+      new Set((Array.isArray(keys) ? keys : []).map((value) => String(value || "").trim()).filter(Boolean))
+    ).slice(-MAX_SEEN_GAIN_KEYS);
+    window.localStorage.setItem(getSeenGainStorageKey(userId), JSON.stringify(normalized));
+  } catch {
+    // noop
+  }
+}
+
 function fireCelebration() {
   confetti({
     particleCount: 36,
@@ -262,9 +294,12 @@ const { data: profileHistory } = useQuery({
     const ledger = Array.isArray(profileHistory?.ledger) ? profileHistory.ledger : [];
 
     if (!initializedRef.current) {
+      const persistedSeenKeys = readSeenGainKeys(user.id);
+      const currentLedgerKeys = ledger.filter(isExactLedgerEvent).map(buildSeenEntryKey);
       initializedRef.current = true;
       lastTotalsRef.current = { xp_total: currentXp, weekly_points: currentWeekly, engagement_points: currentEngagement };
-      seenLedgerKeysRef.current = new Set(ledger.filter(isExactLedgerEvent).map(buildSeenEntryKey));
+      seenLedgerKeysRef.current = new Set([...persistedSeenKeys, ...currentLedgerKeys]);
+      persistSeenGainKeys(user.id, Array.from(seenLedgerKeysRef.current));
       return;
     }
 
@@ -279,6 +314,7 @@ const { data: profileHistory } = useQuery({
         seenLedgerKeysRef.current.add(buildSeenEntryKey(entry));
       }
     });
+    persistSeenGainKeys(user.id, Array.from(seenLedgerKeysRef.current));
 
     lastTotalsRef.current = { xp_total: currentXp, weekly_points: currentWeekly, engagement_points: currentEngagement };
 
