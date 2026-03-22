@@ -1629,7 +1629,7 @@ export async function createDailyChestDepositTicketGrant({
         opening_id: String(openingId || ""),
         chest_day_key: String(chestDayKey || ""),
       },
-      processed_by_user_id: "system:daily_chest",
+      processed_by_user_id: null,
       processed_by_email: "system:daily_chest",
     });
 

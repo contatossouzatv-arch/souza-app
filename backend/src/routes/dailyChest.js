@@ -423,9 +423,13 @@ async function tryReserveRewardForDay(client, reward, chestDayKey) {
 
   const lockedReward = await findEntityRecordByNameAndIdForUpdate(client, "DailyChestRewardConfig", reward.id);
   if (lockedReward) {
-    const nextClaimed = Math.max(0, Number(lockedReward.claimed_count || 0)) + 1;
+    const lockedRewardData =
+      lockedReward?.data && typeof lockedReward.data === "object"
+        ? { ...lockedReward.data }
+        : {};
+    const nextClaimed = Math.max(0, Number(lockedRewardData.claimed_count || 0)) + 1;
     const merged = {
-      ...lockedReward,
+      ...lockedRewardData,
       claimed_count: nextClaimed,
       updated_date: new Date().toISOString(),
     };

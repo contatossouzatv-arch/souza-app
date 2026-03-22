@@ -1356,7 +1356,7 @@ function normalizeChestRewardDraft(entry = {}) {
 
 function sanitizeChestRewardDraft(entry = {}) {
   const allowedRewardTypes = new Set(["xp_total", "weekly_points", "engagement_points", "tickets_active", "points_balance"]);
-  const rewardTypeRaw = String(entry.reward_type || "").trim().toLowerCase();
+  const rewardTypeRaw = String(entry.reward_type || entry.rewardType || "").trim().toLowerCase();
   const rewardType = allowedRewardTypes.has(rewardTypeRaw) ? rewardTypeRaw : "xp_total";
   const rewardUnitByType = {
     xp_total: "xp",
@@ -1374,9 +1374,12 @@ function sanitizeChestRewardDraft(entry = {}) {
   };
   return {
     ...entry,
-    title: String(entry.title || "").trim() || titleByType[rewardType] || "Premio do Bau",
+    title: String(entry.title || entry.reward_title || "").trim() || titleByType[rewardType] || "Premio do Bau",
     reward_type: rewardType,
-    reward_unit: String(entry.reward_unit || "").trim() || rewardUnitByType[rewardType] || "",
+    reward_amount: Math.max(0, Number(entry.reward_amount ?? entry.rewardAmount ?? 0)),
+    reward_unit: String(entry.reward_unit || entry.rewardUnit || "").trim() || rewardUnitByType[rewardType] || "",
+    is_fallback: Boolean(entry.is_fallback ?? entry.isFallback),
+    is_default: Boolean(entry.is_default ?? entry.isDefault),
   };
 }
 
@@ -2893,7 +2896,6 @@ router.get("/admin/leaderboards/weekly", requireAuth, requireAdmin, async (_req,
 router.get("/admin/daily-chest/config", requireAuth, requireAdmin, async (_req, res) => {
   const settingsMap = await listAppSettingsMap();
   const rewards = (await listEntity("DailyChestRewardConfig", "-updated_date", 200))
-    .map(normalizeChestRewardDraft)
     .map(sanitizeChestRewardDraft)
     .sort((a, b) => a.sort_order - b.sort_order || a.title.localeCompare(b.title));
   const chestDayKey = buildDailyChestWindowKey(settingsMap);
@@ -3024,7 +3026,7 @@ router.post("/admin/daily-chest/access-code/generate", requireAuth, requireAdmin
 });
 
 router.post("/admin/daily-chest/rewards", requireAuth, requireAdmin, async (req, res) => {
-  const reward = sanitizeChestRewardDraft(normalizeChestRewardDraft(req.body || {}));
+  const reward = sanitizeChestRewardDraft(req.body || {});
   validateChestRewardDraft(reward);
   const created = await createEntity("DailyChestRewardConfig", reward);
   await appendAdminAudit({
@@ -3046,7 +3048,7 @@ router.patch("/admin/daily-chest/rewards/:id", requireAuth, requireAdmin, async 
   if (!existing) {
     return res.status(404).json({ error: "Prêmio não encontrado." });
   }
-  const next = sanitizeChestRewardDraft(normalizeChestRewardDraft({ ...existing, ...(req.body || {}) }));
+  const next = sanitizeChestRewardDraft({ ...existing, ...(req.body || {}) });
   validateChestRewardDraft(next);
   const updated = await updateEntity("DailyChestRewardConfig", rewardId, next);
   await appendAdminAudit({
