@@ -261,21 +261,21 @@ export default function Home() {
       </Card>
 
       <Card className="border-slate-800 bg-slate-900/70 p-4">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 flex items-center gap-3">
             <div className="rounded-xl bg-cyan-500/15 p-2">
               <Users className="h-5 w-5 text-cyan-300" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-base font-bold text-white">Últimos usuários cadastrados</h2>
-              <p className="text-sm text-slate-400">Perfis reais do app para a galera descobrir.</p>
+              <p className="text-sm leading-snug text-slate-400">Perfis reais do app para a galera descobrir.</p>
             </div>
           </div>
           <Button
             type="button"
             variant="outline"
             onClick={openProfilesGallery}
-            className="border-slate-700 bg-slate-950 text-white hover:bg-slate-800"
+            className="h-10 w-full shrink-0 whitespace-normal rounded-xl border-slate-700 bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800 sm:w-auto"
           >
             Exibir mais perfis
           </Button>

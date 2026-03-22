@@ -658,6 +658,41 @@ export default function SettingsPage() {
     }
   };
 
+  const restoreEditProfileDraft = () => {
+    const currentUser = user || authUser;
+    if (!currentUser) return;
+    const prefs = loadProfilePrefs(currentUser.id);
+    setFormData({
+      full_name: currentUser.full_name || "",
+      nick: currentUser.nick || "",
+      phone: currentUser.phone || "",
+      platform_id: currentUser.platform_id || "",
+      alias: prefs.alias || "",
+      handle: prefs.handle || currentUser.nick?.toLowerCase().replace(/\s+/g, "") || "usuario",
+      avatarId: prefs.avatarId || currentUser.profile_avatar_id || DEFAULT_AVATAR_ID,
+    });
+    setSelectedApprovedPhotoUrl(prefs.selectedPhotoUrl || currentUser.profile_image_url || "");
+    setImageMode(currentUser.profile_image_mode || "avatar");
+    setSelectedPhotoFile(null);
+    setSelectedPhotoPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return "";
+    });
+    setSelectedPhotoNaturalSize({ width: 0, height: 0 });
+    setSelectedPhotoZoom(1);
+    setSelectedPhotoOffsetX(0);
+    setSelectedPhotoOffsetY(0);
+    setPhotoDragState(null);
+  };
+
+  const handleEditDataModalChange = (open) => {
+    if (updateMutation.isPending || uploadImageMutation.isPending || cancelPendingImageMutation.isPending) return;
+    setIsEditDataModalOpen(open);
+    if (!open) {
+      restoreEditProfileDraft();
+    }
+  };
+
   const deactivateAccountMutation = useMutation({
     mutationFn: () => base44.auth.deactivateMe(),
     onSuccess: () => {
@@ -1087,7 +1122,6 @@ export default function SettingsPage() {
           <button
             type="button"
             onClick={() => {
-              setImageMode("avatar");
               setIsEditDataModalOpen(true);
             }}
             className="aspect-square rounded-2xl border border-cyan-500/40 bg-cyan-500/10 p-3 text-left transition hover:bg-cyan-500/20"
@@ -1198,7 +1232,7 @@ export default function SettingsPage() {
         </Button>
       </Card>
 
-      <Dialog open={isEditDataModalOpen} onOpenChange={setIsEditDataModalOpen}>
+      <Dialog open={isEditDataModalOpen} onOpenChange={handleEditDataModalChange}>
         <DialogContent className="flex max-h-[88dvh] w-[calc(100vw-1.5rem)] max-w-xl flex-col overflow-hidden border border-white/10 bg-slate-900/65 p-4 text-white backdrop-blur-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-cyan-200">
