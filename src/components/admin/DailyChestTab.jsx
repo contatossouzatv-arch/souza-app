@@ -345,6 +345,7 @@ export default function DailyChestTab() {
   const [settingsDraft, setSettingsDraft] = React.useState({});
   const [rewardDraft, setRewardDraft] = React.useState(DEFAULT_REWARD);
   const [selectedRewardId, setSelectedRewardId] = React.useState("");
+  const [isCreatingReward, setIsCreatingReward] = React.useState(false);
   const [simulation, setSimulation] = React.useState(null);
   const [planner, setPlanner] = React.useState({
     people: 200,
@@ -373,6 +374,11 @@ export default function DailyChestTab() {
     if (rewards.length === 0) {
       setRewardDraft(EMPTY_REWARD);
       setSelectedRewardId("");
+      setIsCreatingReward(true);
+      return;
+    }
+
+    if (isCreatingReward) {
       return;
     }
 
@@ -391,7 +397,7 @@ export default function DailyChestTab() {
 
     setRewardDraft(rewards[0]);
     setSelectedRewardId(rewards[0]?.id || "");
-  }, [data?.rewards, rewardDraft.id, selectedRewardId]);
+  }, [data?.rewards, isCreatingReward, rewardDraft.id, selectedRewardId]);
 
   const saveSettingsMutation = useMutation({
     mutationFn: () => base44.adminDailyChest.saveSettings(settingsDraft),
@@ -416,6 +422,7 @@ export default function DailyChestTab() {
       const normalized = normalizeRewardRecord(result || rewardDraft);
       setRewardDraft(normalized);
       setSelectedRewardId(normalized.id || "");
+      setIsCreatingReward(false);
       queryClient.invalidateQueries({ queryKey: ["admin-daily-chest-config-v2"] });
       toast({ title: "Prêmio salvo", description: "O pool do Baú Diário foi persistido no backend." });
     },
@@ -431,6 +438,7 @@ export default function DailyChestTab() {
       if (String(selectedRewardId || "") === String(rewardId || "")) {
         setRewardDraft(EMPTY_REWARD);
         setSelectedRewardId("");
+        setIsCreatingReward(true);
       }
       toast({ title: "Prêmio excluído", description: "O prêmio do Baú Diário foi removido do pool." });
     },
@@ -1187,7 +1195,16 @@ export default function DailyChestTab() {
               Monte prêmios limitados, especiais e um fallback garantido. O formulário se adapta ao tipo escolhido.
             </p>
           </div>
-          <Button type="button" variant="outline" onClick={() => { setRewardDraft(EMPTY_REWARD); setSelectedRewardId(""); }} className="border-slate-700 bg-slate-950/60 text-white">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setRewardDraft(EMPTY_REWARD);
+              setSelectedRewardId("");
+              setIsCreatingReward(true);
+            }}
+            className="border-slate-700 bg-slate-950/60 text-white"
+          >
             Novo prêmio
           </Button>
         </div>
@@ -1430,10 +1447,11 @@ export default function DailyChestTab() {
               <button
                 type="button"
                 key={entry.id}
-                  onClick={() => {
-                    setRewardDraft(normalizeRewardRecord(entry));
-                    setSelectedRewardId(String(entry.id || ""));
-                  }}
+                onClick={() => {
+                  setRewardDraft(normalizeRewardRecord(entry));
+                  setSelectedRewardId(String(entry.id || ""));
+                  setIsCreatingReward(false);
+                }}
                 className="block w-full rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-left transition hover:border-emerald-400/40"
               >
                 <div className="flex items-start justify-between gap-3">
