@@ -1100,6 +1100,8 @@ export default function DailyChestScene({
       if (stateRef.lastSpinToken !== runtime.spinToken) {
         stateRef.lastSpinToken = runtime.spinToken;
         stateRef.spinElapsed = 0;
+        stateRef.chestDragRotation = 0;
+        stateRef.chestDragVelocity = 0;
         stateRef.spinStartRotation = chestRoot.rotation.y || 0;
         stateRef.spinTargetRotation = stateRef.spinStartRotation + Math.PI * 4;
         stateRef.lastSpinAngle = stateRef.spinStartRotation;

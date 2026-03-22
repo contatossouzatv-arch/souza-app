@@ -1820,7 +1820,7 @@ router.get("/feed/wins", requireAuth, async (_req, res) => {
         user_avatar: user?.avatar_emoji || "",
         profile_avatar_id: user?.profile_avatar_id || "",
         profile_image_mode: user?.profile_image_mode || "avatar",
-        profile_image_url: user?.profile_image_status === "approved" ? `/api/auth/profile-image/${user?.id}` : "",
+        profile_image_url: String(user?.profile_image_url || "").trim() || (user?.id ? `/api/auth/profile-image/${user?.id}` : ""),
         source_type: item.source_type || "",
         source_label: mapPrizeSourceLabel(item.source_type),
         reward_label: buildPrizeRewardLabel(item),
@@ -1934,7 +1934,7 @@ router.get("/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
   );
   const enrichedUser = {
     ...item,
-    avatar_url: user.profile_image_status === "approved" ? `/api/auth/profile-image/${user.id}` : "",
+    avatar_url: String(user.profile_image_url || "").trim() || (user.id ? `/api/auth/profile-image/${user.id}` : ""),
     created_at: user.created_at || user.created_date || null,
     updated_at: user.updated_at || user.updated_date || null,
     login_count: Number(loginCountResult.rows[0]?.total || 0),

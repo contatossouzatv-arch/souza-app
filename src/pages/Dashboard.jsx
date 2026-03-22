@@ -97,18 +97,6 @@ export default function Dashboard() {
             </motion.div>
 
             <motion.div variants={itemVariants}>
-              <PrizeGalleryCard
-                userId={user.id}
-                title="Seus Prêmios"
-                subtitle="Aqui você acompanha sua coleção pessoal de prêmios já ganhos e registrados no app."
-                emptyTitle="Sua coleção de prêmios ainda está vazia"
-                emptySubtitle="Quando você ganhar e resgatar recompensas, elas vão aparecer aqui automaticamente."
-                countLabel="na coleção"
-                privateView={true}
-              />
-            </motion.div>
-
-            <motion.div variants={itemVariants}>
               <LiveDrawBox user={user} />
             </motion.div>
 
@@ -133,6 +121,18 @@ export default function Dashboard() {
                 ))}
               </motion.div>
             ) : null}
+
+            <motion.div variants={itemVariants}>
+              <PrizeGalleryCard
+                userId={user.id}
+                title="Seus Prêmios"
+                subtitle="Aqui você acompanha sua coleção pessoal de prêmios já ganhos e registrados no app."
+                emptyTitle="Sua coleção de prêmios ainda está vazia"
+                emptySubtitle="Quando você ganhar e resgatar recompensas, elas vão aparecer aqui automaticamente."
+                countLabel="na coleção"
+                privateView={true}
+              />
+            </motion.div>
           </>
         ) : (
           <motion.div variants={itemVariants}>
