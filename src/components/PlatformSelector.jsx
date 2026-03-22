@@ -14,8 +14,6 @@ export default function PlatformSelector() {
 
   if (platforms.length === 0) return null;
 
-  const visiblePlatforms = platforms.slice(0, 2);
-
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
       <p className="text-center text-sm font-semibold text-slate-200">PUBLICIDADE</p>
@@ -23,8 +21,8 @@ export default function PlatformSelector() {
         Vai jogar? Jogue com responsabilidade porque não existe ganhos garantidos!
       </p>
 
-      <div className="grid grid-cols-2 gap-3">
-        {visiblePlatforms.map((platform) => (
+      <div className={`grid gap-3 ${platforms.length >= 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+        {platforms.map((platform) => (
           <a
             key={platform.id}
             href={platform.link}
@@ -33,7 +31,7 @@ export default function PlatformSelector() {
             className="group"
           >
             <div
-              className="relative aspect-square overflow-hidden rounded-2xl border border-white/25 p-3 text-white transition hover:scale-[1.02] hover:border-white/50"
+              className="relative aspect-[0.95] overflow-hidden rounded-2xl border border-white/25 p-2.5 text-white transition hover:scale-[1.02] hover:border-white/50"
               style={{
                 background: `linear-gradient(135deg, ${platform.color_from} 0%, ${platform.color_to} 100%)`,
               }}
@@ -41,8 +39,8 @@ export default function PlatformSelector() {
               <div className="absolute inset-0 bg-black/10 group-hover:bg-black/0 transition" />
 
               <div className="relative z-10 flex h-full flex-col items-center justify-center text-center">
-                <p className="max-w-full truncate text-base font-extrabold">{platform.name}</p>
-                <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-black/25 px-2 py-1 text-[11px] font-semibold">
+                <p className="max-w-full truncate text-sm font-extrabold sm:text-[15px]">{platform.name}</p>
+                <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-black/25 px-2 py-1 text-[10px] font-semibold sm:text-[11px]">
                   Acessar
                   <ExternalLink className="h-3.5 w-3.5" />
                 </span>
