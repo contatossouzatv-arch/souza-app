@@ -520,8 +520,23 @@ export default function SettingsPage() {
       if (response?.user) {
         setUser(response.user);
         setImageMode(response.user.profile_image_mode || "photo");
+        if (!isPendingStatus && user?.id && response.user.profile_image_url) {
+          const nextPrefs = {
+            ...loadProfilePrefs(user.id),
+            selectedPhotoUrl: response.user.profile_image_url,
+          };
+          saveProfilePrefs(user.id, nextPrefs);
+        }
       }
       queryClient.invalidateQueries({ queryKey: ["inicio-users"] });
+      queryClient.invalidateQueries({ queryKey: ["inicio-recent-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["profiles-gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-discover-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["current-user"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative"] });
+      queryClient.invalidateQueries({ queryKey: ["social-following-list"] });
+      queryClient.invalidateQueries({ queryKey: ["social-follower-list"] });
       queryClient.invalidateQueries({ queryKey: ["my-profile-images", user?.id] });
       setSelectedPhotoFile(null);
       setSelectedPhotoPreview((prev) => {
@@ -564,6 +579,13 @@ export default function SettingsPage() {
         if (prev) URL.revokeObjectURL(prev);
         return "";
       });
+      queryClient.invalidateQueries({ queryKey: ["inicio-users"] });
+      queryClient.invalidateQueries({ queryKey: ["inicio-recent-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["profiles-gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-discover-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["current-user"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative"] });
       queryClient.invalidateQueries({ queryKey: ["my-profile-images", user?.id] });
       toast({
         title: "Envio cancelado",

@@ -187,10 +187,16 @@ export default function RealtimeSync() {
             "inicio-users",
             "inicio-recent-profiles",
             "profiles-gallery",
+            "profile-discover-profiles",
             "current-user",
             "profile-all-deposits",
             "social-following-list",
             "social-follower-list",
+          ]);
+
+          addKeys(prefixes, [
+            "profile-gamification-authoritative",
+            "profile-history-authoritative",
           ]);
         }
 

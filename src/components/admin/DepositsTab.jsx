@@ -222,7 +222,7 @@ export default function DepositsTab() {
 
   const submitInvalidate = () => {
     if (!invalidatingDeposit) return;
-    if (invalidatingDeposit.status === "approved") {
+    if (invalidatingDeposit.status === "approved" || invalidatingDeposit.status === "invalidated") {
       deleteMutation.mutate({
         depositId: invalidatingDeposit.id,
         payload: { reason: invalidateForm.reason },
@@ -416,19 +416,21 @@ export default function DepositsTab() {
                         </Button>
                       ) : null}
 
-                      {deposit.status !== "invalidated" ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-rose-600 text-rose-300"
-                          onClick={() => {
-                            setInvalidatingDeposit(deposit);
-                            setInvalidateForm(EMPTY_INVALIDATE_FORM);
-                          }}
-                        >
-                          {deposit.status === "approved" ? <Trash2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                        </Button>
-                      ) : null}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-rose-600 text-rose-300"
+                        onClick={() => {
+                          setInvalidatingDeposit(deposit);
+                          setInvalidateForm(EMPTY_INVALIDATE_FORM);
+                        }}
+                      >
+                        {deposit.status === "approved" || deposit.status === "invalidated" ? (
+                          <Trash2 className="h-4 w-4" />
+                        ) : (
+                          <XCircle className="h-4 w-4" />
+                        )}
+                      </Button>
 
                       <Button
                         size="sm"
@@ -558,12 +560,16 @@ export default function DepositsTab() {
       <Dialog open={!!invalidatingDeposit} onOpenChange={() => setInvalidatingDeposit(null)}>
         <DialogContent className="border-rose-700/50 bg-slate-950 text-white">
           <DialogHeader>
-            <DialogTitle>{invalidatingDeposit?.status === "approved" ? "Excluir depósito" : "Invalidar depósito"}</DialogTitle>
+            <DialogTitle>
+              {invalidatingDeposit?.status === "approved" || invalidatingDeposit?.status === "invalidated"
+                ? "Excluir depósito"
+                : "Invalidar depósito"}
+            </DialogTitle>
           </DialogHeader>
           {invalidatingDeposit ? (
             <div className="space-y-4">
               <p className="text-sm text-rose-200">
-                {invalidatingDeposit.status === "approved"
+                {invalidatingDeposit.status === "approved" || invalidatingDeposit.status === "invalidated"
                   ? "O depósito será removido dos registros exibidos e não ficará como invalidado."
                   : "O depósito será marcado como invalidado para registrar uma divergência administrativa."}
               </p>
@@ -580,7 +586,9 @@ export default function DepositsTab() {
                 disabled={invalidateMutation.isPending || deleteMutation.isPending}
                 className="w-full bg-rose-700 hover:bg-rose-800"
               >
-                {invalidatingDeposit.status === "approved" ? "Confirmar exclusão" : "Confirmar invalidação"}
+                {invalidatingDeposit.status === "approved" || invalidatingDeposit.status === "invalidated"
+                  ? "Confirmar exclusão"
+                  : "Confirmar invalidação"}
               </Button>
             </div>
           ) : null}

@@ -2188,11 +2188,40 @@ router.post("/admin/users/:id/reset-metrics", requireAuth, requireAdmin, async (
     return res.status(404).json({ error: "Usuário não encontrado." });
   }
 
-  const adjustments = [];
-
   const resetClient = await pool.connect();
   try {
     await resetClient.query("BEGIN");
+    const depositIdsResult = await resetClient.query(
+      `SELECT id
+         FROM entity_records
+        WHERE entity_name = 'Deposit'
+          AND COALESCE(data->>'user_id', '') = $1`,
+      [userId],
+    );
+    const depositIds = depositIdsResult.rows.map((row) => String(row.id || "")).filter(Boolean);
+
+    if (depositIds.length > 0) {
+      await resetClient.query("DELETE FROM deposit_processing_events WHERE deposit_id = ANY($1::text[])", [depositIds]);
+      await resetClient.query(
+        "DELETE FROM daily_chest_bonus_grants WHERE source_type = 'deposit_approved' AND source_id = ANY($1::text[])",
+        [depositIds],
+      );
+    }
+
+    await resetClient.query("DELETE FROM daily_chest_openings WHERE user_id = $1", [userId]);
+    await resetClient.query("DELETE FROM daily_chest_access_unlocks WHERE user_id = $1", [userId]);
+    await resetClient.query("DELETE FROM daily_chest_bonus_grants WHERE user_id = $1", [userId]);
+    await resetClient.query("DELETE FROM daily_checkins WHERE user_id = $1", [userId]);
+    await resetClient.query("DELETE FROM engagement_processing_events WHERE user_id = $1", [userId]);
+    await resetClient.query("DELETE FROM user_follows WHERE follower_user_id = $1 OR target_user_id = $1", [userId]);
+    await resetClient.query("DELETE FROM profile_likes WHERE user_id = $1 OR target_user_id = $1", [userId]);
+    await resetClient.query("DELETE FROM entity_records WHERE entity_name = 'Deposit' AND COALESCE(data->>'user_id', '') = $1", [userId]);
+    await resetClient.query("DELETE FROM entity_records WHERE entity_name = 'LiveDrawParticipant' AND COALESCE(data->>'user_id', '') = $1", [userId]);
+    await resetClient.query("DELETE FROM entity_records WHERE entity_name = 'GameCallParticipant' AND COALESCE(data->>'user_id', '') = $1", [userId]);
+    await resetClient.query("DELETE FROM entity_records WHERE entity_name = 'InstantRaffleParticipant' AND COALESCE(data->>'user_id', '') = $1", [userId]);
+    await resetClient.query("DELETE FROM entity_records WHERE entity_name = 'DailyChestXpGrant' AND COALESCE(data->>'user_id', '') = $1", [userId]);
+    await resetClient.query("DELETE FROM entity_records WHERE entity_name = 'CompetitionPointEvent' AND COALESCE(data->>'user_id', '') = $1", [userId]);
+    await resetClient.query("DELETE FROM entity_records WHERE entity_name = 'CashbackClaim' AND COALESCE(data->>'user_id', '') = $1", [userId]);
     await resetClient.query("DELETE FROM user_metric_ledger WHERE user_id = $1", [userId]);
     await resetClient.query("DELETE FROM user_metric_balances WHERE user_id = $1", [userId]);
     await resetClient.query("DELETE FROM points_ledger WHERE user_id = $1", [userId]);
@@ -2251,7 +2280,10 @@ router.post("/admin/users/:id/reset-metrics", requireAuth, requireAdmin, async (
     adminEmail: req.auth.email,
   });
 
+  invalidateGamificationStateCache();
   emitEntityChanged(req, "user", userId, "updated");
+  emitEntityChanged(req, "Deposit", userId, "deleted");
+  emitEntityChanged(req, "Gamification", userId, "reset");
   if (clearDisplayData) {
     emitEntityChanged(req, "UserPrizeGalleryItem", userId, "deleted");
     emitEntityChanged(req, "DrawWinnerAudit", userId, "deleted");
@@ -2260,7 +2292,7 @@ router.post("/admin/users/:id/reset-metrics", requireAuth, requireAdmin, async (
   return res.status(201).json({
     ok: true,
     user_id: userId,
-    reset_count: adjustments.length,
+    reset_count: 0,
     snapshot: snapshot.metrics,
     removed_prize_count: removedPrizeCount,
     removed_audit_count: removedAuditCount,

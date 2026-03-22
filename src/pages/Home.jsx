@@ -1,7 +1,6 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { base44, resolveAssetUrl } from "@/api/base44Client";
-import { loadProfilePrefs } from "@/lib/profilePrefs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BellRing, Heart, Megaphone, Trophy, Users } from "lucide-react";
@@ -84,25 +83,15 @@ export default function Home() {
     return map;
   }, [users]);
 
-  const userPrefsById = useMemo(() => {
-    const map = new Map();
-    users.forEach((item) => {
-      map.set(item.id, loadProfilePrefs(item.id));
-    });
-    return map;
-  }, [users]);
-
   const creatorProfile = useMemo(() => {
     const admin = users.find((item) => String(item.role || "").toLowerCase() === "admin");
     if (!admin) return null;
-    const adminPrefs = userPrefsById.get(admin.id) || {};
-    const selectedAdminPhotoUrl = adminPrefs.selectedPhotoUrl || "";
     const avatarFromSelection = avatarById[admin.profile_avatar_id] || null;
     const creatorPhoto =
       admin.profile_image_mode === "photo" &&
       admin.profile_image_status === "approved" &&
-      (selectedAdminPhotoUrl || admin.profile_image_url)
-        ? resolveAssetUrl(selectedAdminPhotoUrl || admin.profile_image_url)
+      admin.profile_image_url
+        ? resolveAssetUrl(admin.profile_image_url)
         : null;
     return {
       name: admin.full_name || admin.nick || "Souza",
@@ -110,7 +99,7 @@ export default function Home() {
       avatarEmoji: admin.avatar_emoji || "S",
       avatarUrl: creatorPhoto || avatarFromSelection || defaultAvatar,
     };
-  }, [users, userPrefsById]);
+  }, [users]);
 
   const recentProfiles = useMemo(() => {
     return (recentProfilesData?.items || []).map((profile) => {
@@ -132,12 +121,10 @@ export default function Home() {
       .slice(0, 40)
       .map((item) => {
         const profile = usersById.get(item.user_id);
-        const profilePrefs = item.user_id ? userPrefsById.get(item.user_id) || {} : {};
-        const selectedProfilePhotoUrl = profilePrefs.selectedPhotoUrl || "";
         const profileAvatarId = item.profile_avatar_id || profile?.profile_avatar_id || "";
         const profilePhoto =
-          item.profile_image_mode === "photo" && (selectedProfilePhotoUrl || item.profile_image_url)
-            ? resolveAssetUrl(selectedProfilePhotoUrl || item.profile_image_url)
+          item.profile_image_mode === "photo" && item.profile_image_url
+            ? resolveAssetUrl(item.profile_image_url)
             : null;
 
         return {
@@ -157,7 +144,7 @@ export default function Home() {
           createdAt: item.claimed_at,
         };
       });
-  }, [winnerFeed?.items, usersById, userPrefsById, creatorProfile]);
+  }, [winnerFeed?.items, usersById, creatorProfile]);
 
   const feedItems = useMemo(() => {
     const winnerFeed = winnerPosts.map((item) => ({

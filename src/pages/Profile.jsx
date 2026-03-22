@@ -1075,11 +1075,24 @@ export default function Profile() {
       if (response?.user) {
         setUser(response.user);
         setEditData((prev) => ({ ...prev, imageMode: "photo" }));
+        if (!isPendingStatus && user?.id && response.user.profile_image_url) {
+          setProfilePrefs((prev) => {
+            const next = {
+              ...prev,
+              selectedPhotoUrl: response.user.profile_image_url,
+            };
+            saveProfilePrefs(user.id, next);
+            return next;
+          });
+        }
       }
       queryClient.invalidateQueries({ queryKey: ["inicio-users"] });
       queryClient.invalidateQueries({ queryKey: ["inicio-recent-profiles"] });
       queryClient.invalidateQueries({ queryKey: ["profiles-gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-discover-profiles"] });
       queryClient.invalidateQueries({ queryKey: ["current-user"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative"] });
       queryClient.invalidateQueries({ queryKey: ["my-profile-images", user?.id] });
       queryClient.invalidateQueries({ queryKey: ["profile-all-deposits"] });
       setSelectedEditPhotoFile(null);
@@ -1116,7 +1129,10 @@ export default function Profile() {
       queryClient.invalidateQueries({ queryKey: ["inicio-users"] });
       queryClient.invalidateQueries({ queryKey: ["inicio-recent-profiles"] });
       queryClient.invalidateQueries({ queryKey: ["profiles-gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-discover-profiles"] });
       queryClient.invalidateQueries({ queryKey: ["current-user"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative"] });
       queryClient.invalidateQueries({ queryKey: ["my-profile-images", user?.id] });
       queryClient.invalidateQueries({ queryKey: ["profile-all-deposits"] });
     },
@@ -2309,6 +2325,11 @@ export default function Profile() {
         profile_avatar_id: editData.avatarId || profilePrefs.avatarId,
       }));
       queryClient.invalidateQueries({ queryKey: ["inicio-users"] });
+      queryClient.invalidateQueries({ queryKey: ["inicio-recent-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["profiles-gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-discover-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["current-user"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
       setIsEditOpen(false);
       toast({
         title: "Perfil atualizado",
