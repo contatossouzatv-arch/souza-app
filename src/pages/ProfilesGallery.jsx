@@ -2,9 +2,10 @@ import React from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Users } from "lucide-react";
-import { base44, resolveAssetUrl } from "@/api/base44Client";
+import { base44 } from "@/api/base44Client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { getProfileAvatarSrc } from "@/lib/profileMedia";
 import defaultAvatar from "../../assets-para-app/avatar/avatar padrao perfil sem foto.png";
 
 const avatarModules = import.meta.glob("../../assets-para-app/avatar/*.png", {
@@ -87,10 +88,7 @@ export default function ProfilesGallery() {
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {profiles.map((profile) => {
-              const avatarUrl =
-                profile.profile_image_mode === "photo" && profile.profile_image_url
-                  ? resolveAssetUrl(profile.profile_image_url)
-                  : avatarById[profile.profile_avatar_id] || defaultAvatar;
+              const avatarUrl = getProfileAvatarSrc(profile, avatarById, defaultAvatar) || defaultAvatar;
 
               return (
                 <button

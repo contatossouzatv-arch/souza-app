@@ -479,6 +479,17 @@ async function ensureActiveWeeklyCycle(config) {
     [windowData.cycleKey]
   );
   const currentCycle = currentCycleResult.rows[0];
+
+  await pool.query(
+    `UPDATE weekly_cycles
+     SET status = 'closed',
+         closed_at = COALESCE(closed_at, NOW()),
+         updated_at = NOW()
+     WHERE status = 'active'
+       AND cycle_key <> $1`,
+    [windowData.cycleKey]
+  );
+
   if (currentCycle) {
     if (currentCycle.status !== "active") {
       const reopened = await pool.query(
@@ -514,6 +525,49 @@ async function ensureActiveWeeklyCycle(config) {
       };
     }
 
+    const currentStartsAt = safeDate(currentCycle.starts_at);
+    const currentEndsAt = safeDate(currentCycle.ends_at);
+    const currentWindowMismatch =
+      !currentStartsAt ||
+      !currentEndsAt ||
+      currentStartsAt.getTime() !== windowData.startsAt.getTime() ||
+      currentEndsAt.getTime() !== windowData.endsAt.getTime() ||
+      String(currentCycle.title || "") !== String(windowData.title || "");
+
+    if (currentWindowMismatch) {
+      const refreshed = await pool.query(
+        `UPDATE weekly_cycles
+         SET status = 'active',
+             title = $2,
+             starts_at = $3,
+             ends_at = $4,
+             config_snapshot = $5::jsonb,
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING *`,
+        [
+          currentCycle.id,
+          windowData.title,
+          windowData.startsAt.toISOString(),
+          windowData.endsAt.toISOString(),
+          JSON.stringify(normalizeWeeklyConfig(config)),
+        ]
+      );
+      const row = refreshed.rows[0];
+      return {
+        id: row.id,
+        cycle_key: row.cycle_key,
+        title: row.title,
+        status: row.status,
+        starts_at: toIso(row.starts_at),
+        ends_at: toIso(row.ends_at),
+        closed_at: row.closed_at ? toIso(row.closed_at) : null,
+        config_snapshot: row.config_snapshot || {},
+        winners_snapshot: row.winners_snapshot || [],
+        metadata: row.metadata || {},
+      };
+    }
+
     return {
       id: currentCycle.id,
       cycle_key: currentCycle.cycle_key,
@@ -525,28 +579,6 @@ async function ensureActiveWeeklyCycle(config) {
       config_snapshot: currentCycle.config_snapshot || {},
       winners_snapshot: currentCycle.winners_snapshot || [],
       metadata: currentCycle.metadata || {},
-    };
-  }
-
-  const result = await pool.query(
-    `SELECT * FROM weekly_cycles
-     WHERE status = 'active'
-     ORDER BY starts_at DESC
-     LIMIT 1`
-  );
-  const active = result.rows[0];
-  if (active) {
-    return {
-      id: active.id,
-      cycle_key: active.cycle_key,
-      title: active.title,
-      status: active.status,
-      starts_at: toIso(active.starts_at),
-      ends_at: toIso(active.ends_at),
-      closed_at: active.closed_at ? toIso(active.closed_at) : null,
-      config_snapshot: active.config_snapshot || {},
-      winners_snapshot: active.winners_snapshot || [],
-      metadata: active.metadata || {},
     };
   }
 
@@ -579,13 +611,18 @@ async function ensureActiveWeeklyCycle(config) {
 }
 
 function createUserSnapshot(user) {
+  const approvedProfileImageUrl =
+    String(user.profile_image_mode || "").toLowerCase() === "photo" &&
+    String(user.profile_image_status || "").toLowerCase() === "approved"
+      ? String(user.profile_image_url || "").trim()
+      : "";
   return {
     user_id: user.id,
     nick: String(user.nick || user.full_name || "Usuário"),
     avatar_emoji: String(user.avatar_emoji || ""),
     profile_avatar_id: String(user.profile_avatar_id || ""),
     profile_image_mode: String(user.profile_image_mode || "avatar"),
-    profile_image_url: String(user.profile_image_url || ""),
+    profile_image_url: approvedProfileImageUrl,
     xp_total: 0,
     engagement_points: 0,
     weekly_points: 0,
@@ -2000,7 +2037,11 @@ router.get("/feed/wins", requireAuth, async (_req, res) => {
         user_avatar: user?.avatar_emoji || "",
         profile_avatar_id: user?.profile_avatar_id || "",
         profile_image_mode: user?.profile_image_mode || "avatar",
-        profile_image_url: String(user?.profile_image_url || "").trim() || (user?.id ? `/api/auth/profile-image/${user?.id}` : ""),
+        profile_image_url:
+          String(user?.profile_image_mode || "").toLowerCase() === "photo" &&
+          String(user?.profile_image_status || "").toLowerCase() === "approved"
+            ? String(user?.profile_image_url || "").trim()
+            : "",
         source_type: item.source_type || "",
         source_label: mapPrizeSourceLabel(item.source_type),
         reward_label: buildPrizeRewardLabel(item),
@@ -3026,7 +3067,13 @@ router.post("/admin/daily-chest/access-code/generate", requireAuth, requireAdmin
 });
 
 router.post("/admin/daily-chest/rewards", requireAuth, requireAdmin, async (req, res) => {
-  const reward = sanitizeChestRewardDraft(req.body || {});
+  const reward = sanitizeChestRewardDraft({
+    ...(req.body || {}),
+    id: undefined,
+    created_date: undefined,
+    updated_date: undefined,
+    claimed_count: Math.max(0, Number(req.body?.claimed_count || 0)),
+  });
   validateChestRewardDraft(reward);
   const created = await createEntity("DailyChestRewardConfig", reward);
   await appendAdminAudit({
@@ -3048,7 +3095,13 @@ router.patch("/admin/daily-chest/rewards/:id", requireAuth, requireAdmin, async 
   if (!existing) {
     return res.status(404).json({ error: "Prêmio não encontrado." });
   }
-  const next = sanitizeChestRewardDraft({ ...existing, ...(req.body || {}) });
+  const next = sanitizeChestRewardDraft({
+    ...existing,
+    ...(req.body || {}),
+    id: existing.id,
+    created_date: existing.created_date,
+    updated_date: existing.updated_date,
+  });
   validateChestRewardDraft(next);
   const updated = await updateEntity("DailyChestRewardConfig", rewardId, next);
   await appendAdminAudit({

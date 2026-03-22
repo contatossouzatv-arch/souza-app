@@ -67,7 +67,9 @@ const DEFAULT_REWARD = {
   asset_ref: "",
 };
 
-const EMPTY_REWARD = { ...DEFAULT_REWARD };
+function createEmptyReward() {
+  return { ...DEFAULT_REWARD };
+}
 
 function normalizeRewardRecord(raw = {}) {
   return {
@@ -372,7 +374,7 @@ export default function DailyChestTab() {
   React.useEffect(() => {
     const rewards = Array.isArray(data?.rewards) ? data.rewards.map((entry) => normalizeRewardRecord(entry)) : [];
     if (rewards.length === 0) {
-      setRewardDraft(EMPTY_REWARD);
+      setRewardDraft(createEmptyReward());
       setSelectedRewardId("");
       setIsCreatingReward(true);
       return;
@@ -436,7 +438,7 @@ export default function DailyChestTab() {
     onSuccess: (_result, rewardId) => {
       queryClient.invalidateQueries({ queryKey: ["admin-daily-chest-config-v2"] });
       if (String(selectedRewardId || "") === String(rewardId || "")) {
-        setRewardDraft(EMPTY_REWARD);
+        setRewardDraft(createEmptyReward());
         setSelectedRewardId("");
         setIsCreatingReward(true);
       }
@@ -1199,7 +1201,7 @@ export default function DailyChestTab() {
             type="button"
             variant="outline"
             onClick={() => {
-              setRewardDraft(EMPTY_REWARD);
+              setRewardDraft(createEmptyReward());
               setSelectedRewardId("");
               setIsCreatingReward(true);
             }}

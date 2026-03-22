@@ -59,6 +59,7 @@ import top1BorderAnimated from "../../assets-para-app/top-1-borda animada.webm";
 import top2BorderAnimated from "../../assets-para-app/top-2-borda animada.webm";
 import top3BorderAnimated from "../../assets-para-app/top-3-borda animada.webm";
 import LegalLinksBar from "@/components/LegalLinksBar";
+import { getProfileAvatarFallback, getProfileAvatarSrc } from "@/lib/profileMedia";
 const PrizeGalleryCard = lazy(() => import("@/components/profile/PrizeGalleryCard"));
 
 const avatarModules = import.meta.glob("../../assets-para-app/avatar/*.png", {
@@ -868,10 +869,7 @@ export default function Profile() {
           id: profile.id,
           nick: profile.nick || "Usuário",
           handle: profile.handle || String(profile.nick || "usuario").toLowerCase().replace(/\s+/g, "."),
-          avatarSrc:
-            profile.profile_image_mode === "photo" && profile.profile_image_url
-              ? resolveAssetUrl(profile.profile_image_url)
-              : defaultAvatar,
+          avatarSrc: getProfileAvatarSrc(profile, avatarSrcById, defaultAvatar) || defaultAvatar,
           followers: Number(profile.followers || 0),
           following: Number(profile.following || 0),
           likes: Number(profile.likes || 0),
@@ -1533,9 +1531,11 @@ export default function Profile() {
         id: entry.user_id,
         nick: entry.nick,
         handle: String(entry.nick || "usuario").toLowerCase().replace(/\s+/g, "."),
-        avatarSrc: entry.profile_image_mode === "photo" && entry.profile_image_url
-          ? resolveAssetUrl(entry.profile_image_url)
-          : avatarMatch?.src || selectedAvatar?.src || "",
+        avatarSrc:
+          getProfileAvatarSrc(entry, avatarSrcById, avatarMatch?.src || selectedAvatar?.src || defaultAvatar) ||
+          avatarMatch?.src ||
+          selectedAvatar?.src ||
+          defaultAvatar,
         points: Number(entry.weekly_points ?? entry.points ?? 0),
         tickets: entry.stats?.approvedDeposits || 0,
         participations:
@@ -2033,11 +2033,93 @@ export default function Profile() {
     await followMutation.mutateAsync({ targetUserId: selectedPublicProfile.id, shouldFollow });
   };
 
+  const syncDiscoverCardState = React.useCallback((profileId, updater) => {
+    setSimState((prev) => {
+      const current = prev[profileId];
+      if (!current) return prev;
+      const nextState = typeof updater === "function" ? updater(current) : { ...current, ...(updater || {}) };
+      return {
+        ...prev,
+        [profileId]: nextState,
+      };
+    });
+  }, []);
+
+  const toggleDiscoverFollow = React.useCallback(
+    async (profile) => {
+      const targetUserId = String(profile?.id || "");
+      if (!targetUserId || targetUserId === String(user?.id || "")) return;
+
+      const current = simState[targetUserId] || {
+        isFollowing: false,
+        isLiked: false,
+        followers: Number(profile?.followers || 0),
+        likes: Number(profile?.likes || 0),
+      };
+      const shouldFollow = !current.isFollowing;
+
+      syncDiscoverCardState(targetUserId, {
+        ...current,
+        isFollowing: shouldFollow,
+        followers: Math.max(0, Number(current.followers || 0) + (shouldFollow ? 1 : -1)),
+      });
+
+      try {
+        const response = await followMutation.mutateAsync({ targetUserId, shouldFollow });
+        if (response?.state) {
+          syncDiscoverCardState(targetUserId, (prev) => ({
+            ...prev,
+            isFollowing: Boolean(response.state.isFollowing),
+            followers: Number(response.state.followers ?? prev.followers ?? 0),
+          }));
+        }
+      } catch {
+        syncDiscoverCardState(targetUserId, current);
+      }
+    },
+    [followMutation, simState, syncDiscoverCardState, user?.id]
+  );
+
   const toggleAuthoritativePublicLike = async () => {
     if (!selectedPublicProfile?.id || !isSelectedRealProfile) return;
     const shouldLike = !selectedPublicSocialState?.isLiked;
     await likeMutation.mutateAsync({ targetUserId: selectedPublicProfile.id, shouldLike });
   };
+
+  const toggleDiscoverLike = React.useCallback(
+    async (profile) => {
+      const targetUserId = String(profile?.id || "");
+      if (!targetUserId || targetUserId === String(user?.id || "")) return;
+
+      const current = simState[targetUserId] || {
+        isFollowing: false,
+        isLiked: false,
+        followers: Number(profile?.followers || 0),
+        likes: Number(profile?.likes || 0),
+      };
+      const shouldLike = !current.isLiked;
+
+      syncDiscoverCardState(targetUserId, {
+        ...current,
+        isLiked: shouldLike,
+        likes: Math.max(0, Number(current.likes || 0) + (shouldLike ? 1 : -1)),
+      });
+
+      try {
+        const response = await likeMutation.mutateAsync({ targetUserId, shouldLike });
+        if (response?.state) {
+          syncDiscoverCardState(targetUserId, (prev) => ({
+            ...prev,
+            isLiked: Boolean(response.state.isLiked),
+            likes: Number(response.state.likes ?? prev.likes ?? 0),
+          }));
+        }
+      } catch {
+        syncDiscoverCardState(targetUserId, current);
+      }
+    },
+    [likeMutation, simState, syncDiscoverCardState, user?.id]
+  );
 
   const handleSimPointerDown = (event) => {
     const container = simulatedStripRef.current;
@@ -3292,9 +3374,18 @@ export default function Profile() {
                           aria-label={`Abrir perfil de ${profile.nick}`}
                         >
                           {profile.avatarSrc ? (
-                            <img src={profile.avatarSrc} alt={profile.nick} className="h-full w-full object-cover" />
+                            <img
+                              src={profile.avatarSrc}
+                              alt={profile.nick}
+                              className="h-full w-full object-cover"
+                              onError={(event) => {
+                                event.currentTarget.src = defaultAvatar;
+                              }}
+                            />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center text-xs text-white">AV</div>
+                            <div className="flex h-full w-full items-center justify-center text-xs text-white">
+                              {getProfileAvatarFallback(profile, "AV")}
+                            </div>
                           )}
                         </button>
                         {isPodium && podiumFrameSrc ? (
@@ -3346,7 +3437,7 @@ export default function Profile() {
                     <div className="grid grid-cols-2 gap-1.5">
                       <button
                         type="button"
-                        onClick={() => toggleSimFollow(profile.id)}
+                        onClick={() => toggleDiscoverFollow(profile)}
                         className={`rounded-lg px-2 py-1.5 text-xs font-bold transition ${
                           state.isFollowing
                             ? "bg-cyan-500/25 text-cyan-100 ring-1 ring-cyan-400/40"
@@ -3357,7 +3448,7 @@ export default function Profile() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => toggleSimLike(profile.id)}
+                        onClick={() => toggleDiscoverLike(profile)}
                         className={`rounded-lg px-2 py-1.5 text-xs font-bold text-white transition ${
                           state.isLiked ? "bg-pink-500 hover:bg-pink-400" : "bg-pink-600/60 hover:bg-pink-500/80"
                         }`}
@@ -3653,9 +3744,18 @@ export default function Profile() {
                       aria-label={`Abrir perfil de ${profile.nick}`}
                     >
                       {profile.avatarSrc ? (
-                        <img src={profile.avatarSrc} alt={profile.nick} className="h-full w-full object-cover" />
+                        <img
+                          src={profile.avatarSrc}
+                          alt={profile.nick}
+                          className="h-full w-full object-cover"
+                          onError={(event) => {
+                            event.currentTarget.src = defaultAvatar;
+                          }}
+                        />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center text-xs text-white">AV</div>
+                        <div className="flex h-full w-full items-center justify-center text-xs text-white">
+                          {getProfileAvatarFallback(profile, "AV")}
+                        </div>
                       )}
                     </button>
                     {isPodium && podiumFrameSrc ? (
@@ -3707,7 +3807,7 @@ export default function Profile() {
                 <div className="grid grid-cols-2 gap-1.5">
                   <button
                     type="button"
-                    onClick={() => toggleSimFollow(profile.id)}
+                    onClick={() => toggleDiscoverFollow(profile)}
                     className={`rounded-lg px-2 py-1.5 text-xs font-bold transition ${
                       state.isFollowing
                         ? "bg-cyan-500/25 text-cyan-100 ring-1 ring-cyan-400/40"
@@ -3718,7 +3818,7 @@ export default function Profile() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => toggleSimLike(profile.id)}
+                    onClick={() => toggleDiscoverLike(profile)}
                     className={`rounded-lg px-2 py-1.5 text-xs font-bold text-white transition ${
                       state.isLiked ? "bg-pink-500 hover:bg-pink-400" : "bg-pink-600/60 hover:bg-pink-500/80"
                     }`}

@@ -9,6 +9,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import RichTextMessage from "@/components/RichTextMessage";
 import LegalLinksBar from "@/components/LegalLinksBar";
 import { createPageUrl } from "@/utils";
+import { getProfileAvatarSrc } from "@/lib/profileMedia";
 import defaultAvatar from "../../assets-para-app/avatar/avatar padrao perfil sem foto.png";
 
 const avatarModules = import.meta.glob("../../assets-para-app/avatar/*.png", {
@@ -40,6 +41,8 @@ export default function Home() {
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
   const loadMoreRef = useRef(null);
   const postRefs = useRef({});
+  const recentProfilesStripRef = useRef(null);
+  const recentProfilesDragRef = useRef({ isDragging: false, startX: 0, startScrollLeft: 0, moved: false });
   const [highlightPostId, setHighlightPostId] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -67,7 +70,7 @@ export default function Home() {
     staleTime: 60000,
   });
 
-  const formattedMembersCount = String(users.length || 0).padStart(4, "0");
+  const formattedMembersCount = users.length || 0;
 
   useEffect(() => {
     setLikes(getStoredLikes());
@@ -86,27 +89,23 @@ export default function Home() {
   const creatorProfile = useMemo(() => {
     const admin = users.find((item) => String(item.role || "").toLowerCase() === "admin");
     if (!admin) return null;
-    const avatarFromSelection = avatarById[admin.profile_avatar_id] || null;
-    const creatorPhoto =
+      const creatorPhoto =
       admin.profile_image_mode === "photo" &&
       admin.profile_image_status === "approved" &&
       admin.profile_image_url
         ? resolveAssetUrl(admin.profile_image_url)
         : null;
-    return {
-      name: admin.full_name || admin.nick || "Souza",
-      nick: admin.nick || "souza",
-      avatarEmoji: admin.avatar_emoji || "S",
-      avatarUrl: creatorPhoto || avatarFromSelection || defaultAvatar,
-    };
+      return {
+        name: admin.full_name || admin.nick || "Souza",
+        nick: admin.nick || "souza",
+        avatarEmoji: admin.avatar_emoji || "S",
+      avatarUrl: creatorPhoto || getProfileAvatarSrc(admin, avatarById, defaultAvatar) || defaultAvatar,
+      };
   }, [users]);
 
   const recentProfiles = useMemo(() => {
     return (recentProfilesData?.items || []).map((profile) => {
-      const avatarUrl =
-        profile.profile_image_mode === "photo" && profile.profile_image_url
-          ? resolveAssetUrl(profile.profile_image_url)
-          : avatarById[profile.profile_avatar_id] || defaultAvatar;
+      const avatarUrl = getProfileAvatarSrc(profile, avatarById, defaultAvatar) || defaultAvatar;
       return {
         id: profile.id,
         name: profile.nick || "Usuário",
@@ -227,6 +226,57 @@ export default function Home() {
     navigate(createPageUrl("ProfilesGallery"));
   };
 
+  const handleRecentProfilesPointerDown = (event) => {
+    const container = recentProfilesStripRef.current;
+    if (!container || event.button !== 0) return;
+    const interactiveTarget = event.target?.closest?.("button,a,input,textarea,select,label");
+    if (interactiveTarget && interactiveTarget !== container) return;
+    recentProfilesDragRef.current = {
+      isDragging: true,
+      startX: event.clientX,
+      startScrollLeft: container.scrollLeft,
+      moved: false,
+    };
+    container.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleRecentProfilesPointerMove = (event) => {
+    const container = recentProfilesStripRef.current;
+    const drag = recentProfilesDragRef.current;
+    if (!container || !drag.isDragging) return;
+    const deltaX = event.clientX - drag.startX;
+    if (Math.abs(deltaX) > 8) {
+      recentProfilesDragRef.current.moved = true;
+    }
+    container.scrollLeft = drag.startScrollLeft - deltaX;
+    event.preventDefault();
+  };
+
+  const handleRecentProfilesPointerUpOrCancel = (event) => {
+    const container = recentProfilesStripRef.current;
+    if (container?.hasPointerCapture?.(event.pointerId)) {
+      container.releasePointerCapture(event.pointerId);
+    }
+    recentProfilesDragRef.current.isDragging = false;
+  };
+
+  const handleRecentProfilesClickCapture = (event) => {
+    if (recentProfilesDragRef.current.moved) {
+      event.preventDefault();
+      event.stopPropagation();
+      recentProfilesDragRef.current.moved = false;
+    }
+  };
+
+  const handleRecentProfilesWheel = (event) => {
+    const container = recentProfilesStripRef.current;
+    if (!container) return;
+    if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+      container.scrollLeft += event.deltaY;
+      event.preventDefault();
+    }
+  };
+
   if (isLoading || winnersLoading) {
     return (
       <div className="space-y-3">
@@ -276,7 +326,17 @@ export default function Home() {
         </div>
 
         {recentProfiles.length ? (
-          <div className="flex gap-3 overflow-x-auto pb-2">
+          <div
+            ref={recentProfilesStripRef}
+            onPointerDown={handleRecentProfilesPointerDown}
+            onPointerMove={handleRecentProfilesPointerMove}
+            onPointerUp={handleRecentProfilesPointerUpOrCancel}
+            onPointerCancel={handleRecentProfilesPointerUpOrCancel}
+            onClickCapture={handleRecentProfilesClickCapture}
+            onWheel={handleRecentProfilesWheel}
+            className="hide-scrollbar flex gap-3 overflow-x-auto pb-2 touch-pan-x select-none"
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
             {recentProfiles.map((profile) => (
               <button
                 key={profile.id}
@@ -288,6 +348,9 @@ export default function Home() {
                   src={profile.avatarUrl}
                   alt={profile.name}
                   className="mx-auto h-16 w-16 rounded-full border border-slate-700 object-cover"
+                  onError={(event) => {
+                    event.currentTarget.src = defaultAvatar;
+                  }}
                 />
                 <p className="mt-2 truncate text-sm font-semibold text-white">{profile.name}</p>
                 <p className="truncate text-[11px] text-slate-400">@{profile.handle || "usuario"}</p>
@@ -332,6 +395,9 @@ export default function Home() {
                           src={item.authorAvatarUrl || defaultAvatar}
                           alt={item.authorName}
                           className="h-11 w-11 rounded-full border border-emerald-300/60 object-cover transition hover:opacity-90"
+                          onError={(event) => {
+                            event.currentTarget.src = defaultAvatar;
+                          }}
                         />
                       </button>
                       <div>

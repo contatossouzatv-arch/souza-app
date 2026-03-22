@@ -28,6 +28,19 @@ function normalizeAngle(angle) {
   return THREE.MathUtils.euclideanModulo(angle + Math.PI, fullTurn) - Math.PI;
 }
 
+function easeChestSpin(progress) {
+  const safe = clamp(progress, 0, 1);
+  if (safe < 0.2) {
+    return 0.18 * Math.pow(safe / 0.2, 2.1);
+  }
+  if (safe < 0.78) {
+    const middleProgress = (safe - 0.2) / 0.58;
+    return 0.18 + 0.68 * (1 - Math.cos(middleProgress * Math.PI)) * 0.5;
+  }
+  const finalProgress = (safe - 0.78) / 0.22;
+  return 0.86 + 0.14 * (1 - Math.pow(1 - finalProgress, 2.2));
+}
+
 function createProceduralClosedChest() {
   const group = new THREE.Group();
   const bodyMaterial = new THREE.MeshStandardMaterial({
@@ -829,7 +842,7 @@ export default function DailyChestScene({
       lastSpinToken: spinToken,
       openProgress: stageState === "opened" || stageState === "claimed" ? 1 : 0,
       spinElapsed: 999,
-      spinDuration: 1.15,
+      spinDuration: 1.45,
       spinStartRotation: 0,
       spinTargetRotation: 0,
       lastSpinAngle: 0,
@@ -1145,9 +1158,7 @@ export default function DailyChestScene({
 
       stateRef.spinElapsed = Math.min(stateRef.spinDuration, stateRef.spinElapsed + dt);
       const spinRatio = clamp(stateRef.spinElapsed / stateRef.spinDuration, 0, 1);
-      const easedSpin = spinRatio < 0.5
-        ? 4 * spinRatio * spinRatio * spinRatio
-        : 1 - Math.pow(-2 * spinRatio + 2, 3) / 2;
+      const easedSpin = easeChestSpin(spinRatio);
       const spinAngle = stateRef.spinElapsed < stateRef.spinDuration
         ? THREE.MathUtils.lerp(stateRef.spinStartRotation, stateRef.spinTargetRotation, easedSpin)
         : stateRef.spinTargetRotation;
