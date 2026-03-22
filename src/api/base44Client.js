@@ -55,6 +55,14 @@ export function resolveAssetUrl(rawUrl) {
     if (value.startsWith("http://") || value.startsWith("https://")) {
       const parsed = new URL(value);
       const api = new URL(API_BASE_URL);
+      const uploadLikePath =
+        parsed.pathname.startsWith("/uploads/") || parsed.pathname.startsWith("/api/uploads/");
+
+      if (uploadLikePath && parsed.host !== api.host) {
+        parsed.protocol = api.protocol;
+        parsed.host = api.host;
+        return parsed.toString();
+      }
 
       if (isLocalHost(parsed.hostname) && !isLocalHost(api.hostname)) {
         parsed.protocol = api.protocol;
