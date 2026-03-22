@@ -1,0 +1,976 @@
+﻿import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import { Router } from "express";
+import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
+import multer from "multer";
+import { OAuth2Client } from "google-auth-library";
+import { requireAdmin, requireAuth } from "../middleware/auth.js";
+import {
+  countFailedLoginAttemptsSince,
+  createLoginAttempt,
+  createPasswordResetToken,
+  createRefreshToken,
+  createSecurityEvent,
+  findUserRowById,
+  findActiveRefreshTokenByHash,
+  findValidPasswordResetTokenByHash,
+  findOrCreateUserByEmail,
+  findUserById,
+  findUserPrivateById,
+  findUserRowByEmail,
+  listUsersByProfileImageStatus,
+  markPasswordResetTokenUsed,
+  revokeRefreshTokenById,
+  revokeRefreshTokensByUserId,
+  updateUserById,
+  findUserByGoogleId,
+  updateUserGoogleLink,
+  deleteUserById,
+} from "../db/index.js";
+import {
+  buildRefreshExpiryDate,
+  generateRefreshToken,
+  hashToken,
+  signAccessToken,
+} from "../auth.js";
+import { env } from "../config/env.js";
+
+const router = Router();
+const googleClient = new OAuth2Client();
+const profilePendingDir = path.resolve(process.cwd(), "private_uploads", "profile-pending");
+const profilePublicDir = path.resolve(process.cwd(), "uploads", "profile");
+const bannedNameTokens = ["nude", "porn", "sexo", "sex", "nsfw"];
+
+fs.mkdirSync(profilePendingDir, { recursive: true });
+fs.mkdirSync(profilePublicDir, { recursive: true });
+
+const loginRateLimiter = rateLimit({
+  windowMs: Math.max(1, env.rateLimitLoginWindowMin) * 60 * 1000,
+  limit: Math.max(1, env.rateLimitLoginMax),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Muitas tentativas. Tente novamente em instantes." },
+});
+
+const forgotRateLimiter = rateLimit({
+  windowMs: Math.max(1, env.rateLimitLoginWindowMin) * 60 * 1000,
+  limit: Math.max(1, Math.floor(env.rateLimitLoginMax / 2)),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Muitas tentativas. Tente novamente em instantes." },
+});
+
+const profileImageUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, profilePendingDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname || "").toLowerCase() || ".jpg";
+      const safeExt = [".jpg", ".jpeg", ".png", ".webp"].includes(ext) ? ext : ".jpg";
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${safeExt}`);
+    },
+  }),
+  limits: { fileSize: Math.max(1, env.profileImageMaxSizeMb) * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.mimetype)) {
+      return cb(new Error("Formato invalido. Use JPG, PNG ou WEBP."));
+    }
+    cb(null, true);
+  },
+});
+
+function sanitizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function validatePasswordStrength(password) {
+  const value = String(password || "");
+  if (value.length < 8) return false;
+  if (!/[A-Za-z]/.test(value)) return false;
+  if (!/[0-9]/.test(value)) return false;
+  return true;
+}
+
+const base32Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+function encodeBase32(buffer) {
+  let bits = 0;
+  let value = 0;
+  let output = "";
+  for (const byte of buffer) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      output += base32Alphabet[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) {
+    output += base32Alphabet[(value << (5 - bits)) & 31];
+  }
+  return output;
+}
+
+function decodeBase32(input) {
+  const normalized = String(input || "").toUpperCase().replace(/=+$/g, "").replace(/\s+/g, "");
+  let bits = 0;
+  let value = 0;
+  const out = [];
+  for (const ch of normalized) {
+    const idx = base32Alphabet.indexOf(ch);
+    if (idx === -1) continue;
+    value = (value << 5) | idx;
+    bits += 5;
+    if (bits >= 8) {
+      out.push((value >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(out);
+}
+
+function generateTotpSecret() {
+  return encodeBase32(crypto.randomBytes(20));
+}
+
+function generateTotpCode(secret, counter) {
+  const key = decodeBase32(secret);
+  const buffer = Buffer.alloc(8);
+  let c = Number(counter);
+  for (let i = 7; i >= 0; i--) {
+    buffer[i] = c & 0xff;
+    c = Math.floor(c / 256);
+  }
+  const hmac = crypto.createHmac("sha1", key).update(buffer).digest();
+  const offset = hmac[hmac.length - 1] & 0x0f;
+  const code =
+    ((hmac[offset] & 0x7f) << 24) |
+    ((hmac[offset + 1] & 0xff) << 16) |
+    ((hmac[offset + 2] & 0xff) << 8) |
+    (hmac[offset + 3] & 0xff);
+  return String(code % 1000000).padStart(6, "0");
+}
+
+function verifyTotp(secret, otp) {
+  const raw = String(otp || "").trim().replace(/\s+/g, "");
+  if (!/^\d{6,8}$/.test(raw)) return false;
+  const cleanOtp = raw.length === 8 ? raw.slice(-6) : raw;
+  const nowCounter = Math.floor(Date.now() / 30000);
+  // Accept a slightly wider skew window to avoid false negatives
+  // when device clocks are a bit out of sync in local/dev usage.
+  for (let i = -4; i <= 4; i++) {
+    if (generateTotpCode(secret, nowCounter + i) === cleanOtp) return true;
+  }
+  return false;
+}
+
+function buildFileUrl(req, filename) {
+  const configuredBase = String(env.uploadsBaseUrl || "").trim().replace(/\/$/, "");
+  const relativePath = `/uploads/profile/${filename}`;
+
+  // In local/dev, storing relative paths avoids "localhost" URLs that break on mobile.
+  if (!configuredBase) {
+    return relativePath;
+  }
+
+  try {
+    const url = new URL(configuredBase);
+    const host = String(url.hostname || "").toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") {
+      return relativePath;
+    }
+  } catch {
+    return relativePath;
+  }
+
+  return `${configuredBase}${relativePath}`;
+}
+
+function evaluateImageModeration(originalname = "") {
+  const normalized = String(originalname || "").toLowerCase();
+  const hasBannedToken = bannedNameTokens.some((token) => normalized.includes(token));
+
+  if (hasBannedToken) {
+    return { status: "rejected", score: 0.99, reason: "Conteudo suspeito detectado." };
+  }
+
+  if (env.profileImageRequireReview) {
+    return { status: "manual_review", score: null, reason: "Aguardando analise de moderacao." };
+  }
+
+  return { status: "approved", score: 0.1, reason: "" };
+}
+
+function removePublicFileByUrl(url) {
+  const value = String(url || "");
+  if (!value) return;
+  const marker = "/uploads/profile/";
+  const idx = value.indexOf(marker);
+  if (idx === -1) return;
+  const filename = value.slice(idx + marker.length);
+  if (!filename) return;
+  const filePath = path.resolve(profilePublicDir, filename);
+  fs.promises.unlink(filePath).catch(() => {});
+}
+
+function removePendingFileByName(name) {
+  const safeName = String(name || "").trim();
+  if (!safeName) return;
+  if (safeName.includes("/") || safeName.includes("\\")) return;
+
+  const filePath = path.resolve(profilePendingDir, safeName);
+  fs.promises.unlink(filePath).catch(() => {});
+}
+
+function canAccessPendingFile(fileName) {
+  const safeName = String(fileName || "").trim();
+  if (!safeName) return false;
+  if (safeName.includes("/") || safeName.includes("\\")) return false;
+  return fs.existsSync(path.resolve(profilePendingDir, safeName));
+}
+
+async function reactivateIfNeeded(userId) {
+  const current = await findUserById(userId);
+  if (!current) return null;
+  if (current.account_status !== "deactivated") return current;
+  return updateUserById(userId, { account_status: "active", deactivated_at: null });
+}
+
+function requestMeta(req) {
+  return {
+    ip: String(req.ip || req.headers["x-forwarded-for"] || ""),
+    user_agent: String(req.headers["user-agent"] || ""),
+  };
+}
+
+async function isLockedOut(identifier, ip) {
+  const since = new Date(Date.now() - Math.max(1, env.lockoutMinutes) * 60 * 1000).toISOString();
+  const fails = await countFailedLoginAttemptsSince(identifier, ip, since);
+  return fails >= Math.max(1, env.lockoutMaxFails);
+}
+
+async function auditEvent(req, type, userId = null, metadata = {}) {
+  try {
+    const meta = requestMeta(req);
+    await createSecurityEvent({
+      user_id: userId,
+      type,
+      ip: meta.ip,
+      user_agent: meta.user_agent,
+      metadata,
+    });
+  } catch (error) {
+    console.error("security_event_failed", type, error?.message || error);
+  }
+}
+
+async function issueSession(req, user, familyId = null) {
+  const refreshToken = generateRefreshToken();
+  const tokenHash = hashToken(refreshToken);
+  const rotateFamilyId = familyId || crypto.randomUUID();
+  const meta = requestMeta(req);
+
+  await createRefreshToken({
+    user_id: user.id,
+    token_hash: tokenHash,
+    expires_at: buildRefreshExpiryDate(),
+    user_agent: meta.user_agent,
+    ip: meta.ip,
+    rotate_family_id: rotateFamilyId,
+  });
+
+  const token = signAccessToken(user);
+  return { token, refreshToken, user };
+}
+
+router.post("/register", async (req, res) => {
+  const { email, password, full_name, nick, phone } = req.body || {};
+  const normalizedEmail = sanitizeEmail(email);
+  const normalizedName = String(full_name || "").trim();
+  const normalizedPhone = String(phone || "").trim();
+
+  if (!normalizedEmail || !password || !normalizedName || !normalizedPhone) {
+    return res.status(400).json({ error: "email, nome e telefone são obrigatórios" });
+  }
+
+  const existing = await findUserRowByEmail(normalizedEmail);
+  if (existing) {
+    return res.status(409).json({ error: "Email já cadastrado" });
+  }
+
+  const password_hash = await bcrypt.hash(String(password), 10);
+  const user = await findOrCreateUserByEmail(normalizedEmail, {
+    password_hash,
+    full_name: normalizedName,
+    nick: nick || normalizedEmail.split("@")[0],
+    phone: normalizedPhone,
+    terms_accepted: false,
+    privacy_accepted: false,
+    onboarding_completed: false,
+  });
+
+  const session = await issueSession(req, user);
+  await auditEvent(req, "USER_REGISTERED", user.id, { method: "password" });
+  return res.status(201).json(session);
+});
+
+router.post("/login", loginRateLimiter, async (req, res) => {
+  const { email, password, otp } = req.body || {};
+  const normalizedEmail = sanitizeEmail(email);
+  const meta = requestMeta(req);
+
+  if (!normalizedEmail || !password) {
+    return res.status(400).json({ error: "email and password are required" });
+  }
+
+  if (await isLockedOut(normalizedEmail, meta.ip)) {
+    await auditEvent(req, "LOGIN_BLOCKED_LOCKOUT", null, { identifier: normalizedEmail });
+    return res.status(429).json({ error: "Muitas tentativas. Aguarde e tente novamente." });
+  }
+
+  const userRow = await findUserRowByEmail(normalizedEmail);
+  if (!userRow?.password_hash) {
+    await createLoginAttempt({
+      identifier: normalizedEmail,
+      ip: meta.ip,
+      user_agent: meta.user_agent,
+      success: false,
+    });
+    return res.status(401).json({ error: "Credenciais inválidas" });
+  }
+
+  const valid = await bcrypt.compare(String(password), userRow.password_hash);
+  if (!valid) {
+    await createLoginAttempt({
+      identifier: normalizedEmail,
+      ip: meta.ip,
+      user_agent: meta.user_agent,
+      success: false,
+    });
+    return res.status(401).json({ error: "Credenciais inválidas" });
+  }
+
+  if (Boolean(userRow.two_factor_enabled) && userRow.two_factor_secret) {
+    const otpOk = verifyTotp(userRow.two_factor_secret, otp);
+    if (!otpOk) {
+      await createLoginAttempt({
+        identifier: normalizedEmail,
+        ip: meta.ip,
+        user_agent: meta.user_agent,
+        success: false,
+      });
+      await auditEvent(req, "LOGIN_2FA_FAILED", userRow.id, { identifier: normalizedEmail });
+      return res.status(401).json({ error: "Código 2FA inválido." });
+    }
+  }
+
+  const activeUser = await reactivateIfNeeded(userRow.id);
+  await createLoginAttempt({
+    identifier: normalizedEmail,
+    ip: meta.ip,
+    user_agent: meta.user_agent,
+    success: true,
+  });
+  const session = await issueSession(req, activeUser);
+  await auditEvent(req, "USER_LOGGED_IN", activeUser.id, { method: "password" });
+  return res.json(session);
+});
+
+router.post("/google", async (req, res) => {
+  const { credential } = req.body || {};
+  if (!credential) {
+    return res.status(400).json({ error: "credential is required" });
+  }
+
+  if (!env.googleClientId) {
+    return res.status(503).json({ error: "Google login não configurado no backend" });
+  }
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: env.googleClientId,
+    });
+
+    const payload = ticket.getPayload();
+    const email = sanitizeEmail(payload?.email);
+    const googleId = payload?.sub;
+
+    if (!email || !googleId) {
+      return res.status(400).json({ error: "Token Google inválido" });
+    }
+
+    let user = await findUserByGoogleId(googleId);
+
+    if (!user) {
+      const existingByEmail = await findUserRowByEmail(email);
+      if (existingByEmail) {
+        user = await updateUserGoogleLink(existingByEmail.id, googleId);
+      } else {
+        user = await findOrCreateUserByEmail(email, {
+          google_id: googleId,
+          full_name: payload?.name || "",
+          nick: payload?.given_name || email.split("@")[0],
+          terms_accepted: false,
+          privacy_accepted: false,
+          onboarding_completed: false,
+        });
+      }
+    }
+
+    const activeUser = await reactivateIfNeeded(user.id);
+    const session = await issueSession(req, activeUser);
+    await auditEvent(req, "USER_LOGGED_IN", activeUser.id, { method: "google" });
+    return res.json(session);
+  } catch (_error) {
+    return res.status(401).json({ error: "Falha na autenticação Google" });
+  }
+});
+
+router.post("/dev-login", async (req, res) => {
+  if (env.nodeEnv === "production") {
+    return res.status(404).json({ error: "Not found" });
+  }
+
+  const { email, full_name, nick, role } = req.body || {};
+  const normalizedEmail = sanitizeEmail(email || env.adminEmail);
+
+  const user = await findOrCreateUserByEmail(normalizedEmail, {
+    full_name: full_name || "Usuário Local",
+    nick: nick || normalizedEmail.split("@")[0],
+    role: role || (normalizedEmail === "admin@local.dev" ? "admin" : "user"),
+    onboarding_completed: true,
+    terms_accepted: true,
+    privacy_accepted: true,
+  });
+
+  const session = await issueSession(req, user);
+  await auditEvent(req, "USER_LOGGED_IN", user.id, { method: "dev-login" });
+  return res.json(session);
+});
+
+router.post("/2fa/setup", requireAuth, async (req, res) => {
+  const userRow = await findUserRowById(req.auth.sub);
+  if (!userRow) return res.status(404).json({ error: "User not found" });
+
+  const secret = generateTotpSecret();
+  await updateUserById(req.auth.sub, {
+    two_factor_secret: secret,
+    two_factor_enabled: false,
+  });
+
+  const appName = "APP do Souza";
+  const label = encodeURIComponent(`${appName}:${userRow.email}`);
+  const issuer = encodeURIComponent(appName);
+  const otpauthUrl = `otpauth://totp/${label}?secret=${secret}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`;
+
+  await auditEvent(req, "2FA_SETUP_CREATED", req.auth.sub);
+  return res.json({
+    secret,
+    otpauth_url: otpauthUrl,
+    message: "Escaneie o QR no app autenticador e confirme com um código.",
+  });
+});
+
+router.post("/2fa/enable", requireAuth, async (req, res) => {
+  const otp = String(req.body?.otp || "").trim();
+  const userRow = await findUserRowById(req.auth.sub);
+  if (!userRow) return res.status(404).json({ error: "User not found" });
+  if (!userRow.two_factor_secret) {
+    return res.status(400).json({ error: "2FA não configurado. Execute /2fa/setup antes." });
+  }
+
+  if (!verifyTotp(userRow.two_factor_secret, otp)) {
+    await auditEvent(req, "2FA_ENABLE_FAILED", req.auth.sub);
+    return res.status(400).json({ error: "Código 2FA inválido." });
+  }
+
+  await updateUserById(req.auth.sub, { two_factor_enabled: true });
+  await auditEvent(req, "2FA_ENABLED", req.auth.sub);
+  return res.json({ ok: true, two_factor_enabled: true });
+});
+
+router.post("/2fa/disable", requireAuth, async (req, res) => {
+  const otp = String(req.body?.otp || "").trim();
+  const userRow = await findUserRowById(req.auth.sub);
+  if (!userRow) return res.status(404).json({ error: "User not found" });
+  if (!userRow.two_factor_enabled || !userRow.two_factor_secret) {
+    return res.json({ ok: true, two_factor_enabled: false });
+  }
+
+  if (!verifyTotp(userRow.two_factor_secret, otp)) {
+    await auditEvent(req, "2FA_DISABLE_FAILED", req.auth.sub);
+    return res.status(400).json({ error: "Código 2FA inválido." });
+  }
+
+  await updateUserById(req.auth.sub, {
+    two_factor_enabled: false,
+    two_factor_secret: null,
+  });
+  await auditEvent(req, "2FA_DISABLED", req.auth.sub);
+  return res.json({ ok: true, two_factor_enabled: false });
+});
+
+router.post("/2fa/diagnose", requireAuth, async (req, res) => {
+  const otp = String(req.body?.otp || "").trim();
+  const userRow = await findUserRowById(req.auth.sub);
+  if (!userRow) return res.status(404).json({ error: "User not found" });
+
+  const nowMs = Date.now();
+  const currentCounter = Math.floor(nowMs / 30000);
+  const remainingMs = 30000 - (nowMs % 30000);
+  const response = {
+    has_secret: Boolean(userRow.two_factor_secret),
+    two_factor_enabled: Boolean(userRow.two_factor_enabled),
+    server_time_iso: new Date(nowMs).toISOString(),
+    seconds_remaining: Math.ceil(remainingMs / 1000),
+    server_current_code: null,
+    is_valid: false,
+    matched_window_steps: null,
+    drift_seconds_estimate: null,
+    clock_drift_warning: "",
+    hint: "",
+  };
+
+  if (!userRow.two_factor_secret) {
+    response.hint = "2FA ainda não foi configurado. Gere um segredo novo primeiro.";
+    return res.json(response);
+  }
+
+  if (!/^\d{6}$/.test(otp)) {
+    response.server_current_code = generateTotpCode(userRow.two_factor_secret, currentCounter);
+    response.hint = "Digite um código de 6 dígitos.";
+    return res.json(response);
+  }
+
+  for (let i = -6; i <= 6; i += 1) {
+    const candidate = generateTotpCode(userRow.two_factor_secret, currentCounter + i);
+    if (candidate === otp) {
+      response.is_valid = true;
+      response.matched_window_steps = i;
+      break;
+    }
+  }
+
+  if (!response.is_valid) {
+    response.server_current_code = generateTotpCode(userRow.two_factor_secret, currentCounter);
+    response.hint = "Código não confere com o segredo salvo. Gere novo segredo e tente novamente.";
+    return res.json(response);
+  }
+
+  if (response.matched_window_steps === 0) {
+    response.hint = "Código válido no tempo atual.";
+  } else if (response.matched_window_steps < 0) {
+    response.hint = "Código válido, mas o relógio do celular parece atrasado em relação ao servidor.";
+  } else {
+    response.hint = "Código válido, mas o relógio do celular parece adiantado em relação ao servidor.";
+  }
+  response.drift_seconds_estimate = response.matched_window_steps * 30;
+  if (Math.abs(response.matched_window_steps) >= 2) {
+    response.clock_drift_warning =
+      "Diferença de horário detectada entre dispositivo e servidor. Ative sincronização automática de hora.";
+  }
+
+  return res.json(response);
+});
+
+router.post("/forgot-password", forgotRateLimiter, async (req, res) => {
+  const email = sanitizeEmail(req.body?.email);
+  const neutral = { message: "Se o email existir, enviaremos instruções." };
+  if (!email) return res.json(neutral);
+
+  const userRow = await findUserRowByEmail(email);
+  if (!userRow) {
+    await auditEvent(req, "PASSWORD_RESET_REQUESTED", null, { email });
+    return res.json(neutral);
+  }
+
+  const rawToken = crypto.randomBytes(32).toString("base64url");
+  const tokenHash = hashToken(rawToken);
+  const expiresAt = new Date(
+    Date.now() + Math.max(1, env.resetTokenTtlMin) * 60 * 1000
+  ).toISOString();
+  await createPasswordResetToken({
+    user_id: userRow.id,
+    token_hash: tokenHash,
+    expires_at: expiresAt,
+  });
+
+  const resetLink = `${env.appBaseUrl}/reset-password?token=${rawToken}`;
+  if (env.mailMode === "console") {
+    console.log("[MAIL:console] Password reset link:", resetLink);
+  }
+
+  await auditEvent(req, "PASSWORD_RESET_REQUESTED", userRow.id, { email });
+  return res.json(neutral);
+});
+
+router.post("/reset-password", async (req, res) => {
+  const token = String(req.body?.token || "").trim();
+  const newPassword = String(req.body?.newPassword || "");
+
+  if (!token || !newPassword) {
+    return res.status(400).json({ error: "token and newPassword are required" });
+  }
+  if (!validatePasswordStrength(newPassword)) {
+    return res.status(400).json({ error: "Senha fraca. Use ao menos 8 caracteres com letras e números." });
+  }
+
+  const stored = await findValidPasswordResetTokenByHash(hashToken(token));
+  if (!stored) {
+    return res.status(400).json({ error: "Token inválido ou expirado." });
+  }
+
+  const newHash = await bcrypt.hash(newPassword, 10);
+  await updateUserById(stored.user_id, { password_hash: newHash });
+  await markPasswordResetTokenUsed(stored.id);
+  await revokeRefreshTokensByUserId(stored.user_id);
+  await auditEvent(req, "PASSWORD_RESET_COMPLETED", stored.user_id);
+  return res.json({ ok: true });
+});
+
+router.post("/change-password", requireAuth, async (req, res) => {
+  const currentPassword = String(req.body?.currentPassword || "");
+  const newPassword = String(req.body?.newPassword || "");
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: "currentPassword and newPassword are required" });
+  }
+  if (!validatePasswordStrength(newPassword)) {
+    return res.status(400).json({ error: "Senha fraca. Use ao menos 8 caracteres com letras e números." });
+  }
+
+  const userRow = await findUserRowById(req.auth.sub);
+  if (!userRow?.password_hash) {
+    return res.status(400).json({ error: "Conta sem senha local." });
+  }
+
+  const valid = await bcrypt.compare(currentPassword, userRow.password_hash);
+  if (!valid) {
+    return res.status(401).json({ error: "Senha atual inválida." });
+  }
+
+  const newHash = await bcrypt.hash(newPassword, 10);
+  await updateUserById(req.auth.sub, { password_hash: newHash });
+  await revokeRefreshTokensByUserId(req.auth.sub);
+  await auditEvent(req, "PASSWORD_CHANGED", req.auth.sub);
+  return res.json({ ok: true });
+});
+
+router.post("/refresh", async (req, res) => {
+  const rawToken = String(req.body?.refreshToken || "").trim();
+  if (!rawToken) {
+    return res.status(401).json({ error: "Refresh token inválido" });
+  }
+
+  const tokenHash = hashToken(rawToken);
+  const stored = await findActiveRefreshTokenByHash(tokenHash);
+  if (!stored) {
+    return res.status(401).json({ error: "Refresh token inválido" });
+  }
+
+  const user = await findUserById(stored.user_id);
+  if (!user) {
+    await revokeRefreshTokenById(stored.id);
+    return res.status(401).json({ error: "Sessão inválida" });
+  }
+
+  await revokeRefreshTokenById(stored.id);
+  const session = await issueSession(req, user, stored.rotate_family_id);
+  await auditEvent(req, "TOKEN_REFRESHED", user.id, { family: stored.rotate_family_id });
+  return res.json(session);
+});
+
+router.post("/logout", async (req, res) => {
+  const rawToken = String(req.body?.refreshToken || "").trim();
+  if (rawToken) {
+    const stored = await findActiveRefreshTokenByHash(hashToken(rawToken));
+    if (stored) {
+      await revokeRefreshTokenById(stored.id);
+      await auditEvent(req, "USER_LOGGED_OUT", stored.user_id);
+    }
+  }
+  return res.status(204).send();
+});
+
+router.post("/logout-all", requireAuth, async (req, res) => {
+  await revokeRefreshTokensByUserId(req.auth.sub);
+  await auditEvent(req, "USER_LOGGED_OUT_ALL", req.auth.sub);
+  return res.status(204).send();
+});
+
+router.get("/me", requireAuth, async (req, res) => {
+  const user = await findUserById(req.auth.sub);
+  if (!user) return res.status(401).json({ error: "User not found" });
+  if (user.account_status === "deactivated") {
+    return res.status(403).json({ error: "Conta desativada. Faca login novamente para reativar." });
+  }
+  return res.json(user);
+});
+
+router.post("/me/deactivate", requireAuth, async (req, res) => {
+  const user = await findUserById(req.auth.sub);
+  if (!user) return res.status(401).json({ error: "User not found" });
+
+  const updated = await updateUserById(req.auth.sub, {
+    account_status: "deactivated",
+    deactivated_at: new Date().toISOString(),
+  });
+
+  return res.json({ ok: true, user: updated });
+});
+
+router.delete("/me", requireAuth, async (req, res) => {
+  const user = await findUserPrivateById(req.auth.sub);
+  if (!user) return res.status(401).json({ error: "User not found" });
+
+  if (canAccessPendingFile(user.profile_image_pending_name)) {
+    const pendingPath = path.resolve(profilePendingDir, user.profile_image_pending_name);
+    await fs.promises.unlink(pendingPath).catch(() => {});
+  }
+
+  removePublicFileByUrl(user.profile_image_url);
+  await deleteUserById(req.auth.sub);
+
+  return res.status(204).send();
+});
+
+router.post(
+  "/me/profile-image",
+  requireAuth,
+  (req, res, next) => {
+    profileImageUpload.single("file")(req, res, (error) => {
+      if (!error) return next();
+      if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+        return res
+          .status(400)
+          .json({ error: `Arquivo muito grande. Maximo ${env.profileImageMaxSizeMb}MB.` });
+      }
+      return res.status(400).json({ error: error.message || "Falha no upload da imagem." });
+    });
+  },
+  async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "Arquivo de imagem obrigatorio." });
+    }
+
+    const user = await findUserPrivateById(req.auth.sub);
+    if (!user) return res.status(401).json({ error: "User not found" });
+
+    const moderation = evaluateImageModeration(req.file.originalname);
+    removePendingFileByName(user.profile_image_pending_name);
+    const updatePayload = {
+      profile_image_mode: "photo",
+      profile_image_status: moderation.status,
+      profile_image_reject_reason: moderation.reason,
+      profile_image_moderation_score: moderation.score,
+      profile_image_uploaded_at: new Date().toISOString(),
+      profile_image_pending_name: "",
+    };
+
+    if (moderation.status === "approved") {
+      const publicFilename = `profile-${req.auth.sub}-${Date.now()}${path.extname(req.file.filename)}`;
+      const publicPath = path.resolve(profilePublicDir, publicFilename);
+      await fs.promises.rename(req.file.path, publicPath);
+
+      removePublicFileByUrl(user.profile_image_url);
+      updatePayload.profile_image_url = buildFileUrl(req, publicFilename);
+      updatePayload.profile_image_reject_reason = "";
+    } else if (moderation.status === "rejected") {
+      await fs.promises.unlink(req.file.path).catch(() => {});
+      updatePayload.profile_image_url = "";
+    } else {
+      // manual_review: keep file private and hide from public profile until approval
+      updatePayload.profile_image_url = "";
+      updatePayload.profile_image_pending_name = req.file.filename;
+    }
+
+    const updated = await updateUserById(req.auth.sub, updatePayload);
+    return res.status(201).json({
+      ok: true,
+      moderation: {
+        status: moderation.status,
+        reason: moderation.reason,
+        score: moderation.score,
+      },
+      user: updated,
+    });
+  }
+);
+
+router.delete("/me/profile-image/pending", requireAuth, async (req, res) => {
+  const user = await findUserPrivateById(req.auth.sub);
+  if (!user) return res.status(401).json({ error: "User not found" });
+
+  if (canAccessPendingFile(user.profile_image_pending_name)) {
+    const pendingPath = path.resolve(profilePendingDir, user.profile_image_pending_name);
+    await fs.promises.unlink(pendingPath).catch(() => {});
+  }
+
+  const updated = await updateUserById(req.auth.sub, {
+    profile_image_status: "none",
+    profile_image_pending_name: "",
+    profile_image_reject_reason: "",
+    profile_image_moderation_score: null,
+    profile_image_uploaded_at: null,
+  });
+
+  return res.json({ ok: true, user: updated });
+});
+
+router.get("/me/profile-image/private", requireAuth, async (req, res) => {
+  const user = await findUserPrivateById(req.auth.sub);
+  if (!user) return res.status(401).json({ error: "User not found" });
+
+  if (!canAccessPendingFile(user.profile_image_pending_name)) {
+    return res.status(404).json({ error: "Imagem privada nao encontrada." });
+  }
+
+  const pendingPath = path.resolve(profilePendingDir, user.profile_image_pending_name);
+  return res.sendFile(pendingPath);
+});
+
+router.get("/admin/profile-images", requireAuth, requireAdmin, async (req, res) => {
+  const status = String(req.query.status || "manual_review").toLowerCase();
+  const allowed = new Set(["manual_review", "approved", "rejected", "none"]);
+  const normalizedStatus = allowed.has(status) ? status : "manual_review";
+
+  const rows = await listUsersByProfileImageStatus(normalizedStatus);
+  const items = rows.map((row) => ({
+    id: row.id,
+    email: row.email,
+    full_name: row.full_name,
+    nick: row.nick,
+    profile_image_status: row.profile_image_status,
+    profile_image_reject_reason: row.profile_image_reject_reason,
+    profile_image_moderation_score: row.profile_image_moderation_score,
+    profile_image_uploaded_at: row.profile_image_uploaded_at,
+    profile_image_url: row.profile_image_url,
+    has_pending_image: Boolean(row.profile_image_pending_name),
+  }));
+
+  return res.json(items);
+});
+
+router.get("/admin/profile-images/:userId/preview", requireAuth, requireAdmin, async (req, res) => {
+  const user = await findUserPrivateById(req.params.userId);
+  if (!user) return res.status(404).json({ error: "Usuario nao encontrado." });
+
+  if (user.profile_image_status === "manual_review" && canAccessPendingFile(user.profile_image_pending_name)) {
+    const pendingPath = path.resolve(profilePendingDir, user.profile_image_pending_name);
+    return res.sendFile(pendingPath);
+  }
+
+  if (user.profile_image_status === "approved" && user.profile_image_url) {
+    const marker = "/uploads/profile/";
+    const idx = user.profile_image_url.indexOf(marker);
+    if (idx !== -1) {
+      const fileName = user.profile_image_url.slice(idx + marker.length);
+      if (fileName && !fileName.includes("/") && !fileName.includes("\\")) {
+        const filePath = path.resolve(profilePublicDir, fileName);
+        if (fs.existsSync(filePath)) {
+          return res.sendFile(filePath);
+        }
+      }
+    }
+  }
+
+  return res.status(404).json({ error: "Imagem nao encontrada." });
+});
+
+router.post("/admin/profile-images/:userId/approve", requireAuth, requireAdmin, async (req, res) => {
+  const user = await findUserPrivateById(req.params.userId);
+  if (!user) return res.status(404).json({ error: "Usuario nao encontrado." });
+
+  if (user.profile_image_status !== "manual_review") {
+    return res.status(400).json({ error: "Apenas fotos em analise podem ser aprovadas." });
+  }
+
+  if (!canAccessPendingFile(user.profile_image_pending_name)) {
+    return res.status(404).json({ error: "Arquivo pendente nao encontrado." });
+  }
+
+  const ext = path.extname(user.profile_image_pending_name || "").toLowerCase() || ".jpg";
+  const safeExt = [".jpg", ".jpeg", ".png", ".webp"].includes(ext) ? ext : ".jpg";
+  const publicFilename = `profile-${user.id}-${Date.now()}${safeExt}`;
+  const sourcePath = path.resolve(profilePendingDir, user.profile_image_pending_name);
+  const targetPath = path.resolve(profilePublicDir, publicFilename);
+
+  await fs.promises.rename(sourcePath, targetPath);
+  removePublicFileByUrl(user.profile_image_url);
+
+  const updated = await updateUserById(user.id, {
+    profile_image_status: "approved",
+    profile_image_url: buildFileUrl(req, publicFilename),
+    profile_image_pending_name: "",
+    profile_image_reject_reason: "",
+    profile_image_mode: "photo",
+  });
+
+  return res.json({ ok: true, user: updated });
+});
+
+router.post("/admin/profile-images/:userId/reject", requireAuth, requireAdmin, async (req, res) => {
+  const user = await findUserPrivateById(req.params.userId);
+  if (!user) return res.status(404).json({ error: "Usuario nao encontrado." });
+
+  const reason = String(req.body?.reason || "").trim() || "Rejeitada pela moderacao.";
+
+  if (canAccessPendingFile(user.profile_image_pending_name)) {
+    const pendingPath = path.resolve(profilePendingDir, user.profile_image_pending_name);
+    await fs.promises.unlink(pendingPath).catch(() => {});
+  }
+
+  const updated = await updateUserById(user.id, {
+    profile_image_status: "rejected",
+    profile_image_url: "",
+    profile_image_pending_name: "",
+    profile_image_reject_reason: reason,
+  });
+
+  return res.json({ ok: true, user: updated });
+});
+
+router.patch("/me", requireAuth, async (req, res) => {
+  const payload = req.body || {};
+  const allowedFields = [
+    "full_name",
+    "nick",
+    "phone",
+    "platform_id",
+    "avatar_emoji",
+    "profile_avatar_id",
+    "profile_image_mode",
+    "terms_accepted",
+    "privacy_accepted",
+    "onboarding_completed",
+  ];
+
+  const update = {};
+  for (const key of allowedFields) {
+    if (key in payload) {
+      update[key] = payload[key];
+    }
+  }
+
+  if ("profile_image_mode" in update) {
+    const mode = String(update.profile_image_mode || "").toLowerCase();
+    if (!["avatar", "photo"].includes(mode)) {
+      return res.status(400).json({ error: "profile_image_mode invalido" });
+    }
+    update.profile_image_mode = mode;
+  }
+
+  if ("profile_avatar_id" in update) {
+    update.profile_avatar_id = String(update.profile_avatar_id || "").trim();
+  }
+
+  const updated = await updateUserById(req.auth.sub, update);
+  if (!updated) return res.status(404).json({ error: "User not found" });
+  return res.json(updated);
+});
+
+export default router;
+

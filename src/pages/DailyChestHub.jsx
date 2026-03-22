@@ -1,0 +1,275 @@
+import React, { lazy, Suspense } from "react";
+import confetti from "canvas-confetti";
+import { useNavigate } from "react-router-dom";
+import { toast } from "@/components/ui/use-toast";
+import { useDailyChestState } from "@/hooks/useDailyChestState";
+import DailyChestOverlay from "@/components/daily-chest/DailyChestOverlay";
+import { filterAvailableDailyChestRewards, formatDailyChestPrize } from "@/lib/dailyChest";
+import menuClickSound from "../../assets-para-app/Songs/Song click menu principal.mp3";
+import chestOpenSound from "../../assets-para-app/Songs/Song Bau final da partida se abrindo.mp3";
+import commonRewardCollectSound from "../../assets-para-app/Songs/Song Coleta coisa comum no final da partida ou de baus no lobby.mp3";
+import chestTurnSound from "../../assets-para-app/Songs/Song girar bau para abrir.mp3";
+import { isInteractionSoundEnabled, isMenuSoundEnabled } from "@/lib/soundPrefs";
+
+const DailyChestScene = lazy(() => import("@/components/daily-chest/DailyChestScene"));
+
+function SceneLoader() {
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_28%),linear-gradient(180deg,#020617_0%,#06111d_45%,#030712_100%)]">
+      <div className="rounded-full border border-cyan-200/20 bg-slate-950/70 px-4 py-2 text-sm text-cyan-100">
+        Montando cena do bau...
+      </div>
+    </div>
+  );
+}
+
+export default function DailyChestHub() {
+  const navigate = useNavigate();
+  const [tapCount, setTapCount] = React.useState(0);
+  const [tapPulseToken, setTapPulseToken] = React.useState(0);
+  const [spinToken, setSpinToken] = React.useState(0);
+  const [displayState, setDisplayState] = React.useState("available");
+  const [viewMode, setViewMode] = React.useState("main");
+  const menuAudioRef = React.useRef(null);
+  const spinAudioRef = React.useRef(null);
+  const openAudioRef = React.useRef(null);
+  const collectAudioRef = React.useRef(null);
+  const lastRevealStateRef = React.useRef(null);
+  const { state, isLoading, error, refetch, openChest, unlockChest, claimChest, isOpening, isUnlocking, isClaiming } = useDailyChestState();
+
+  const playAudio = React.useCallback((audioRef, enabled, volume = 0.9) => {
+    if (!enabled) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    audio.volume = volume;
+    audio.play().catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    const menuAudio = new Audio(menuClickSound);
+    menuAudio.preload = "auto";
+    menuAudioRef.current = menuAudio;
+
+    const spinAudio = new Audio(chestTurnSound);
+    spinAudio.preload = "auto";
+    spinAudioRef.current = spinAudio;
+
+    const openAudio = new Audio(chestOpenSound);
+    openAudio.preload = "auto";
+    openAudioRef.current = openAudio;
+
+    const collectAudio = new Audio(commonRewardCollectSound);
+    collectAudio.preload = "auto";
+    collectAudioRef.current = collectAudio;
+
+    return () => {
+      menuAudioRef.current = null;
+      spinAudioRef.current = null;
+      openAudioRef.current = null;
+      collectAudioRef.current = null;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!state) return;
+    const backendState = String(state.state || "available");
+    setDisplayState(backendState);
+    setViewMode("main");
+    if (backendState === "available") {
+      setTapCount(0);
+      return;
+    }
+    setTapCount(Number(state.tapGoal || 0));
+  }, [state]);
+
+  React.useEffect(() => {
+    if (displayState !== "opened" || lastRevealStateRef.current === "opened") return;
+    lastRevealStateRef.current = "opened";
+    playAudio(openAudioRef, isInteractionSoundEnabled(), 0.92);
+    confetti({
+      particleCount: 140,
+      spread: 84,
+      startVelocity: 36,
+      scalar: 0.95,
+      origin: { x: 0.5, y: 0.52 },
+      colors: ["#67e8f9", "#22d3ee", "#c084fc", "#fef08a", "#ffffff"],
+    });
+  }, [displayState, playAudio]);
+
+  React.useEffect(() => {
+    if (displayState === "available") {
+      lastRevealStateRef.current = null;
+    }
+  }, [displayState]);
+
+  const availableRewardPool = React.useMemo(() => filterAvailableDailyChestRewards(state?.rewardPool || []), [state?.rewardPool]);
+
+  React.useEffect(() => {
+    if (viewMode === "rewards" && availableRewardPool.length === 0) {
+      setViewMode("main");
+    }
+  }, [availableRewardPool.length, viewMode]);
+
+  const handleSpin = React.useCallback(async (slotType = "base") => {
+    if (!state || displayState !== "available" || isOpening) return;
+    const remainingForType =
+      slotType === "bonus"
+        ? Math.max(0, Number(state?.slots?.availableBonus || 0))
+        : Math.max(0, Number(state?.slots?.availableBase || 0));
+    if (remainingForType <= 0) return;
+
+    const tapGoal = Math.max(1, Number(state.tapGoal || 4));
+    setTapCount(tapGoal);
+    setTapPulseToken((value) => value + 1);
+    setSpinToken((value) => value + 1);
+    setDisplayState("opening");
+    playAudio(spinAudioRef, isInteractionSoundEnabled(), 0.9);
+
+    try {
+      await new Promise((resolve) => window.setTimeout(resolve, 900));
+      const nextState = await openChest(slotType);
+      setDisplayState(String(nextState?.state || "opened"));
+    } catch (openError) {
+      setDisplayState("available");
+      setTapCount(0);
+      toast({
+        title: "Nao foi possivel abrir",
+        description: openError?.message || "Tente novamente em instantes.",
+      });
+    }
+  }, [displayState, isOpening, openChest, playAudio, state]);
+
+  const handleUnlock = React.useCallback(async (code) => {
+    try {
+      const nextState = await unlockChest(code);
+      setDisplayState(String(nextState?.state || "available"));
+      toast({
+        title: "Bau liberado",
+        description: "O giro diario foi destravado com sucesso.",
+      });
+    } catch (unlockError) {
+      toast({
+        title: "Nao foi possivel liberar",
+        description: unlockError?.message || "Confira o codigo e tente novamente.",
+      });
+      throw unlockError;
+    }
+  }, [unlockChest]);
+
+  const handleClaim = React.useCallback(async () => {
+    try {
+      playAudio(collectAudioRef, isInteractionSoundEnabled(), 0.92);
+      const nextState = await claimChest();
+      setDisplayState(String(nextState?.state || "claimed"));
+      toast({
+        title: "Premio resgatado",
+        description: "O Bau Diario foi concluido com sucesso.",
+      });
+    } catch (claimError) {
+      toast({
+        title: "Falha ao resgatar",
+        description: claimError?.message || "O premio continua salvo. Tente novamente.",
+      });
+    }
+  }, [claimChest, playAudio]);
+
+  if (isLoading) {
+    return <SceneLoader />;
+  }
+
+  if (error || !state) {
+    return (
+      <div className="flex h-[100dvh] max-h-[100dvh] items-center justify-center overflow-hidden bg-slate-950 px-4 text-white">
+        <div className="max-w-sm rounded-[2rem] border border-white/10 bg-slate-950/80 p-6 text-center">
+          <p className="text-lg font-black">Falha ao carregar o Bau Diario</p>
+          <p className="mt-2 text-sm text-slate-400">A experiencia continua salva no backend. Tente novamente.</p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="mt-5 rounded-2xl bg-cyan-400 px-4 py-2 font-bold text-slate-950"
+          >
+            Tentar de novo
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const reward = state.opening?.rewardSnapshot || state.rewardPreview || {};
+  const sceneState =
+    displayState === "claimed" || displayState === "cooldown"
+      ? "claimed"
+      : displayState === "opened"
+      ? "opened"
+      : displayState;
+
+  return (
+    <div className="relative h-[100dvh] max-h-[100dvh] overflow-hidden bg-slate-950 text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_32%),linear-gradient(180deg,#020617_0%,#04111d_48%,#030712_100%)]" />
+      <div className="absolute inset-0 lg:flex lg:items-center lg:justify-center lg:p-6">
+        <div className="h-full w-full lg:h-[min(100dvh-3rem,100vw-3rem)] lg:w-[min(100dvh-3rem,100vw-3rem)] lg:overflow-hidden lg:rounded-[2rem] lg:border lg:border-white/10 lg:bg-slate-950/40 lg:shadow-[0_24px_80px_rgba(2,6,23,0.45)]">
+          <Suspense fallback={<SceneLoader />}>
+            <DailyChestScene
+              stageState={sceneState}
+              viewMode={viewMode}
+              tapProgress={tapCount}
+              tapGoal={Number(state.tapGoal || 4)}
+              rarity={reward.rarity}
+              theme={state.theme?.sceneTheme}
+              tapPulseToken={tapPulseToken}
+              spinToken={spinToken}
+              rewardLabel={formatDailyChestPrize(reward)}
+              rewardDescription={reward?.messageOfDay || reward?.subtitle || state?.messageOfDay || ""}
+              rewardPool={availableRewardPool}
+              slotSummary={state.slots || {}}
+              statusInfo={{
+                title:
+                  displayState === "opening"
+                    ? "Girando o bau"
+                    : displayState === "opened"
+                    ? "Premio liberado"
+                    : displayState === "claimed"
+                    ? "Bau concluido hoje"
+                    : displayState === "cooldown"
+                    ? "Sem giros restantes"
+                    : displayState === "locked"
+                    ? "Bau temporariamente desativado"
+                    : "Bau Diario",
+                body:
+                  displayState === "opening"
+                    ? "O giro ja comecou e o resultado esta sendo liberado."
+                    : displayState === "opened"
+                    ? "Seu resultado ja saiu. Agora e so resgatar."
+                    : displayState === "claimed"
+                    ? `Novo reset em ${state?.resetAt ? new Date(state.resetAt).toLocaleString("pt-BR") : "-"}.`
+                    : displayState === "cooldown"
+                    ? `Seu proximo bau volta em ${state?.resetAt ? new Date(state.resetAt).toLocaleString("pt-BR") : "-"}.`
+                    : displayState === "locked"
+                    ? "A abertura esta travada por enquanto."
+                    : "Gire o bau para revelar a recompensa do dia.",
+              }}
+            />
+          </Suspense>
+        </div>
+      </div>
+
+      <DailyChestOverlay
+        displayState={displayState}
+        state={state}
+        tapCount={tapCount}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        hasRewardsAvailable={availableRewardPool.length > 0}
+        onTap={handleSpin}
+        onUnlock={handleUnlock}
+        onClaim={handleClaim}
+        onBack={() => navigate("/")}
+        onMenuOpenSound={() => playAudio(menuAudioRef, isMenuSoundEnabled(), 0.88)}
+        isClaiming={isClaiming}
+        isOpening={isOpening}
+        isUnlocking={isUnlocking}
+      />
+    </div>
+  );
+}

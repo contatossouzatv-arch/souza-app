@@ -1,0 +1,103 @@
+export const STORE_CATALOG_SECTIONS = Object.freeze([
+  {
+    id: "perk_unlocks",
+    title: "Perks desbloqueaveis",
+    description: "Expande o loadout sem mexer na base do runner.",
+    items: [
+      {
+        id: "unlock_perk_diamond_luck",
+        itemType: "perk_unlock",
+        itemRefId: "diamond_luck",
+        title: "Perk Sorte de diamond",
+        description: "Aumenta a chance de diamantes aparecerem na pista.",
+        price: { currency: "diamonds", amount: 8 },
+      },
+      {
+        id: "unlock_perk_power_up_duration_plus",
+        itemType: "perk_unlock",
+        itemRefId: "power_up_duration_plus",
+        title: "Perk Power-up longo",
+        description: "Estende a duracao dos power-ups coletados na run.",
+        price: { currency: "coins", amount: 980 },
+      },
+    ],
+  },
+  {
+    id: "consumables",
+    title: "Consumiveis de run",
+    description: "Estoque local para futuras runs e ofertas.",
+    items: [
+      {
+        id: "buy_money_multiplier_charge",
+        itemType: "consumable",
+        itemRefId: "money_multiplier_charge",
+        title: "Carga x3",
+        description: "Entrega 1 carga do multiplicador de moedas ao inventario.",
+        price: { currency: "coins", amount: 240 },
+      },
+      {
+        id: "buy_shield_charge",
+        itemType: "consumable",
+        itemRefId: "shield_charge",
+        title: "Carga de escudo",
+        description: "Entrega 1 carga de escudo ao inventario.",
+        price: { currency: "coins", amount: 320 },
+      },
+      {
+        id: "buy_slow_motion_charge",
+        itemType: "consumable",
+        itemRefId: "slow_motion_charge",
+        title: "Carga slow motion",
+        description: "Entrega 1 carga de slow motion ao inventario.",
+        price: { currency: "diamonds", amount: 5 },
+      },
+    ],
+  },
+  {
+    id: "visuals",
+    title: "Visuais placeholder",
+    description: "Base local para skins e personagens desbloqueaveis.",
+    items: [
+      {
+        id: "unlock_skin_sunset",
+        itemType: "wardrobe_item_unlock",
+        itemRefId: "sunset",
+        title: "Skin Sunset Rider",
+        description: "Libera a skin rara quente do loadout.",
+        price: { currency: "coins", amount: 1400 },
+      },
+      {
+        id: "unlock_skin_midnight",
+        itemType: "wardrobe_item_unlock",
+        itemRefId: "midnight",
+        title: "Skin Noite Neon",
+        description: "Libera a skin epica do loadout.",
+        price: { currency: "diamonds", amount: 14 },
+      },
+      {
+        id: "unlock_skin_coral_wave",
+        itemType: "wardrobe_item_unlock",
+        itemRefId: "coral_wave",
+        title: "Skin Coral Wave",
+        description: "Libera a placeholder sazonal para futuras colecoes.",
+        price: { currency: "diamonds", amount: 18 },
+      },
+    ],
+  },
+  {
+    id: "offers",
+    title: "Ofertas simples",
+    description: "Espaco reservado para rotacao futura de pacotes.",
+    items: [
+      {
+        id: "starter_offer_placeholder",
+        itemType: "offer_placeholder",
+        itemRefId: "starter_offer",
+        title: "Oferta do dia",
+        description: "Placeholder de pacote rotativo para futura integracao.",
+        price: { currency: "coins", amount: 0 },
+        available: false,
+      },
+    ],
+  },
+]);
