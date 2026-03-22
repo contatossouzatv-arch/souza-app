@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+﻿import React from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -12,9 +12,10 @@ import { Card } from "@/components/ui/card";
 import { Sparkles, Trophy, Gamepad2 } from "lucide-react";
 import LegalLinksBar from "@/components/LegalLinksBar";
 import PrizeGalleryCard from "@/components/profile/PrizeGalleryCard";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function Dashboard() {
-  const [user, setUser] = useState(null);
+  const { user, isLoadingAuth } = useAuth();
 
   const { data: promoBoxes = [], isLoading: promoBoxesLoading } = useQuery({
     queryKey: ["promoBoxes"],
@@ -43,20 +44,6 @@ export default function Dashboard() {
     enabled: !!user,
     staleTime: 30000,
   });
-
-  useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const currentUser = await base44.auth.me();
-      setUser(currentUser);
-    } catch (error) {
-      console.error("Error loading user:", error);
-    }
-  };
-
   const containerVariants = {
     hidden: { opacity: 0 },
     show: {
@@ -72,7 +59,7 @@ export default function Dashboard() {
     show: { opacity: 1, y: 0 },
   };
 
-  const isLoading = !user || promoBoxesLoading || instantLoading || liveLoading || gameCallLoading;
+  const isLoading = isLoadingAuth || !user || promoBoxesLoading || instantLoading || liveLoading || gameCallLoading;
 
   if (isLoading) {
     return <TechLoader />;

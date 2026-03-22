@@ -42,7 +42,7 @@ function warmAudio(rawUrl) {
 }
 
 export function warmAppShell() {
-  return Promise.allSettled([
+  Promise.allSettled([
     warmModule("layout", () => import("../Layout.jsx")),
     warmModule("dashboard", () => import("../pages/Dashboard")),
     warmModule("home", () => import("../pages/Home")),
@@ -56,5 +56,6 @@ export function warmAppShell() {
     ...(FEATURE_FLAGS.GAME_MAIN_ENABLED
       ? [import("@/lib/mainGameWarmup").then(({ warmMainGameAppShell }) => warmMainGameAppShell())]
       : []),
-  ]);
+  ]).catch(() => {});
+  return Promise.resolve();
 }

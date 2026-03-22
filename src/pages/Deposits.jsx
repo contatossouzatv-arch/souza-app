@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+﻿import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { base44, resolveAssetUrl } from "@/api/base44Client";
@@ -16,6 +16,7 @@ import { ChevronDown, Trophy } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import bannerSorteio from "../../assets-para-app/banner sorteio.png";
 import LegalLinksBar from "@/components/LegalLinksBar";
+import { useAuth } from "@/lib/AuthContext";
 
 const avatarModules = import.meta.glob("../../assets-para-app/avatar/*.png", {
   eager: true,
@@ -36,7 +37,7 @@ const DEFAULT_AVATAR_ID =
 
 export default function Deposits() {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
+  const { user, isLoadingAuth } = useAuth();
   const [historyPopup, setHistoryPopup] = useState(null);
   const [expandedHistoryCycle, setExpandedHistoryCycle] = useState(null);
 
@@ -91,20 +92,6 @@ export default function Deposits() {
     enabled: !!user,
     staleTime: 60000,
   });
-
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const currentUser = await base44.auth.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Error loading user:", error);
-      }
-    };
-
-    loadUser();
-  }, []);
-
   const activeCycle = cycles.find((c) => c.active);
 
   const cycleApprovedDeposits = deposits.filter(
@@ -145,7 +132,7 @@ export default function Deposits() {
   const depositantDrawEndDate = activeCycle?.draw_date || getSettingValue("depositant_draw_end_date");
 
   const isLoading =
-    !user || depositsLoading || allDepositsLoading || settingsLoading || usersLoading || drawWinnersLoading;
+    isLoadingAuth || !user || depositsLoading || allDepositsLoading || settingsLoading || usersLoading || drawWinnersLoading;
 
   if (isLoading) {
     return <TechLoader />;

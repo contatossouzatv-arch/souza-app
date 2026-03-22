@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { AnimatePresence, motion } from "framer-motion";
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ArrowLeft, Award, CalendarDays, CheckCircle2, Eye, Heart, HelpCircle, ImageUp, Loader2, Lock, Pencil, Sparkles, Star, Trophy, UserPlus, Wallet, XCircle } from "lucide-react";
 import TechLoader from "@/components/TechLoader";
 import { useToast } from "@/components/ui/use-toast";
+import { useAuth } from "@/lib/AuthContext";
 import { createPageUrl } from "@/utils";
 import {
   isHandleAvailable,
@@ -58,7 +59,7 @@ import top1BorderAnimated from "../../assets-para-app/top-1-borda animada.webm";
 import top2BorderAnimated from "../../assets-para-app/top-2-borda animada.webm";
 import top3BorderAnimated from "../../assets-para-app/top-3-borda animada.webm";
 import LegalLinksBar from "@/components/LegalLinksBar";
-import PrizeGalleryCard from "@/components/profile/PrizeGalleryCard";
+const PrizeGalleryCard = lazy(() => import("@/components/profile/PrizeGalleryCard"));
 
 const avatarModules = import.meta.glob("../../assets-para-app/avatar/*.png", {
   eager: true,
@@ -247,15 +248,15 @@ function getBadgeCelebrationText(achievement) {
     normalizedLabel.includes("10 premios");
 
   if (isTickets500Badge) {
-    return "Você acumulou 500 bilhetes nos depósitos! Continue no ritmo para dominar o ranking.";
+    return "Voc� acumulou 500 bilhetes nos dep�sitos! Continue no ritmo para dominar o ranking.";
   }
 
   if (isFollowers50Badge) {
-    return "Você atingiu 50 seguidores no perfil! Sua presença na comunidade está crescendo forte.";
+    return "Voc� atingiu 50 seguidores no perfil! Sua presen�a na comunidade est� crescendo forte.";
   }
 
   if (isWinner10Badge) {
-    return "Lendário! Você já ganhou 10 prêmios com o Souza e entrou no hall dos campeões.";
+    return "Lend�rio! Voc� j� ganhou 10 pr�mios com o Souza e entrou no hall dos campe�es.";
   }
 
   return achievement.ruleText || "Continue jogando para liberar mais conquistas.";
@@ -697,6 +698,7 @@ export default function Profile() {
     moved: false,
   });
   const { toast } = useToast();
+  const { user: authUser, isLoadingAuth } = useAuth();
   const [user, setUser] = useState(null);
   const [privatePhotoPreview, setPrivatePhotoPreview] = useState("");
   const [isPrivatePhotoLoading, setIsPrivatePhotoLoading] = useState(false);
@@ -798,45 +800,7 @@ export default function Profile() {
     return normalizeEngagementGuideConfig(parseJsonSetting(rawValue, DEFAULT_PROFILE_ENGAGEMENT_GUIDE_CONFIG));
   }, [achievementRulesSettings]);
 
-  const simulatedBaseProfiles = useMemo(() => {
-    const names = [
-      { nick: "Luna Souza", handle: "luna.souza" },
-      { nick: "Rick Premios", handle: "rick.premios" },
-      { nick: "Nina Dinamica", handle: "nina.dinamica" },
-      { nick: "Caio Bilhetes", handle: "caio.bilhetes" },
-      { nick: "Bia Top10", handle: "bia.top10" },
-      { nick: "Joao Sorte", handle: "joao.sorte" },
-      { nick: "Maya Turbo", handle: "maya.turbo" },
-      { nick: "Leo Foguete", handle: "leo.foguete" },
-      { nick: "Gabi Flash", handle: "gabi.flash" },
-      { nick: "Rafa XP", handle: "rafa.xp" },
-    ];
-
-    return names.map((item, index) => {
-      const avatar = avatarOptions[(index + 2) % avatarOptions.length];
-      return {
-        id: `sim-${index + 1}`,
-        nick: item.nick,
-        handle: item.handle,
-        avatarSrc: avatar?.src,
-        activeDays: 45 + index * 16,
-        activityCount: 120 + index * 38,
-        depositedAmount: 380 + index * 240,
-        daysSinceJoin: 14 + index * 22,
-        points: 0,
-        tickets: 0,
-        participations: 8 + index * 4,
-        position: index + 2,
-        badges: 2 + (index % 4),
-        totalApproved: 280 + index * 110,
-        totalWins: 1 + (index % 3),
-        liveParticipations: 4 + index * 2,
-        following: 35 + index * 7,
-        followers: 85 + index * 21,
-        likes: 120 + index * 17,
-      };
-    });
-  }, []);
+  const simulatedBaseProfiles = useMemo(() => [], []);
   const simulatedProfiles = useMemo(() => {
     const weights = engagementGuideConfig.ranking_weights || DEFAULT_PROFILE_ENGAGEMENT_GUIDE_CONFIG.ranking_weights;
     return simulatedBaseProfiles
@@ -884,16 +848,8 @@ export default function Profile() {
   }, [simulatedProfiles]);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const currentUser = await base44.auth.me();
-        setUser(currentUser);
-      } catch (error) {
-        console.error("Error loading user:", error);
-      }
-    };
-    load();
-  }, []);
+    if (authUser && authUser !== user) setUser(authUser);
+  }, [authUser, user]);
 
   useEffect(() => {
     let revokedUrl = "";
@@ -1074,7 +1030,7 @@ export default function Profile() {
       toast({
         variant: "destructive",
         title: "Falha ao cancelar",
-        description: error?.message || "Não foi possível cancelar o envio.",
+        description: error?.message || "N�o foi poss�vel cancelar o envio.",
       });
     },
   });
@@ -1152,9 +1108,9 @@ export default function Profile() {
   const activeCycle = competitionBoard?.cycle || null;
 
   const isLoading =
+    isLoadingAuth ||
     !user ||
-    loadingProfileGamification ||
-    loadingPrizeGallery;
+    loadingProfileGamification;
 
   const metrics = useMemo(
     () =>
@@ -1520,7 +1476,7 @@ export default function Profile() {
     const candidates = simulatedProfiles.filter((profile) => {
       if (selectedId && profile.id === selectedId) return false;
       const state = simState[profile.id];
-      // Para rotacionar recomendações, removemos perfis já "concluídos" (seguindo + curtido).
+      // Para rotacionar recomenda��es, removemos perfis j� "conclu�dos" (seguindo + curtido).
       return !(state?.isFollowing && state?.isLiked);
     });
 
@@ -1888,16 +1844,16 @@ export default function Profile() {
     onSuccess: (response) => {
       syncGamificationViews();
       toast({
-        title: response?.alreadyCheckedIn ? "Check-in já registrado" : "Check-in diário confirmado",
+        title: response?.alreadyCheckedIn ? "Check-in j� registrado" : "Check-in di�rio confirmado",
         description: response?.alreadyCheckedIn
-          ? "Você já fez check-in hoje. O backend manteve o estado correto."
-          : "Seu check-in foi registrado e já alimenta a gamificação authoritative.",
+          ? "Voc� j� fez check-in hoje. O backend manteve o estado correto."
+          : "Seu check-in foi registrado e j� alimenta a gamifica��o authoritative.",
       });
     },
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "Falha no check-in diário",
+        title: "Falha no check-in di�rio",
         description: error?.message || "Tente novamente.",
       });
       },
@@ -1917,15 +1873,15 @@ export default function Profile() {
 
   const updateFollow = () => {
     toast({
-      title: "Ação disponível em perfis públicos",
-      description: "Use seguir em um perfil público real para registrar a ação no backend.",
+      title: "A��o dispon�vel em perfis p�blicos",
+      description: "Use seguir em um perfil p�blico real para registrar a a��o no backend.",
     });
   };
 
   const likeProfile = () => {
     toast({
-      title: "Ação disponível em perfis públicos",
-      description: "Use curtir em um perfil público real para registrar a ação no backend.",
+      title: "A��o dispon�vel em perfis p�blicos",
+      description: "Use curtir em um perfil p�blico real para registrar a a��o no backend.",
     });
   };
 
@@ -2262,14 +2218,14 @@ export default function Profile() {
       setIsEditOpen(false);
       toast({
         title: "Perfil atualizado",
-        description: "As alterações foram salvas com sucesso.",
+        description: "As altera��es foram salvas com sucesso.",
       });
     } catch (error) {
       console.error("Error updating quick profile:", error);
       toast({
         variant: "destructive",
         title: "Falha ao salvar",
-        description: "Não foi possível atualizar o perfil agora.",
+        description: "N�o foi poss�vel atualizar o perfil agora.",
       });
     }
   };
@@ -2679,7 +2635,7 @@ export default function Profile() {
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-300">Modo Semanal</p>
               <h3 className="text-lg font-black uppercase tracking-wide text-white">
-                {isCompetitionFinishedPreview ? competitionBoard.config.finished_title : competitionBoard.config.title || "COMPETIÇÃO SEMANAL"}
+                {isCompetitionFinishedPreview ? competitionBoard.config.finished_title : competitionBoard.config.title || "COMPETI��O SEMANAL"}
               </h3>
               <p className="text-xs text-slate-300">
                 {isCompetitionFinishedPreview ? competitionBoard.config.finished_subtitle : competitionBoard.config.subtitle}
@@ -2724,7 +2680,7 @@ export default function Profile() {
               <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/10 p-3 text-center">
                 <p className="text-xs font-black uppercase tracking-wide text-emerald-200">Top {winnersCount} Ganhadores do ciclo</p>
                 <p className="mt-1 text-[11px] text-emerald-100">
-                  Premiação configurada no admin. Valor base atual: R${prizePerWinner.toFixed(2)}. Novo ciclo comeca em breve.
+                  Premia��o configurada no admin. Valor base atual: R${prizePerWinner.toFixed(2)}. Novo ciclo comeca em breve.
                 </p>
               </div>
               <div
@@ -3107,7 +3063,7 @@ export default function Profile() {
             </div>
             <div className="mt-4">
               <div className="mb-1 flex items-center justify-between text-xs">
-                <span className="text-slate-400">Super Fã das Lives do SouzaTV</span>
+                <span className="text-slate-400">Super F� das Lives do SouzaTV</span>
                 <span className="text-cyan-300">{publicSuperFanProgress}%</span>
               </div>
               <div className="h-2 w-full rounded-full bg-slate-800">
@@ -3171,7 +3127,7 @@ export default function Profile() {
                   <div className="mb-1 flex items-center justify-between text-xs">
                     <p className="font-semibold text-cyan-200">{badge.title}</p>
                     <p className="text-slate-300">
-                      Nível {badge.level}
+                      N�vel {badge.level}
                     </p>
                   </div>
                   <p className="mb-2 text-[11px] text-slate-400">{badge.subtitle}</p>
@@ -3182,22 +3138,24 @@ export default function Profile() {
                     />
                   </div>
                   <p className={`mt-1 text-[11px] ${badge.completed ? "text-emerald-300" : "text-slate-400"}`}>
-                    {badge.current}/{badge.target} para o Nível {badge.nextLevel} ({badge.progress}%)
+                    {badge.current}/{badge.target} para o N�vel {badge.nextLevel} ({badge.progress}%)
                   </p>
                 </div>
               ))}
             </div>
           </Card>
 
-          <PrizeGalleryCard
-            userId={selectedPublicProfile?.id}
-            title="Galeria de Prêmios"
-            subtitle="Modo público: outras pessoas conseguem ver os prêmios já registrados neste perfil."
-            emptyTitle="Este perfil ainda não exibiu prêmios na galeria"
-            emptySubtitle="Quando esse usuário ganhar e resgatar recompensas, elas vão aparecer aqui em formato de coleção."
-            countLabel="registrados"
-            privateView={false}
-          />
+          <Suspense fallback={null}>
+            <PrizeGalleryCard
+              userId={selectedPublicProfile?.id}
+              title="Galeria de Pr�mios"
+              subtitle="Modo p�blico: outras pessoas conseguem ver os pr�mios j� registrados neste perfil."
+              emptyTitle="Este perfil ainda n�o exibiu pr�mios na galeria"
+              emptySubtitle="Quando esse usu�rio ganhar e resgatar recompensas, elas v�o aparecer aqui em formato de cole��o."
+              countLabel="registrados"
+              privateView={false}
+            />
+          </Suspense>
 
           <Card className="border-slate-800 bg-slate-900/70 p-4">
             <div className="mb-3 flex items-center justify-between">
@@ -3318,7 +3276,7 @@ export default function Profile() {
               })}
               {!otherProfiles.length ? (
                 <div className="w-full rounded-2xl border border-dashed border-slate-700 bg-slate-950/70 p-4 text-center text-sm text-slate-300">
-                  Sem novas recomendações por agora. Volte depois para descobrir novos perfis.
+                  Sem novas recomenda��es por agora. Volte depois para descobrir novos perfis.
                 </div>
               ) : null}
             </div>
@@ -3388,7 +3346,7 @@ export default function Profile() {
           </>
         ) : (
           <Card className="border-slate-800 bg-slate-900/70 p-6 text-center text-slate-200">
-            Perfil não encontrado.
+            Perfil n�o encontrado.
           </Card>
         )}
       {profileSwitchLoaderOverlay}
@@ -3433,11 +3391,11 @@ export default function Profile() {
           </button>
 
           <div className="mt-3 min-w-0">
-            <h1 className="truncate text-xl font-bold text-white">{user.nick || user.full_name || "Usuário"}</h1>
+            <h1 className="truncate text-xl font-bold text-white">{user.nick || user.full_name || "Usu�rio"}</h1>
             <p className="text-sm font-medium text-cyan-300">@{profilePrefs.handle || "usuario"}</p>
             {profilePrefs.alias ? <p className="text-xs text-slate-300">{profilePrefs.alias}</p> : null}
             {(user.profile_image_status === "manual_review" || user.profile_image_status === "pending") && (
-              <p className="text-[11px] text-cyan-300">Sua foto está em análise e visível apenas para você.</p>
+              <p className="text-[11px] text-cyan-300">Sua foto est� em an�lise e vis�vel apenas para voc�.</p>
             )}
           </div>
 
@@ -3447,10 +3405,10 @@ export default function Profile() {
             type="button"
             onClick={openQuickEditModal}
             className="mt-2 inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800/80 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-cyan-400/60 hover:text-cyan-200"
-            aria-label="Editar perfil rápido"
+            aria-label="Editar perfil r�pido"
           >
             <Pencil className="h-3.5 w-3.5" />
-            Editar rápido
+            Editar r�pido
           </button>
 
           <div className="mt-3 w-full rounded-2xl border border-slate-700/80 bg-slate-900/80 p-1">
@@ -3697,7 +3655,7 @@ export default function Profile() {
 
         <div className="mt-4">
           <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="text-slate-400">Super Fã das Lives do SouzaTV</span>
+            <span className="text-slate-400">Super F� das Lives do SouzaTV</span>
             <span className="text-cyan-300">{superFanProgress}%</span>
           </div>
           <div className="h-2 w-full rounded-full bg-slate-800">
@@ -3761,7 +3719,7 @@ export default function Profile() {
               <div className="mb-1 flex items-center justify-between text-xs">
                 <p className="font-semibold text-cyan-200">{badge.title}</p>
                 <p className="text-slate-300">
-                  Nível {badge.level}
+                  N�vel {badge.level}
                 </p>
               </div>
               <p className="mb-2 text-[11px] text-slate-400">{badge.subtitle}</p>
@@ -3772,28 +3730,30 @@ export default function Profile() {
                 />
               </div>
               <p className={`mt-1 text-[11px] ${badge.completed ? "text-emerald-300" : "text-slate-400"}`}>
-                {badge.current}/{badge.target} para o Nível {badge.nextLevel} ({badge.progress}%)
+                {badge.current}/{badge.target} para o N�vel {badge.nextLevel} ({badge.progress}%)
               </p>
             </div>
           ))}
         </div>
       </Card>
 
-      <PrizeGalleryCard
-        userId={user?.id}
-        title="Seus Prêmios"
-        subtitle="Esta é a sua galeria privada. Aqui você acompanha tudo o que já ganhou no app em formato de coleção."
-        emptyTitle="Você ainda não tem prêmios salvos na sua galeria"
-        emptySubtitle="Os prêmios resgatados no Baú Diário e nas próximas experiências vão aparecer aqui automaticamente."
-        countLabel="na coleção"
-        privateView={true}
-      />
+      <Suspense fallback={null}>
+        <PrizeGalleryCard
+          userId={user?.id}
+          title="Seus Pr�mios"
+          subtitle="Esta � a sua galeria privada. Aqui voc� acompanha tudo o que j� ganhou no app em formato de cole��o."
+          emptyTitle="Voc� ainda n�o tem pr�mios salvos na sua galeria"
+          emptySubtitle="Os pr�mios resgatados no Ba� Di�rio e nas pr�ximas experi�ncias v�o aparecer aqui automaticamente."
+          countLabel="na cole��o"
+          privateView={true}
+        />
+      </Suspense>
 
       <Dialog open={isPointsHistoryOpen} onOpenChange={setIsPointsHistoryOpen}>
         <DialogContent className="border-cyan-500/30 bg-slate-950 text-white shadow-[0_0_45px_rgba(34,211,238,0.15)]">
           <DialogHeader>
             <DialogTitle className="text-center text-base font-black uppercase tracking-wide text-cyan-100">
-              Histórico de Pontos
+              Hist�rico de Pontos
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -3818,7 +3778,7 @@ export default function Profile() {
                     : "text-slate-300 hover:bg-slate-800"
                 }`}
               >
-                Nível do perfil
+                N�vel do perfil
               </button>
             </div>
 
@@ -3836,13 +3796,13 @@ export default function Profile() {
             <div className="rounded-2xl border border-slate-800 bg-slate-900/75 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">
                 {pointsHistoryTab === "weekly"
-                  ? "Tudo o que já contou para o Top Semanal"
-                  : "Tudo o que já fortaleceu o nível do seu perfil"}
+                  ? "Tudo o que j� contou para o Top Semanal"
+                  : "Tudo o que j� fortaleceu o n�vel do seu perfil"}
               </p>
               <div className="hide-scrollbar mt-3 max-h-[48dvh] space-y-2 overflow-y-auto pr-1">
                 {activePointsHistory.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/70 px-4 py-5 text-center text-sm text-slate-400">
-                    Ainda não existem pontos registrados nessa aba.
+                    Ainda n�o existem pontos registrados nessa aba.
                   </div>
                 ) : (
                   activePointsHistory.map((entry) => (
@@ -3853,11 +3813,11 @@ export default function Profile() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-bold text-white">
-                            {entry.total.toLocaleString("pt-BR")} pontos por {entry.label.toLowerCase()} até o momento
+                            {entry.total.toLocaleString("pt-BR")} pontos por {entry.label.toLowerCase()} at� o momento
                           </p>
                           <p className="mt-1 text-[11px] text-slate-400">
                             {entry.entries} registro{entry.entries === 1 ? "" : "s"}
-                            {entry.latestAt ? ` • último em ${formatHistoryTimestamp(entry.latestAt)}` : ""}
+                            {entry.latestAt ? ` � �ltimo em ${formatHistoryTimestamp(entry.latestAt)}` : ""}
                           </p>
                         </div>
                         <div className="rounded-xl bg-cyan-500/15 px-2 py-1 text-xs font-black text-cyan-200">
@@ -3877,7 +3837,7 @@ export default function Profile() {
         <DialogContent className="w-[calc(100vw-1rem)] max-w-lg overflow-hidden border-emerald-500/30 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),rgba(2,6,23,0.96)_45%)] px-3 py-5 text-white shadow-[0_0_45px_rgba(16,185,129,0.18)] sm:px-5">
           <DialogHeader>
             <DialogTitle className="text-center text-base font-black uppercase tracking-[0.2em] text-emerald-100">
-              Check-in diário
+              Check-in di�rio
             </DialogTitle>
           </DialogHeader>
           <div className="min-w-0 space-y-4">
@@ -3886,17 +3846,17 @@ export default function Profile() {
                 Boas-vindas do dia
               </p>
               <p className="mt-2 text-base font-black text-white sm:text-lg">
-                {dailyCheckInState?.checkedIn ? "Coleta diária concluída" : "Colete seu ponto do dia"}
+                {dailyCheckInState?.checkedIn ? "Coleta di�ria conclu�da" : "Colete seu ponto do dia"}
               </p>
               <p className="mt-2 text-xs text-slate-300 sm:text-sm">
-                Cada coleta válida fortalece sua disputa no Top Semanal conforme a regra configurada no admin.
+                Cada coleta v�lida fortalece sua disputa no Top Semanal conforme a regra configurada no admin.
               </p>
             </div>
 
             <div className="space-y-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-200/80">
-                  Progressão de 7 dias
+                  Progress�o de 7 dias
                 </p>
                 <div
                   ref={checkInCarouselRef}
@@ -3986,10 +3946,10 @@ export default function Profile() {
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-200">Estado de hoje</p>
                 <p className="mt-1 text-sm font-black text-white">
                   {dailyCheckInState?.checkedIn
-                    ? "Já coletado"
+                    ? "J� coletado"
                     : dailyCheckInMutation.isPending
                     ? "Coletando..."
-                    : "Disponível para coleta"}
+                    : "Dispon�vel para coleta"}
                 </p>
                 {todayCheckInEntry?.checkedAt ? (
                   <p className="mt-1 text-[11px] text-emerald-100/80">
@@ -4001,7 +3961,7 @@ export default function Profile() {
 
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-slate-400">
-                Toque no quadrado de hoje para coletar e confirmar sua presença.
+                Toque no quadrado de hoje para coletar e confirmar sua presen�a.
               </p>
               <Button
                 type="button"
@@ -4055,7 +4015,7 @@ export default function Profile() {
           <div className="mx-auto flex w-[min(92vw,420px)] flex-col items-center justify-center px-3 py-2 text-center">
             <DialogHeader>
               <DialogTitle className="text-center text-base font-black uppercase tracking-wide text-amber-100 drop-shadow-[0_0_14px_rgba(251,191,36,0.55)] sm:text-lg">
-                PARABÉNS! VOCÊ CONQUISTOU
+                PARAB�NS! VOC� CONQUISTOU
               </DialogTitle>
             </DialogHeader>
             <p className="mt-1 text-center text-sm font-black uppercase tracking-wide text-cyan-100 sm:text-base">
@@ -4179,15 +4139,15 @@ export default function Profile() {
         <DialogContent className="border-slate-700 bg-slate-950 text-white">
           <DialogHeader>
             <DialogTitle className="text-center text-base font-bold text-white">
-              {socialListType === "following" ? "Pessoas que você segue" : "Seguidores"}
+              {socialListType === "following" ? "Pessoas que voc� segue" : "Seguidores"}
             </DialogTitle>
           </DialogHeader>
           <div className="hide-scrollbar max-h-[62vh] space-y-2 overflow-y-auto pr-1">
             {socialListProfiles.length === 0 ? (
               <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-center text-sm text-slate-300">
                 {socialListType === "following"
-                  ? "Você ainda não segue ninguém."
-                  : "Ainda não há seguidores para mostrar."}
+                  ? "Voc� ainda n�o segue ningu�m."
+                  : "Ainda n�o h� seguidores para mostrar."}
               </div>
             ) : (
               socialListProfiles.map((profile) => (
@@ -4226,7 +4186,7 @@ export default function Profile() {
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="flex max-h-[88dvh] w-[calc(100vw-1.5rem)] max-w-lg flex-col overflow-hidden border-slate-700 bg-slate-950 text-white">
           <DialogHeader>
-            <DialogTitle className="text-center text-base font-bold text-white">Editar perfil rápido</DialogTitle>
+            <DialogTitle className="text-center text-base font-bold text-white">Editar perfil r�pido</DialogTitle>
           </DialogHeader>
           <div className="hide-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
             <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
@@ -4341,7 +4301,7 @@ export default function Profile() {
                         if (!isSupportedType) {
                           toast({
                             variant: "destructive",
-                            title: "Formato não suportado",
+                            title: "Formato n�o suportado",
                             description: "Use uma imagem JPG, PNG, WEBP ou GIF.",
                           });
                           event.target.value = "";
@@ -4365,12 +4325,12 @@ export default function Profile() {
                       <div className="relative h-24 w-24 overflow-hidden rounded-full border-2 border-cyan-400/60 bg-slate-800">
                         <img
                           src={selectedEditPhotoPreview}
-                          alt="Prévia da nova foto"
+                          alt="Pr�via da nova foto"
                           className="h-full w-full object-cover"
                           style={getProfileCropPreviewStyle(selectedEditPhotoZoom, selectedEditPhotoOffsetY)}
                         />
                       </div>
-                      <p className="text-[11px] text-cyan-200">Prévia final do perfil</p>
+                      <p className="text-[11px] text-cyan-200">Pr�via final do perfil</p>
                     </div>
                   ) : null}
 
@@ -4389,7 +4349,7 @@ export default function Profile() {
                         />
                       </div>
                       <div>
-                        <Label className="mb-1 block text-[11px] text-slate-300">Posição vertical</Label>
+                        <Label className="mb-1 block text-[11px] text-slate-300">Posi��o vertical</Label>
                         <input
                           type="range"
                           min="-140"
@@ -4418,7 +4378,7 @@ export default function Profile() {
                       } catch (error) {
                         toast({
                           variant: "destructive",
-                          title: "Falha na preparação",
+                          title: "Falha na prepara��o",
                           description: error?.message || "Falha ao preparar a foto.",
                         });
                       } finally {
@@ -4498,17 +4458,17 @@ export default function Profile() {
             </div>
 
             <div>
-              <Label className="mb-1 block text-slate-300">Nick público</Label>
+              <Label className="mb-1 block text-slate-300">Nick p�blico</Label>
               <Input
                 value={editData.nick}
                 onChange={(e) => setEditData((prev) => ({ ...prev, nick: e.target.value }))}
-                placeholder="Seu nome público"
+                placeholder="Seu nome p�blico"
                 className="border-slate-700 bg-slate-900 text-white"
               />
             </div>
 
             <div>
-              <Label className="mb-1 block text-slate-300">@ usuário</Label>
+              <Label className="mb-1 block text-slate-300">@ usu�rio</Label>
               <Input
                 value={editData.handle}
                 onChange={(e) => setEditData((prev) => ({ ...prev, handle: e.target.value }))}
@@ -4529,6 +4489,9 @@ export default function Profile() {
     </motion.div>
   );
 }
+
+
+
 
 
 

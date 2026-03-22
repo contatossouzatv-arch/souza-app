@@ -84,7 +84,7 @@ const AuthenticatedApp = () => {
     });
     const timerId = window.setTimeout(() => {
       if (!cancelled) setHasBootMinDurationElapsed(true);
-    }, 900);
+    }, 120);
     return () => {
       cancelled = true;
       window.clearTimeout(timerId);
