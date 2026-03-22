@@ -142,6 +142,10 @@ function getRewardTypeMeta(value) {
   return REWARD_TYPE_OPTIONS.find((entry) => entry.value === value) || REWARD_TYPE_OPTIONS[0];
 }
 
+function getRarityLabel(value) {
+  return RARITY_OPTIONS.find((entry) => entry.value === value)?.label || "Raro";
+}
+
 function formatNumber(value) {
   return new Intl.NumberFormat("pt-BR").format(Number(value || 0));
 }
@@ -764,12 +768,12 @@ export default function DailyChestTab() {
                       <p className="font-semibold text-white">{entry.user_label}</p>
                       <p className="mt-1 text-sm text-slate-200">
                         {entry.title}
-                        {entry.reward_amount ? ` â€¢ ${entry.reward_amount} ${entry.reward_unit || ""}` : ""}
+                        {entry.reward_amount ? ` • ${entry.reward_amount} ${entry.reward_unit || ""}` : ""}
                       </p>
                       {entry.subtitle ? <p className="mt-1 text-xs text-slate-400">{entry.subtitle}</p> : null}
                     </div>
                     <div className="text-right text-xs text-slate-300">
-                      <p className="font-semibold text-white">{entry.rarity || "rare"}</p>
+                      <p className="font-semibold text-white">{getRarityLabel(entry.rarity)}</p>
                       <p className="mt-1">{formatDateTimeLabel(entry.claimed_at)}</p>
                     </div>
                   </div>
@@ -1441,10 +1445,10 @@ export default function DailyChestTab() {
                 </div>
                 <div className="mt-3 grid gap-2 text-sm text-slate-400">
                   <p>
-                    {entry.reward_amount} {entry.reward_unit || typeMeta.unitPlaceholder} â€¢ {entry.rarity || "rare"}
+                    {entry.reward_amount} {entry.reward_unit || typeMeta.unitPlaceholder} • {getRarityLabel(entry.rarity)}
                   </p>
                   <p>
-                    Hoje: {usage?.claimed_count ?? 0}/{entry.daily_cap || "ilimitado"} â€¢ Estoque: {entry.claimed_count ?? 0}/{entry.stock_total || "ilimitado"}
+                    Hoje: {usage?.claimed_count ?? 0}/{entry.daily_cap || "ilimitado"} • Estoque: {entry.claimed_count ?? 0}/{entry.stock_total || "ilimitado"}
                   </p>
                   <p>
                     Peso {entry.weight} • {entry.active ? "ativo" : "inativo"} • {entry.auto_apply ? "entrega automática" : "entrega manual"}

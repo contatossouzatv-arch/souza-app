@@ -1558,13 +1558,14 @@ export async function createDailyChestDepositTicketGrant({
       `SELECT *
          FROM entity_records
         WHERE entity_name = 'DepositantDrawCycle'
-          AND COALESCE(data->>'active', 'false') = 'true'
-        ORDER BY created_at DESC
+        ORDER BY
+          CASE WHEN COALESCE(data->>'active', 'false') = 'true' THEN 0 ELSE 1 END,
+          created_at DESC
         LIMIT 1
         FOR UPDATE`
     );
     if (!cycleLocked.rows[0]) {
-      const error = new Error("Nao ha ciclo ativo do sorteio dos depositantes para gerar bilhetes.");
+      const error = new Error("Não há nenhum ciclo do sorteio dos depositantes para gerar bilhetes.");
       error.status = 409;
       throw error;
     }
