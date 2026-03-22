@@ -185,8 +185,12 @@ export default function RealtimeSync() {
             "social-bar-settings",
             "social-settings",
             "inicio-users",
+            "inicio-recent-profiles",
+            "profiles-gallery",
             "current-user",
             "profile-all-deposits",
+            "social-following-list",
+            "social-follower-list",
           ]);
         }
 

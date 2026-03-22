@@ -84,6 +84,16 @@ function sanitizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
+function emitEntityChanged(req, entityName, entityId, action = "updated") {
+  req.app?.locals?.io?.emit("entity:changed", {
+    entity: entityName,
+    entityName,
+    entityId,
+    action,
+    emittedAt: new Date().toISOString(),
+  });
+}
+
 function validatePasswordStrength(password) {
   const value = String(password || "");
   if (value.length < 8) return false;
@@ -329,6 +339,7 @@ router.post("/register", loginRateLimiter, async (req, res) => {
 
   const session = await issueSession(req, user);
   await auditEvent(req, "USER_REGISTERED", user.id, { method: "password" });
+  emitEntityChanged(req, "user", user.id, "created");
   return res.status(201).json(session);
 });
 
@@ -478,6 +489,7 @@ router.post("/google", loginRateLimiter, async (req, res) => {
     });
     const session = await issueSession(req, activeUser);
     await auditEvent(req, "USER_LOGGED_IN", activeUser.id, { method: "google" });
+    emitEntityChanged(req, "user", activeUser.id, "updated");
     return res.json(session);
   } catch (_error) {
     return res.status(401).json({ error: "Falha na autenticação Google" });
@@ -866,6 +878,7 @@ router.post(
     }
 
     const updated = await updateUserById(req.auth.sub, updatePayload);
+    emitEntityChanged(req, "user", req.auth.sub, "updated");
     return res.status(201).json({
       ok: true,
       moderation: {
@@ -900,6 +913,7 @@ router.delete("/me/profile-image/pending", requireAuth, async (req, res) => {
     profile_image_uploaded_at: null,
   });
 
+  emitEntityChanged(req, "user", req.auth.sub, "updated");
   return res.json({ ok: true, user: updated });
 });
 
@@ -1061,6 +1075,7 @@ router.post("/admin/profile-images/:userId/approve", requireAuth, requireAdmin, 
     profile_image_mode: "photo",
   });
 
+  emitEntityChanged(req, "user", user.id, "updated");
   return res.json({ ok: true, user: updated });
 });
 
@@ -1087,6 +1102,7 @@ router.post("/admin/profile-images/:userId/reject", requireAuth, requireAdmin, a
     profile_image_reject_reason: reason,
   });
 
+  emitEntityChanged(req, "user", user.id, "updated");
   return res.json({ ok: true, user: updated });
 });
 
@@ -1177,6 +1193,7 @@ router.patch("/me", requireAuth, async (req, res) => {
 
   const updated = await updateUserById(req.auth.sub, update);
   if (!updated) return res.status(404).json({ error: "User not found" });
+  emitEntityChanged(req, "user", req.auth.sub, "updated");
   return res.json(updated);
 });
 

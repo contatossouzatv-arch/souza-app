@@ -84,12 +84,12 @@ export default function DailyChestOverlay({
   const resetLabel = state?.resetAt ? formatCountdownLabel(state.resetAt) : "-";
   const canSpinBase =
     viewMode === "main" &&
-    displayState === "available" &&
+    displayState !== "opening" &&
     Math.max(0, Number(slotSummary.availableBase || 0)) > 0 &&
     !isOpening;
   const canSpinBonus =
     viewMode === "main" &&
-    displayState === "available" &&
+    displayState !== "opening" &&
     Math.max(0, Number(slotSummary.availableBonus || 0)) > 0 &&
     !isOpening;
   const showClaim = viewMode === "main" && displayState === "opened";
@@ -114,7 +114,7 @@ export default function DailyChestOverlay({
       : shouldShowUnlockPanel
       ? "LIBERE O BAU DIARIO"
       : Math.max(0, Number(slotSummary.remaining || 0)) > 0
-      ? "GIROS DISPONIVEIS"
+      ? "GIROS DISPONÍVEIS"
       : `NOVO RESET EM ${resetLabel}`;
 
   return (
@@ -228,7 +228,7 @@ export default function DailyChestOverlay({
                 sublabel={
                   Math.max(0, Number(slotSummary.remainingBonus || 0)) > 0
                     ? "Liberados por depositos aprovados."
-                    : "Sem extras disponiveis agora."
+                    : "Sem extras disponíveis agora."
                 }
                 onClick={() => onTap?.("bonus")}
               />

@@ -87,6 +87,7 @@ export default function UsersAdminTab() {
   const [onlyAdjusted, setOnlyAdjusted] = React.useState(false);
   const [onlyAnomaly, setOnlyAnomaly] = React.useState(false);
   const [selectedUser, setSelectedUser] = React.useState(null);
+  const [pendingUserAction, setPendingUserAction] = React.useState(null);
   const [adjustModalUser, setAdjustModalUser] = React.useState(null);
   const [adjustForm, setAdjustForm] = React.useState({
     metricKey: "xp_total",
@@ -140,6 +141,7 @@ export default function UsersAdminTab() {
   const resetMetricsMutation = useMutation({
     mutationFn: ({ userId, payload }) => base44.adminUsers.resetMetrics(userId, payload),
     onSuccess: () => {
+      setPendingUserAction(null);
       queryClient.invalidateQueries({ queryKey: ["admin-users-list"] });
       queryClient.invalidateQueries({ queryKey: ["admin-user-detail"] });
       queryClient.invalidateQueries({ queryKey: ["admin-user-history"] });
@@ -154,6 +156,7 @@ export default function UsersAdminTab() {
   const restoreMetricsMutation = useMutation({
     mutationFn: ({ userId, payload }) => base44.adminUsers.restoreLastReset(userId, payload),
     onSuccess: () => {
+      setPendingUserAction(null);
       queryClient.invalidateQueries({ queryKey: ["admin-users-list"] });
       queryClient.invalidateQueries({ queryKey: ["admin-user-detail"] });
       queryClient.invalidateQueries({ queryKey: ["admin-user-history"] });
@@ -178,26 +181,46 @@ export default function UsersAdminTab() {
 
   function handleResetUserMetrics(user) {
     if (!user?.id) return;
-    if (!window.confirm(`Zerar os pontos e métricas de ${user.full_name || "este usuário"}?\n\nSerá criado um backup para permitir recuperação se você clicar errado.`)) {
+    if (!window.confirm(`Preparar zeramento de ${user.full_name || "este usuário"}?\n\nDepois clique em salvar para aplicar de verdade.`)) {
       return;
     }
-    resetMetricsMutation.mutate({
+    setPendingUserAction({
+      type: "reset",
       userId: user.id,
-      payload: {
-        reason: "Reset administrativo manual pelo painel de usuários",
-      },
+      reason: "Reset administrativo manual pelo painel de usuários",
+      userName: user.full_name || "este usuário",
     });
   }
 
   function handleRestoreUserMetrics(user) {
     if (!user?.id) return;
-    if (!window.confirm(`Restaurar o último reset de ${user.full_name || "este usuário"}?\n\nIsso reaplica o backup salvo no último zeramento.`)) {
+    if (!window.confirm(`Preparar restauração de ${user.full_name || "este usuário"}?\n\nDepois clique em salvar para aplicar de verdade.`)) {
+      return;
+    }
+    setPendingUserAction({
+      type: "restore",
+      userId: user.id,
+      reason: "Restauração administrativa manual pelo painel de usuários",
+      userName: user.full_name || "este usuário",
+    });
+  }
+
+  function applyPendingUserAction() {
+    if (!pendingUserAction?.userId) return;
+    if (pendingUserAction.type === "reset") {
+      resetMetricsMutation.mutate({
+        userId: pendingUserAction.userId,
+        payload: {
+          reason: pendingUserAction.reason,
+          clearDisplayData: true,
+        },
+      });
       return;
     }
     restoreMetricsMutation.mutate({
-      userId: user.id,
+      userId: pendingUserAction.userId,
       payload: {
-        reason: "Restauração administrativa manual pelo painel de usuários",
+        reason: pendingUserAction.reason,
       },
     });
   }
@@ -394,6 +417,16 @@ export default function UsersAdminTab() {
                   <p className="mt-1 text-xs text-slate-500">{userDetail.user.id}</p>
                 </div>
                 <div className="flex gap-2">
+                  {pendingUserAction?.userId === userDetail.user.id ? (
+                    <Button
+                      type="button"
+                      onClick={applyPendingUserAction}
+                      disabled={resetMetricsMutation.isPending || restoreMetricsMutation.isPending}
+                      className="bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+                    >
+                      {resetMetricsMutation.isPending || restoreMetricsMutation.isPending ? "Salvando..." : "Salvar ações"}
+                    </Button>
+                  ) : null}
                   <Button type="button" variant="outline" onClick={() => handleCopy(userDetail.user.summary_text, "Resumo do usuário copiado")} className="border-slate-700 bg-slate-950 text-white">
                     <Copy className="mr-2 h-4 w-4" />
                     Copiar resumo do usuário
@@ -421,6 +454,15 @@ export default function UsersAdminTab() {
                   </Button>
                 </div>
               </div>
+
+              {pendingUserAction?.userId === userDetail.user.id ? (
+                <Card className="border-amber-500/30 bg-amber-500/10 p-4">
+                  <p className="font-semibold text-amber-100">Ação pendente</p>
+                  <p className="mt-1 text-sm text-amber-50">
+                    {pendingUserAction.type === "reset" ? "Zeramento" : "Restauração"} preparado para {pendingUserAction.userName}. Clique em <strong>Salvar ações</strong> para aplicar.
+                  </p>
+                </Card>
+              ) : null}
 
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <MetricChip icon={Sparkles} label="XP total" value={userDetail.user.xp_total} accent="text-cyan-300" />

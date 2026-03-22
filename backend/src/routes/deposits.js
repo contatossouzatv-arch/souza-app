@@ -4,6 +4,7 @@ import {
   adjustDepositTicketsAdmin,
   createDepositRecord,
   createSecurityEvent,
+  deleteDepositAdmin,
   getDepositAdminHistory,
   invalidateDepositAdmin,
   listAdminDeposits,
@@ -304,6 +305,47 @@ router.post("/admin/deposits/:id/invalidate", requireAuth, requireAdmin, async (
   });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
+});
+
+router.delete("/admin/deposits/:id", requireAuth, requireAdmin, async (req, res) => {
+  const depositId = String(req.params.id || "").trim();
+  if (!depositId) return res.status(400).json({ error: "Deposit id obrigatório." });
+
+  const result = await deleteDepositAdmin({
+    depositId,
+    adminUserId: req.auth.sub,
+    adminEmail: req.auth.email,
+    requestId: String(req.body?.requestId || "").trim(),
+    reason: String(req.body?.reason || "").trim(),
+  });
+
+  if (!result) {
+    return res.status(404).json({ error: "Depósito não encontrado." });
+  }
+
+  await createSecurityEvent({
+    user_id: req.auth.sub,
+    type: "DEPOSIT_DELETED",
+    ip: requestMeta(req).ip,
+    user_agent: requestMeta(req).user_agent,
+    metadata: {
+      deposit_id: depositId,
+      user_id: result?.deposit?.user_id || "",
+      reason: String(req.body?.reason || "").trim(),
+    },
+  });
+
+  emitEntityChanged(req, "Deposit", "delete", {
+    deposit_id: depositId,
+    user_id: result?.deposit?.user_id || "",
+    status: "deleted",
+  });
+  emitEntityChanged(req, "Gamification", "refresh", {
+    user_id: result?.deposit?.user_id || "",
+    reason: "deposit_deleted",
+  });
+
+  return res.status(200).json(result);
 });
 
 export default router;

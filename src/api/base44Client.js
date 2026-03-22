@@ -621,6 +621,17 @@ export const base44 = {
         }),
       });
     },
+
+    async adminDelete(id, { reason, requestId } = {}) {
+      return request(`/api/admin/deposits/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reason,
+          requestId: requestId || createRequestId("deposit-delete"),
+        }),
+      });
+    },
   },
 
   liveDraws: {

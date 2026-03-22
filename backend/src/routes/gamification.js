@@ -2177,6 +2177,7 @@ router.post("/admin/users/:id/reset-metrics", requireAuth, requireAdmin, async (
   const userId = String(req.params.id || "").trim();
   const requestId = String(req.body?.requestId || "").trim();
   const reason = String(req.body?.reason || "").trim() || "Reset administrativo do usuário";
+  const clearDisplayData = req.body?.clearDisplayData !== false;
 
   if (!userId || !requestId) {
     return res.status(400).json({ error: "Envie userId e requestId válidos." });
@@ -2188,20 +2189,46 @@ router.post("/admin/users/:id/reset-metrics", requireAuth, requireAdmin, async (
   }
 
   const adjustments = [];
-  for (const [metricKey, currentValue] of Object.entries(snapshot.metrics || {})) {
-    const numericValue = Number(currentValue || 0);
-    if (numericValue === 0) continue;
-    const result = await applyAdminMetricAdjustment({
-      userId,
-      metricKey,
-      reason: `${reason} (${ADMIN_ADJUSTABLE_METRICS[metricKey]?.label || metricKey})`,
-      requestId: `${requestId}:${metricKey}`,
-      adjustment: -numericValue,
-      adminAuth: req.auth,
-      ip: String(req.ip || req.headers["x-forwarded-for"] || ""),
-      userAgent: String(req.headers["user-agent"] || ""),
-    });
-    adjustments.push(result);
+
+  const resetClient = await pool.connect();
+  try {
+    await resetClient.query("BEGIN");
+    await resetClient.query("DELETE FROM user_metric_ledger WHERE user_id = $1", [userId]);
+    await resetClient.query("DELETE FROM user_metric_balances WHERE user_id = $1", [userId]);
+    await resetClient.query("DELETE FROM points_ledger WHERE user_id = $1", [userId]);
+    await resetClient.query("COMMIT");
+  } catch (error) {
+    await resetClient.query("ROLLBACK");
+    throw error;
+  } finally {
+    resetClient.release();
+  }
+
+  let removedPrizeCount = 0;
+  let removedAuditCount = 0;
+  if (clearDisplayData) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const userPrizeItems = (await listEntity("UserPrizeGalleryItem", "-claimed_at", 500)).filter((item) => item.user_id === userId);
+      const userAudits = (await listEntity("DrawWinnerAudit", "-created_date", 500)).filter((item) => item.user_id === userId);
+
+      for (const item of userPrizeItems) {
+        await client.query("DELETE FROM entity_records WHERE entity_name = 'UserPrizeGalleryItem' AND id = $1", [item.id]);
+      }
+      for (const item of userAudits) {
+        await client.query("DELETE FROM entity_records WHERE entity_name = 'DrawWinnerAudit' AND id = $1", [item.id]);
+      }
+
+      removedPrizeCount = userPrizeItems.length;
+      removedAuditCount = userAudits.length;
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   await appendAdminAudit({
@@ -2216,16 +2243,27 @@ router.post("/admin/users/:id/reset-metrics", requireAuth, requireAdmin, async (
       reason,
       snapshot_cycle_key: snapshot.cycle_key,
       restored: false,
+      clear_display_data: clearDisplayData,
+      removed_prize_count: removedPrizeCount,
+      removed_audit_count: removedAuditCount,
     },
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
   });
+
+  emitEntityChanged(req, "user", userId, "updated");
+  if (clearDisplayData) {
+    emitEntityChanged(req, "UserPrizeGalleryItem", userId, "deleted");
+    emitEntityChanged(req, "DrawWinnerAudit", userId, "deleted");
+  }
 
   return res.status(201).json({
     ok: true,
     user_id: userId,
     reset_count: adjustments.length,
     snapshot: snapshot.metrics,
+    removed_prize_count: removedPrizeCount,
+    removed_audit_count: removedAuditCount,
   });
 });
 

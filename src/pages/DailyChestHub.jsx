@@ -117,7 +117,7 @@ export default function DailyChestHub() {
   }, [availableRewardPool.length, viewMode]);
 
   const handleSpin = React.useCallback(async (slotType = "base") => {
-    if (!state || displayState !== "available" || isOpening) return;
+    if (!state || isOpening) return;
     const remainingForType =
       slotType === "bonus"
         ? Math.max(0, Number(state?.slots?.availableBonus || 0))

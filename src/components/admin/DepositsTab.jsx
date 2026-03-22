@@ -25,6 +25,7 @@ import {
   Pencil,
   Search,
   Ticket,
+  Trash2,
   Trophy,
   X,
   XCircle,
@@ -152,6 +153,15 @@ export default function DepositsTab() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: ({ depositId, payload }) => base44.deposits.adminDelete(depositId, payload),
+    onSuccess: () => {
+      invalidateAll();
+      setInvalidatingDeposit(null);
+      setInvalidateForm(EMPTY_INVALIDATE_FORM);
+    },
+  });
+
   const stats = useMemo(() => {
     return filteredDeposits.reduce(
       (acc, deposit) => {
@@ -212,6 +222,13 @@ export default function DepositsTab() {
 
   const submitInvalidate = () => {
     if (!invalidatingDeposit) return;
+    if (invalidatingDeposit.status === "approved") {
+      deleteMutation.mutate({
+        depositId: invalidatingDeposit.id,
+        payload: { reason: invalidateForm.reason },
+      });
+      return;
+    }
     invalidateMutation.mutate({
       depositId: invalidatingDeposit.id,
       payload: { reason: invalidateForm.reason },
@@ -409,7 +426,7 @@ export default function DepositsTab() {
                             setInvalidateForm(EMPTY_INVALIDATE_FORM);
                           }}
                         >
-                          <XCircle className="h-4 w-4" />
+                          {deposit.status === "approved" ? <Trash2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                         </Button>
                       ) : null}
 
@@ -541,12 +558,14 @@ export default function DepositsTab() {
       <Dialog open={!!invalidatingDeposit} onOpenChange={() => setInvalidatingDeposit(null)}>
         <DialogContent className="border-rose-700/50 bg-slate-950 text-white">
           <DialogHeader>
-            <DialogTitle>Invalidar depósito</DialogTitle>
+            <DialogTitle>{invalidatingDeposit?.status === "approved" ? "Excluir depósito" : "Invalidar depósito"}</DialogTitle>
           </DialogHeader>
           {invalidatingDeposit ? (
             <div className="space-y-4">
               <p className="text-sm text-rose-200">
-                O depósito será removido da operação ativa, mas o histórico e a auditoria serão preservados.
+                {invalidatingDeposit.status === "approved"
+                  ? "O depósito será removido dos registros exibidos e não ficará como invalidado."
+                  : "O depósito será marcado como invalidado para registrar uma divergência administrativa."}
               </p>
               <div>
                 <Label>Motivo obrigatório</Label>
@@ -556,8 +575,12 @@ export default function DepositsTab() {
                   className="bg-slate-900/60"
                 />
               </div>
-              <Button onClick={submitInvalidate} disabled={invalidateMutation.isPending} className="w-full bg-rose-700 hover:bg-rose-800">
-                Confirmar invalidação
+              <Button
+                onClick={submitInvalidate}
+                disabled={invalidateMutation.isPending || deleteMutation.isPending}
+                className="w-full bg-rose-700 hover:bg-rose-800"
+              >
+                {invalidatingDeposit.status === "approved" ? "Confirmar exclusão" : "Confirmar invalidação"}
               </Button>
             </div>
           ) : null}

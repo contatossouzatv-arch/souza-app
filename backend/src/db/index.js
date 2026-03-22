@@ -1525,6 +1525,128 @@ async function updateTicketCounterForCycle(client, cycleId, nextTicketNumber) {
   );
 }
 
+export async function createDailyChestDepositTicketGrant({
+  userId,
+  openingId,
+  chestDayKey,
+  rewardSnapshot = {},
+  ticketsGranted = 0,
+}) {
+  const safeTickets = Math.max(0, Math.round(Number(ticketsGranted || 0)));
+  if (safeTickets <= 0) return null;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const existing = await client.query(
+      `SELECT *
+         FROM entity_records
+        WHERE entity_name = 'Deposit'
+          AND COALESCE(data->>'source_type', '') = 'daily_chest_ticket_reward'
+          AND COALESCE(data->>'opening_id', '') = $1
+        LIMIT 1
+        FOR UPDATE`,
+      [String(openingId || "")]
+    );
+    if (existing.rows[0]) {
+      await client.query("COMMIT");
+      return normalizeRecord(existing.rows[0]);
+    }
+
+    const cycleLocked = await client.query(
+      `SELECT *
+         FROM entity_records
+        WHERE entity_name = 'DepositantDrawCycle'
+          AND COALESCE(data->>'active', 'false') = 'true'
+        ORDER BY created_at DESC
+        LIMIT 1
+        FOR UPDATE`
+    );
+    if (!cycleLocked.rows[0]) {
+      const error = new Error("Nao ha ciclo ativo do sorteio dos depositantes para gerar bilhetes.");
+      error.status = 409;
+      throw error;
+    }
+
+    const cycle = normalizeRecord(cycleLocked.rows[0]);
+    const counter = await lockTicketCounterForCycle(client, cycle.id || "default");
+    const ticketStart = Number(counter?.next_ticket_number || 1000000);
+    const ticketNumbers = buildSequentialTicketNumbers(ticketStart, safeTickets);
+    await updateTicketCounterForCycle(client, cycle.id || "default", ticketStart + safeTickets);
+
+    const now = new Date().toISOString();
+    const deposit = await createEntityRecordData(client, "Deposit", {
+      user_id: String(userId || ""),
+      user_name: "",
+      user_email: "",
+      platform_name: "Baú Diário",
+      user_platform_id: "",
+      cycle_id: String(cycle.id || ""),
+      proof_image_url: "",
+      proof_image_urls: [],
+      amount: 0,
+      status: "approved",
+      ticket_numbers: ticketNumbers,
+      tickets_count: safeTickets,
+      basic_ticket_count: safeTickets,
+      bonus_ticket_count: 0,
+      approved_date: now,
+      processed_at: now,
+      processed_by_user_id: "system:daily_chest",
+      processed_by_email: "system:daily_chest",
+      source_type: "daily_chest_ticket_reward",
+      opening_id: String(openingId || ""),
+      chest_day_key: String(chestDayKey || ""),
+      ticket_reward_title: String(rewardSnapshot?.title || "Bilhetes do Baú Diário").trim() || "Bilhetes do Baú Diário",
+      ticket_rule_snapshot: {
+        source: "daily_chest",
+        reward_type: String(rewardSnapshot?.rewardType || "tickets_active"),
+        reward_amount: safeTickets,
+      },
+      updated_date: now,
+    });
+
+    const processingEvent = await createDepositProcessingEvent(client, {
+      deposit_id: deposit.id,
+      user_id: String(userId || ""),
+      event_type: "approved",
+      request_id: `daily-chest-ticket:${String(openingId || "")}`,
+      previous_status: null,
+      next_status: "approved",
+      tickets_granted: safeTickets,
+      basic_tickets: safeTickets,
+      bonus_tickets: 0,
+      ticket_start: ticketStart,
+      ticket_end: Number(ticketNumbers[ticketNumbers.length - 1] || ticketStart),
+      rule_snapshot: {
+        source: "daily_chest",
+        reward_type: String(rewardSnapshot?.rewardType || "tickets_active"),
+      },
+      metadata: {
+        source: "daily_chest",
+        opening_id: String(openingId || ""),
+        chest_day_key: String(chestDayKey || ""),
+      },
+      processed_by_user_id: "system:daily_chest",
+      processed_by_email: "system:daily_chest",
+    });
+
+    const updatedDeposit = await updateEntityRecordData(client, "Deposit", deposit.id, {
+      ...deposit,
+      processing_event_id: processingEvent?.id || "",
+    });
+
+    await client.query("COMMIT");
+    return updatedDeposit;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function findDepositProcessingEventByRequestId(requestId) {
   if (!requestId) return null;
   const result = await pool.query(
@@ -2168,6 +2290,61 @@ export async function invalidateDepositAdmin({
 
     await client.query("COMMIT");
     return { deposit: updated, processing_event: event, idempotent: false };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function deleteDepositAdmin({
+  depositId,
+  adminUserId,
+  adminEmail,
+  requestId = "",
+  reason = "",
+}) {
+  const normalizedReason = String(reason || "").trim();
+  if (!normalizedReason) {
+    const error = new Error("Motivo obrigatório para excluir depósito.");
+    error.status = 400;
+    throw error;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const lockedRecord = await findEntityRecordByNameAndIdForUpdate(client, "Deposit", depositId);
+    if (!lockedRecord) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+
+    const deposit = getEntityRecordData(lockedRecord);
+
+    await client.query("DELETE FROM deposit_processing_events WHERE deposit_id = $1", [String(deposit.id || "")]);
+    await client.query(
+      "DELETE FROM daily_chest_bonus_grants WHERE source_type = 'deposit_approved' AND source_id = $1",
+      [String(deposit.id || "")]
+    );
+    await client.query(
+      "DELETE FROM entity_records WHERE entity_name = 'Deposit' AND id = $1",
+      [String(deposit.id || "")]
+    );
+
+    await client.query("COMMIT");
+    return {
+      deposit: {
+        ...deposit,
+        deleted_at: new Date().toISOString(),
+        deleted_by_user_id: String(adminUserId || ""),
+        deleted_by_email: String(adminEmail || ""),
+        deletion_reason: normalizedReason,
+        request_id: String(requestId || "").trim(),
+      },
+      idempotent: false,
+    };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

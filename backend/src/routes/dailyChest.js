@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
 import {
   createDailyChestOpening,
+  createDailyChestDepositTicketGrant,
   createEntity,
   createPointsLedgerEntry,
   findEntityRecordByNameAndIdForUpdate,
@@ -618,6 +619,128 @@ async function awardChestXp({ userId, openingId, chestDayKey, xpAmount }) {
   });
 }
 
+async function getActiveWeeklyCycleKey() {
+  const result = await pool.query(
+    `SELECT cycle_key
+       FROM weekly_cycles
+      WHERE status = 'active'
+      ORDER BY starts_at DESC
+      LIMIT 1`
+  );
+  return String(result.rows[0]?.cycle_key || "").trim();
+}
+
+async function applyMetricGrant({ userId, metricKey, amount, requestId, rewardSnapshot, chestDayKey, openingId }) {
+  const safeAmount = Math.max(0, Math.round(Number(amount || 0)));
+  if (safeAmount <= 0) {
+    return {
+      applyStatus: "applied",
+      target: metricKey,
+      requestId,
+      metricKey,
+      cycleKey: "",
+      pointsAwarded: 0,
+    };
+  }
+
+  const cycleKey = metricKey === "weekly_points" ? await getActiveWeeklyCycleKey() : "";
+  if (metricKey === "weekly_points" && !cycleKey) {
+    const error = new Error("Nao ha ciclo semanal ativo para aplicar pontos do bau.");
+    error.status = 409;
+    throw error;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const existing = await client.query(
+      `SELECT amount
+         FROM user_metric_ledger
+        WHERE user_id = $1
+          AND metric_key = $2
+          AND cycle_key = $3
+          AND source_type = 'daily_chest_reward'
+          AND source_ref = $4
+        LIMIT 1`,
+      [userId, metricKey, cycleKey, requestId]
+    );
+
+    const currentBalance = await client.query(
+      `SELECT amount
+         FROM user_metric_balances
+        WHERE user_id = $1
+          AND metric_key = $2
+          AND cycle_key = $3
+        FOR UPDATE`,
+      [userId, metricKey, cycleKey]
+    );
+
+    const beforeValue = Number(currentBalance.rows[0]?.amount || 0);
+    const appliedAmount = existing.rows[0] ? Number(existing.rows[0].amount || 0) : safeAmount;
+
+    if (!existing.rows[0]) {
+      await client.query(
+        `INSERT INTO user_metric_ledger (
+          user_id, metric_key, cycle_key, amount, source_type, source_ref, occurred_at, metadata, updated_at
+        )
+         VALUES ($1, $2, $3, $4, 'daily_chest_reward', $5, NOW(), $6::jsonb, NOW())`,
+        [
+          userId,
+          metricKey,
+          cycleKey,
+          safeAmount,
+          requestId,
+          JSON.stringify({
+            source: "daily_chest",
+            exact_event: true,
+            source_ref_id: openingId,
+            chest_day_key: chestDayKey,
+            reward_title: String(rewardSnapshot?.title || "Recompensa do baú").trim() || "Recompensa do baú",
+            reward_type: String(rewardSnapshot?.rewardType || metricKey).trim(),
+          }),
+        ]
+      );
+
+      await client.query(
+        `INSERT INTO user_metric_balances (user_id, metric_key, cycle_key, amount, metadata, updated_at)
+         VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
+         ON CONFLICT (user_id, metric_key, cycle_key)
+         DO UPDATE SET
+           amount = user_metric_balances.amount + EXCLUDED.amount,
+           metadata = EXCLUDED.metadata,
+           updated_at = NOW()`,
+        [
+          userId,
+          metricKey,
+          cycleKey,
+          safeAmount,
+          JSON.stringify({
+            source: "daily_chest",
+            last_opening_id: openingId,
+            chest_day_key: chestDayKey,
+          }),
+        ]
+      );
+    }
+
+    await client.query("COMMIT");
+    return {
+      applyStatus: "applied",
+      target: metricKey,
+      requestId,
+      metricKey,
+      cycleKey,
+      pointsAwarded: appliedAmount,
+      finalValue: beforeValue + (existing.rows[0] ? 0 : safeAmount),
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function applyChestGrant({ userId, chestDayKey, rewardSnapshot, openingId }) {
   const rewardType = String(rewardSnapshot?.rewardType || "points_balance").trim().toLowerCase();
   const rewardAmount = Number(rewardSnapshot?.rewardAmount || 0);
@@ -664,6 +787,59 @@ async function applyChestGrant({ userId, chestDayKey, rewardSnapshot, openingId 
       target: "competition_rank",
       requestId,
       bonusEventId: bonusEvent?.id || "",
+      pointsAwarded: Math.max(0, Math.round(rewardAmount)),
+    };
+  }
+
+  if (rewardType === "weekly_points") {
+    return applyMetricGrant({
+      userId,
+      metricKey: "weekly_points",
+      amount: rewardAmount,
+      requestId,
+      rewardSnapshot,
+      chestDayKey,
+      openingId,
+    });
+  }
+
+  if (rewardType === "engagement_points") {
+    return applyMetricGrant({
+      userId,
+      metricKey: "engagement_points",
+      amount: rewardAmount,
+      requestId,
+      rewardSnapshot,
+      chestDayKey,
+      openingId,
+    });
+  }
+
+  if (rewardType === "xp_total" || rewardType === "xp") {
+    return applyMetricGrant({
+      userId,
+      metricKey: "xp_total",
+      amount: rewardAmount,
+      requestId,
+      rewardSnapshot,
+      chestDayKey,
+      openingId,
+    });
+  }
+
+  if (["tickets_active", "tickets_bonus", "ticket_bonus", "bilhetes"].includes(rewardType)) {
+    const depositTicketGrant = await createDailyChestDepositTicketGrant({
+      userId,
+      openingId,
+      chestDayKey,
+      rewardSnapshot,
+      ticketsGranted: rewardAmount,
+    });
+    return {
+      applyStatus: "applied",
+      target: "deposit_tickets",
+      requestId,
+      depositId: depositTicketGrant?.id || "",
       pointsAwarded: Math.max(0, Math.round(rewardAmount)),
     };
   }
@@ -865,12 +1041,12 @@ router.post("/open", requireAuth, async (req, res) => {
   }
 
   if (slotType === "bonus" && slotSummary.availableBonus <= 0) {
-    return res.status(409).json({ error: "Voce nao tem giros extras disponiveis agora." });
+    return res.status(409).json({ error: "Voce nao tem giros extras disponíveis agora." });
   }
 
   const selectedReward = await reserveRewardFromPool(filteredRewardPool, windowInfo.chestDayKey);
   if (!selectedReward) {
-    return res.status(409).json({ error: "Nao ha premios disponiveis para este ciclo no momento." });
+    return res.status(409).json({ error: "Nao ha premios disponíveis para este ciclo no momento." });
   }
 
   const opening = await createDailyChestOpening({

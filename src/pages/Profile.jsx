@@ -848,34 +848,57 @@ export default function Profile() {
     return normalizeEngagementGuideConfig(parseJsonSetting(rawValue, DEFAULT_PROFILE_ENGAGEMENT_GUIDE_CONFIG));
   }, [achievementRulesSettings]);
 
-  const simulatedBaseProfiles = useMemo(() => [], []);
-  const simulatedProfiles = useMemo(() => {
-    const weights = engagementGuideConfig.ranking_weights || DEFAULT_PROFILE_ENGAGEMENT_GUIDE_CONFIG.ranking_weights;
-    return simulatedBaseProfiles
-      .map((profile) => {
-        const baseScore =
-          profile.activeDays * Number(weights.points_per_active_day || 0) +
-          profile.activityCount * Number(weights.points_per_activity || 0) +
-          profile.depositedAmount * Number(weights.points_per_brl_deposit || 0);
-        const isNewcomer = profile.daysSinceJoin <= Number(weights.newcomer_boost_days || 0);
-        const score = Math.round(baseScore * (isNewcomer ? Number(weights.newcomer_multiplier || 1) : 1));
+  const { data: discoverProfilesData } = useQuery({
+    queryKey: ["profile-discover-profiles", user?.id],
+    queryFn: () => base44.social.discover({ limit: 50, offset: 0 }),
+    enabled: !!user,
+    staleTime: 15000,
+  });
+
+  const simulatedBaseProfiles = useMemo(
+    () =>
+      (discoverProfilesData?.items || []).map((profile) => {
+        const createdAt = new Date(profile.created_at || Date.now()).getTime();
+        const daysSinceJoin = Math.max(0, Math.floor((Date.now() - createdAt) / (1000 * 60 * 60 * 24)));
         return {
-          ...profile,
-          points: score,
-          tickets: Math.max(0, Math.round(profile.activityCount * 1.5 + profile.activeDays)),
-          totalApproved: profile.depositedAmount,
+          id: profile.id,
+          nick: profile.nick || "Usuário",
+          handle: profile.handle || String(profile.nick || "usuario").toLowerCase().replace(/\s+/g, "."),
+          avatarSrc:
+            profile.profile_image_mode === "photo" && profile.profile_image_url
+              ? resolveAssetUrl(profile.profile_image_url)
+              : defaultAvatar,
+          followers: Number(profile.followers || 0),
+          following: Number(profile.following || 0),
+          likes: Number(profile.likes || 0),
+          activeDays: Math.max(1, Math.min(daysSinceJoin + 1, 30)),
+          activityCount: Number(profile.followers || 0) + Number(profile.likes || 0),
+          depositedAmount: 0,
+          daysSinceJoin,
+          totalWins: 0,
+          participations: 0,
         };
-      })
+      }),
+    [discoverProfilesData?.items]
+  );
+  const simulatedProfiles = useMemo(() => {
+    return simulatedBaseProfiles
+      .map((profile) => ({
+        ...profile,
+        points: profile.activityCount * 3 + profile.followers * 2,
+        tickets: Math.max(0, profile.followers + profile.likes),
+        totalApproved: 0,
+      }))
       .sort((a, b) => {
         if (b.points !== a.points) return b.points - a.points;
-        if (b.activeDays !== a.activeDays) return b.activeDays - a.activeDays;
-        return b.activityCount - a.activityCount;
+        if (b.followers !== a.followers) return b.followers - a.followers;
+        return b.likes - a.likes;
       })
       .map((profile, index) => ({
         ...profile,
         position: index + 1,
       }));
-  }, [engagementGuideConfig.ranking_weights, simulatedBaseProfiles]);
+  }, [simulatedBaseProfiles]);
 
   useEffect(() => {
     if (!simulatedProfiles.length) return;
@@ -1050,6 +1073,11 @@ export default function Profile() {
         setEditData((prev) => ({ ...prev, imageMode: "photo" }));
       }
       queryClient.invalidateQueries({ queryKey: ["inicio-users"] });
+      queryClient.invalidateQueries({ queryKey: ["inicio-recent-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["profiles-gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["current-user"] });
+      queryClient.invalidateQueries({ queryKey: ["my-profile-images", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["profile-all-deposits"] });
       setSelectedEditPhotoFile(null);
       setSelectedEditPhotoPreview((prev) => {
         if (isPendingStatus) {
@@ -1081,6 +1109,12 @@ export default function Profile() {
         setUser(response.user);
       }
       setPrivatePhotoPreview("");
+      queryClient.invalidateQueries({ queryKey: ["inicio-users"] });
+      queryClient.invalidateQueries({ queryKey: ["inicio-recent-profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["profiles-gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["current-user"] });
+      queryClient.invalidateQueries({ queryKey: ["my-profile-images", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["profile-all-deposits"] });
     },
     onError: (error) => {
       toast({
@@ -1517,7 +1551,7 @@ export default function Profile() {
     selectedAvatar?.src,
   ]);
 
-  const isSelectedRealProfile = Boolean(selectedPublicProfile?.id && competitionEntryByUserId[selectedPublicProfile.id]);
+  const isSelectedRealProfile = Boolean(selectedPublicProfile?.id);
   const isOwnSelectedPublicProfile = Boolean(selectedPublicProfile?.id && selectedPublicProfile.id === user?.id);
 
   const { data: selectedPublicSocialState } = useQuery({
