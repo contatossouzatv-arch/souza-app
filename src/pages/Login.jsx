@@ -12,7 +12,7 @@ import caricaturaSouza from "../../assets-para-app/13a71c5e4_caricatura-001.png"
 import profileCoverTile from "../../assets-para-app/profile-cover-tile.png";
 import souzaTitleAnimado from "../../assets-para-app/souza title animado.webm";
 
-const GOOOOGLE_CLIENT_ID = import.meta.env.VITE_GOOOOGLE_CLIENT_ID || "";
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const MIN_LOADING_MS = 2000;
 const LOGIN_2FA_PENDING_KEY = "souza_login_2fa_pending_v1";
 
@@ -73,7 +73,7 @@ export default function Login() {
   }, [isAuthenticated, navigate]);
 
   useEffect(() => {
-    if (!GOOOOGLE_CLIENT_ID) return;
+    if (!GOOGLE_CLIENT_ID) return;
 
     const scriptId = "google-gsi-script";
     let script = document.getElementById(scriptId);
@@ -81,7 +81,7 @@ export default function Login() {
     const initGoogle = () => {
       if (!window.google || !googleButtonRef.current) return;
       window.google.accounts.id.initialize({
-        client_id: GOOOOGLE_CLIENT_ID,
+        client_id: GOOGLE_CLIENT_ID,
         callback: async (response) => {
           const startedAt = Date.now();
           try {
@@ -552,11 +552,11 @@ export default function Login() {
 
           <div className="my-5 h-px bg-gradient-to-r from-transparent via-slate-500/70 to-transparent" />
 
-          {GOOOOGLE_CLIENT_ID ? (
+          {GOOGLE_CLIENT_ID ? (
             <div ref={googleButtonRef} className="flex justify-center overflow-hidden rounded-lg" />
           ) : (
             <p className="mb-2 text-xs text-amber-300">
-              Defina `VITE_GOOOOGLE_CLIENT_ID` para habilitar login com Google.
+               Defina `VITE_GOOGLE_CLIENT_ID` para habilitar login com Google.
             </p>
           )}
 
