@@ -68,6 +68,8 @@ export default function Home() {
     staleTime: 60000,
   });
 
+  const formattedMembersCount = String(users.length || 0).padStart(4, "0");
+
   useEffect(() => {
     setLikes(getStoredLikes());
   }, []);
@@ -269,8 +271,8 @@ export default function Home() {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-base font-bold text-white">Últimos usuários cadastrados</h2>
-                <span className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200">
-                  {users.length} no app
+                <span className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-cyan-200">
+                  {formattedMembersCount} Membros do APP Do SouzaTV
                 </span>
               </div>
               <p className="mt-1 text-sm leading-snug text-slate-400">Perfis reais do app para a galera descobrir.</p>
