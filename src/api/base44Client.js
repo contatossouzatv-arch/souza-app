@@ -1267,6 +1267,14 @@ export const base44 = {
     },
   },
 
+  adminAudit: {
+    async deleteWinnerAudit(auditId) {
+      return request(`/api/admin/audits/winners/${encodeURIComponent(auditId)}`, {
+        method: "DELETE",
+      });
+    },
+  },
+
   integrations: {
     Core: {
       UploadFile: uploadFile,

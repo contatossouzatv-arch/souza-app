@@ -158,11 +158,54 @@ function buildRequestMeta(req) {
 
 function emitEntityChanged(req, entityName, entityId, action = "updated") {
   req.app?.locals?.io?.emit("entity:changed", {
+    entity: entityName,
     entityName,
     entityId,
     action,
     emittedAt: new Date().toISOString(),
   });
+}
+
+function inferPrizeSourceTypesFromAudit(audit = {}) {
+  const raffleId = String(audit?.raffle_id || "").trim().toLowerCase();
+  const raffleTitle = String(audit?.raffle_title || "").trim().toLowerCase();
+  const gameCall = String(audit?.game_call || "").trim();
+
+  if (raffleId === "depositant_draw") return ["deposit_draw"];
+  if (gameCall) return ["game_call"];
+  if (raffleTitle.includes("rápido") || raffleTitle.includes("rapido")) return ["instant_raffle"];
+  if (raffleTitle.includes("ao vivo")) return ["live_draw"];
+  return ["live_draw", "instant_raffle"];
+}
+
+function isPrizeGalleryMatchForAudit(item = {}, audit = {}) {
+  if (String(item.user_id || "").trim() !== String(audit.user_id || "").trim()) return false;
+
+  const allowedSourceTypes = inferPrizeSourceTypesFromAudit(audit);
+  if (!allowedSourceTypes.includes(String(item.source_type || "").trim())) return false;
+
+  const auditAmount = Number(audit.prize_amount || 0);
+  const itemAmount = Number(item.reward_amount || 0);
+  const metadata = item.metadata || {};
+
+  if (String(item.source_type || "").trim() === "deposit_draw") {
+    const auditCycle = String(audit.cycle_number || "").trim();
+    return String(metadata.cycle_number || "").trim() === auditCycle && itemAmount === auditAmount;
+  }
+
+  const auditRaffleId = String(audit.raffle_id || "").trim();
+  if (auditRaffleId && String(metadata.raffle_id || "").trim() === auditRaffleId && itemAmount === auditAmount) {
+    return true;
+  }
+
+  const auditDate = new Date(audit.validated_at || audit.drawn_at || 0).getTime();
+  const itemDate = new Date(item.claimed_at || item.created_date || item.updated_date || 0).getTime();
+  if (Number.isFinite(auditDate) && Number.isFinite(itemDate)) {
+    const diff = Math.abs(itemDate - auditDate);
+    if (diff <= 1000 * 60 * 10 && itemAmount === auditAmount) return true;
+  }
+
+  return false;
 }
 
 async function listAppSettingsMap() {
@@ -1874,6 +1917,51 @@ router.get("/admin/users", requireAuth, requireAdmin, async (req, res) => {
 
 router.get("/admin/users/adjustments/recent", requireAuth, requireAdmin, async (_req, res) => {
   res.json({ items: await listRecentAdminAdjustments(20) });
+});
+
+router.delete("/admin/audits/winners/:id", requireAuth, requireAdmin, async (req, res) => {
+  const auditId = String(req.params.id || "").trim();
+  if (!auditId) {
+    return res.status(400).json({ error: "Informe um auditId válido." });
+  }
+
+  const audit = await getEntityById("DrawWinnerAudit", auditId);
+  if (!audit) {
+    return res.status(404).json({ error: "Registro de auditoria não encontrado." });
+  }
+
+  const prizeItems = await listEntity("UserPrizeGalleryItem", "-claimed_at", 500);
+  const matchedPrizeItems = prizeItems.filter((item) => isPrizeGalleryMatchForAudit(item, audit));
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const item of matchedPrizeItems) {
+      await client.query("DELETE FROM entity_records WHERE entity_name = 'UserPrizeGalleryItem' AND id = $1", [item.id]);
+    }
+
+    await client.query("DELETE FROM entity_records WHERE entity_name = 'DrawWinnerAudit' AND id = $1", [auditId]);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  emitEntityChanged(req, "DrawWinnerAudit", auditId, "deleted");
+  matchedPrizeItems.forEach((item) => {
+    emitEntityChanged(req, "UserPrizeGalleryItem", item.id, "deleted");
+  });
+  if (audit.user_id) {
+    emitEntityChanged(req, "user", audit.user_id, "updated");
+  }
+
+  return res.json({
+    ok: true,
+    audit_id: auditId,
+    removed_gallery_items: matchedPrizeItems.map((item) => item.id),
+  });
 });
 
 router.get("/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {

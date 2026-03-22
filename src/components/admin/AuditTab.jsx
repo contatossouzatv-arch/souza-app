@@ -105,9 +105,11 @@ export default function AuditTab() {
   }, [audits, usersById, resolvePlatformName]);
 
   const deleteAuditMutation = useMutation({
-    mutationFn: (auditId) => base44.entities.DrawWinnerAudit.delete(auditId),
+    mutationFn: (auditId) => base44.adminAudit.deleteWinnerAudit(auditId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["winner-audits"] });
+      queryClient.invalidateQueries({ queryKey: ["inicio-winner-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["user-prize-gallery"] });
     },
   });
 

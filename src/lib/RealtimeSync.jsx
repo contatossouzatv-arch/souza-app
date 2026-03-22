@@ -117,6 +117,8 @@ export default function RealtimeSync() {
             "my-live-participation",
             "my-winnings",
             "winner-audits",
+            "inicio-winner-posts",
+            "user-prize-gallery",
           ]);
         }
 
@@ -128,6 +130,8 @@ export default function RealtimeSync() {
             "validated-gamecall-winners",
             "my-gamecall-participation",
             "winner-audits",
+            "inicio-winner-posts",
+            "user-prize-gallery",
           ]);
         }
 
@@ -140,6 +144,17 @@ export default function RealtimeSync() {
             "my-instant-participation",
             "previous-instant-raffles",
             "winner-audits",
+            "inicio-winner-posts",
+            "user-prize-gallery",
+          ]);
+        }
+
+        if (["drawwinneraudit", "userprizegalleryitem"].includes(entity)) {
+          addKeys(prefixes, [
+            "winner-audits",
+            "inicio-winner-posts",
+            "user-prize-gallery",
+            "admin-user-history",
           ]);
         }
 
