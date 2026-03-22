@@ -277,7 +277,7 @@ export default function Home() {
             onClick={openProfilesGallery}
             className="border-slate-700 bg-slate-950 text-white hover:bg-slate-800"
           >
-            Ver galeria
+            Exibir mais perfis
           </Button>
         </div>
 

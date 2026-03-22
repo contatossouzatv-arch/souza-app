@@ -122,7 +122,7 @@ function mapSocialProfile(row) {
     avatar_emoji: row.avatar_emoji || "🎰",
     profile_avatar_id: row.profile_avatar_id || "",
     profile_image_mode: row.profile_image_mode || "avatar",
-    profile_image_url: row.profile_image_url || "",
+    profile_image_url: row.profile_image_status === "approved" ? `/api/auth/profile-image/${row.id}` : "",
     followers: Number(row.followers || 0),
     following: Number(row.following || 0),
     likes: Number(row.likes || 0),

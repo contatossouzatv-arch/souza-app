@@ -130,6 +130,19 @@ export async function ensureDb() {
   await pool.query("CREATE INDEX IF NOT EXISTS idx_points_ledger_created_at ON points_ledger(created_at)");
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_profile_images (
+      user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      approved_mime_type TEXT,
+      approved_file_name TEXT,
+      approved_data BYTEA,
+      pending_mime_type TEXT,
+      pending_file_name TEXT,
+      pending_data BYTEA,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS user_metric_ledger (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -458,6 +471,10 @@ export function normalizeUser(row) {
   if (!row) return null;
   const createdAt = row.created_at ? toIso(row.created_at) : null;
   const updatedAt = row.updated_at ? toIso(row.updated_at) : null;
+  const approvedProfileImageUrl =
+    String(row.profile_image_status || "none") === "approved" && row.id
+      ? `/api/auth/profile-image/${row.id}`
+      : row.profile_image_url || "";
   return {
     id: row.id,
     email: row.email,
@@ -468,7 +485,7 @@ export function normalizeUser(row) {
     avatar_emoji: row.avatar_emoji || "🎰",
     profile_avatar_id: row.profile_avatar_id || "",
     profile_image_mode: row.profile_image_mode || "avatar",
-    profile_image_url: row.profile_image_url || "",
+    profile_image_url: approvedProfileImageUrl,
     profile_image_status: row.profile_image_status || "none",
     profile_image_reject_reason: row.profile_image_reject_reason || "",
     profile_image_moderation_score:
@@ -588,6 +605,57 @@ export async function updateUserGoogleLink(userId, googleId) {
 export async function deleteUserById(userId) {
   const result = await pool.query("DELETE FROM users WHERE id = $1 RETURNING *", [userId]);
   return normalizeUser(result.rows[0]);
+}
+
+export async function getUserProfileImages(userId) {
+  const result = await pool.query(
+    `SELECT user_id, approved_mime_type, approved_file_name, approved_data,
+            pending_mime_type, pending_file_name, pending_data, updated_at
+       FROM user_profile_images
+      WHERE user_id = $1
+      LIMIT 1`,
+    [userId]
+  );
+  return result.rows[0] || null;
+}
+
+export async function upsertUserProfileImages(userId, payload = {}) {
+  const current = (await getUserProfileImages(userId)) || {};
+  const next = {
+    approved_mime_type: payload.approved_mime_type !== undefined ? payload.approved_mime_type : current.approved_mime_type || null,
+    approved_file_name: payload.approved_file_name !== undefined ? payload.approved_file_name : current.approved_file_name || null,
+    approved_data: payload.approved_data !== undefined ? payload.approved_data : current.approved_data || null,
+    pending_mime_type: payload.pending_mime_type !== undefined ? payload.pending_mime_type : current.pending_mime_type || null,
+    pending_file_name: payload.pending_file_name !== undefined ? payload.pending_file_name : current.pending_file_name || null,
+    pending_data: payload.pending_data !== undefined ? payload.pending_data : current.pending_data || null,
+  };
+
+  const result = await pool.query(
+    `INSERT INTO user_profile_images (
+       user_id, approved_mime_type, approved_file_name, approved_data,
+       pending_mime_type, pending_file_name, pending_data, updated_at
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+     ON CONFLICT (user_id) DO UPDATE SET
+       approved_mime_type = EXCLUDED.approved_mime_type,
+       approved_file_name = EXCLUDED.approved_file_name,
+       approved_data = EXCLUDED.approved_data,
+       pending_mime_type = EXCLUDED.pending_mime_type,
+       pending_file_name = EXCLUDED.pending_file_name,
+       pending_data = EXCLUDED.pending_data,
+       updated_at = NOW()
+     RETURNING *`,
+    [
+      userId,
+      next.approved_mime_type,
+      next.approved_file_name,
+      next.approved_data,
+      next.pending_mime_type,
+      next.pending_file_name,
+      next.pending_data,
+    ]
+  );
+  return result.rows[0] || null;
 }
 
 export async function createRefreshToken(payload) {

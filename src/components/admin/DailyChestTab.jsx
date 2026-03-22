@@ -166,6 +166,37 @@ function formatDateTimeLabel(value) {
   });
 }
 
+function detectSchedulePreset(settings = {}) {
+  const start = String(settings.daily_chest_schedule_start_at ?? "");
+  const end = String(settings.daily_chest_schedule_end_at ?? "");
+
+  if (!start && !end) {
+    return "always";
+  }
+
+  const now = new Date();
+  const startToday = new Date(now);
+  startToday.setHours(0, 0, 0, 0);
+  const endToday = new Date(now);
+  endToday.setHours(23, 59, 0, 0);
+
+  const startNext7 = new Date(now);
+  startNext7.setHours(0, 0, 0, 0);
+  const endNext7 = new Date(now);
+  endNext7.setDate(endNext7.getDate() + 6);
+  endNext7.setHours(23, 59, 0, 0);
+
+  if (start === toDateTimeLocalValue(startToday) && end === toDateTimeLocalValue(endToday)) {
+    return "today";
+  }
+
+  if (start === toDateTimeLocalValue(startNext7) && end === toDateTimeLocalValue(endNext7)) {
+    return "next7";
+  }
+
+  return "";
+}
+
 function simulateRewards(rewards, openings = 1000) {
   const activeRewards = rewards.filter((entry) => entry.active !== false);
   const fallbackRewards = activeRewards.filter((entry) => entry.is_fallback);
@@ -497,6 +528,7 @@ export default function DailyChestTab() {
   }
 
   const rewardTypeMeta = getRewardTypeMeta(rewardDraft.reward_type);
+  const selectedSchedulePreset = React.useMemo(() => detectSchedulePreset(settingsDraft), [settingsDraft]);
   const configuredRewards = React.useMemo(
     () => (Array.isArray(data?.rewards) ? data.rewards.map((entry) => normalizeRewardRecord(entry)) : []),
     [data?.rewards]
@@ -728,24 +760,28 @@ export default function DailyChestTab() {
         <div className="mt-5 grid gap-4 xl:grid-cols-2">
           <SectionCard title="Ativação" description="Controle se o Baú Diário está no ar e qual mensagem aparece para o usuário.">
             <div className="mb-4 flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => applySchedulePreset("always")} className="border-slate-700 bg-slate-950/60 text-white">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => applySchedulePreset("always")}
+                className={selectedSchedulePreset === "always" ? "border-cyan-400 bg-cyan-400/15 text-cyan-100" : "border-slate-700 bg-slate-950/60 text-white"}
+              >
                 Sempre ativo
               </Button>
-              <Button type="button" variant="outline" onClick={() => applySchedulePreset("today")} className="border-slate-700 bg-slate-950/60 text-white">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => applySchedulePreset("today")}
+                className={selectedSchedulePreset === "today" ? "border-cyan-400 bg-cyan-400/15 text-cyan-100" : "border-slate-700 bg-slate-950/60 text-white"}
+              >
                 Só hoje
               </Button>
-              <Button type="button" variant="outline" onClick={() => applySchedulePreset("next7")} className="border-slate-700 bg-slate-950/60 text-white">
-                Próximos 7 dias
-              </Button>
-            </div>
-            <div className="mb-4 flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => applySchedulePreset("always")} className="border-slate-700 bg-slate-950/60 text-white">
-                Sempre ativo
-              </Button>
-              <Button type="button" variant="outline" onClick={() => applySchedulePreset("today")} className="border-slate-700 bg-slate-950/60 text-white">
-                Só hoje
-              </Button>
-              <Button type="button" variant="outline" onClick={() => applySchedulePreset("next7")} className="border-slate-700 bg-slate-950/60 text-white">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => applySchedulePreset("next7")}
+                className={selectedSchedulePreset === "next7" ? "border-cyan-400 bg-cyan-400/15 text-cyan-100" : "border-slate-700 bg-slate-950/60 text-white"}
+              >
                 Próximos 7 dias
               </Button>
             </div>

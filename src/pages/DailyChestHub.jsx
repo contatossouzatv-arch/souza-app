@@ -15,9 +15,13 @@ const DailyChestScene = lazy(() => import("@/components/daily-chest/DailyChestSc
 
 function SceneLoader() {
   return (
-    <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_28%),linear-gradient(180deg,#020617_0%,#06111d_45%,#030712_100%)]">
-      <div className="rounded-full border border-cyan-200/20 bg-slate-950/70 px-4 py-2 text-sm text-cyan-100">
-        Montando cena do bau...
+    <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_28%),linear-gradient(180deg,#020617_0%,#06111d_45%,#030712_100%)] px-6 text-center">
+      <div className="max-w-md rounded-[2rem] border border-cyan-200/15 bg-slate-950/75 px-6 py-7 shadow-[0_24px_80px_rgba(2,6,23,0.45)]">
+        <div className="mx-auto h-12 w-12 animate-spin rounded-full border-2 border-cyan-300/20 border-t-cyan-300" />
+        <p className="mt-4 text-lg font-black text-cyan-100">Preparando o Baú Diário</p>
+        <p className="mt-2 text-sm text-slate-300">
+          Carregando cenário, texturas e efeitos para abrir tudo já pronto.
+        </p>
       </div>
     </div>
   );
@@ -30,6 +34,7 @@ export default function DailyChestHub() {
   const [spinToken, setSpinToken] = React.useState(0);
   const [displayState, setDisplayState] = React.useState("available");
   const [viewMode, setViewMode] = React.useState("main");
+  const [sceneReady, setSceneReady] = React.useState(false);
   const menuAudioRef = React.useRef(null);
   const spinAudioRef = React.useRef(null);
   const openAudioRef = React.useRef(null);
@@ -211,6 +216,7 @@ export default function DailyChestHub() {
         <div className="h-full w-full lg:h-[min(100dvh-3rem,100vw-3rem)] lg:w-[min(100dvh-3rem,100vw-3rem)] lg:overflow-hidden lg:rounded-[2rem] lg:border lg:border-white/10 lg:bg-slate-950/40 lg:shadow-[0_24px_80px_rgba(2,6,23,0.45)]">
           <Suspense fallback={<SceneLoader />}>
             <DailyChestScene
+              onSceneReady={() => setSceneReady(true)}
               stageState={sceneState}
               viewMode={viewMode}
               tapProgress={tapCount}
@@ -251,25 +257,32 @@ export default function DailyChestHub() {
               }}
             />
           </Suspense>
+          {!sceneReady ? (
+            <div className="pointer-events-auto absolute inset-0 z-30">
+              <SceneLoader />
+            </div>
+          ) : null}
         </div>
       </div>
 
-      <DailyChestOverlay
-        displayState={displayState}
-        state={state}
-        tapCount={tapCount}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-        hasRewardsAvailable={availableRewardPool.length > 0}
-        onTap={handleSpin}
-        onUnlock={handleUnlock}
-        onClaim={handleClaim}
-        onBack={() => navigate("/")}
-        onMenuOpenSound={() => playAudio(menuAudioRef, isMenuSoundEnabled(), 0.88)}
-        isClaiming={isClaiming}
-        isOpening={isOpening}
-        isUnlocking={isUnlocking}
-      />
+      {sceneReady ? (
+        <DailyChestOverlay
+          displayState={displayState}
+          state={state}
+          tapCount={tapCount}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          hasRewardsAvailable={availableRewardPool.length > 0}
+          onTap={handleSpin}
+          onUnlock={handleUnlock}
+          onClaim={handleClaim}
+          onBack={() => navigate("/")}
+          onMenuOpenSound={() => playAudio(menuAudioRef, isMenuSoundEnabled(), 0.88)}
+          isClaiming={isClaiming}
+          isOpening={isOpening}
+          isUnlocking={isUnlocking}
+        />
+      ) : null}
     </div>
   );
 }

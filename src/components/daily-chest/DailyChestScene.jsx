@@ -189,6 +189,7 @@ export default function DailyChestScene({
   rewardPool = [],
   slotSummary = {},
   statusInfo = null,
+  onSceneReady,
 }) {
   const mountRef = React.useRef(null);
   const runtimeRef = React.useRef({
@@ -247,7 +248,17 @@ export default function DailyChestScene({
 
     const backgroundGroup = new THREE.Group();
     scene.add(backgroundGroup);
-    const textureLoader = new THREE.TextureLoader();
+    let hasSignaledReady = false;
+    const loadingManager = new THREE.LoadingManager();
+    loadingManager.onLoad = () => {
+      if (!mounted || hasSignaledReady) return;
+      hasSignaledReady = true;
+      window.requestAnimationFrame(() => {
+        if (!mounted) return;
+        onSceneReady?.();
+      });
+    };
+    const textureLoader = new THREE.TextureLoader(loadingManager);
 
     const backgroundTexture = textureLoader.load(chestBackgroundUrl);
     backgroundTexture.colorSpace = THREE.SRGBColorSpace;
@@ -777,7 +788,6 @@ export default function DailyChestScene({
         }
     }
 
-    const loadingManager = new THREE.LoadingManager();
     const gltfLoader = new GLTFLoader(loadingManager);
     let mounted = true;
     gltfLoader.load(
@@ -1309,7 +1319,7 @@ export default function DailyChestScene({
       disposeObject(closedChest);
       renderer.dispose();
     };
-  }, [rarity, theme]);
+  }, [onSceneReady, rarity, theme]);
 
   return <div ref={mountRef} className="h-full w-full" />;
 }

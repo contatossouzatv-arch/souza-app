@@ -1297,6 +1297,211 @@ async function listLastActivityMap() {
   return new Map(result.rows.map((row) => [row.user_id, row.last_activity_at ? toIso(row.last_activity_at) : null]));
 }
 
+async function getAdminUserMetricSnapshot(userId) {
+  const [{ items }, state, pointsBalanceMap] = await Promise.all([
+    buildAdminUsersDataset(),
+    buildGamificationState(),
+    listPointsBalancesMap(),
+  ]);
+  const user = items.find((entry) => entry.id === userId);
+  if (!user) {
+    return null;
+  }
+  return {
+    cycle_key: String(state?.cycle?.cycle_key || ""),
+    metrics: {
+      xp_total: Number(user.xp_total || 0),
+      weekly_points: Number(user.weekly_points || 0),
+      engagement_points: Number(user.engagement_points || 0),
+      tickets_active: Number(user.tickets_active || 0),
+      tickets_bonus: Number(user.tickets_bonus || 0),
+      points_balance: Number(pointsBalanceMap.get(userId) || user.points_balance || 0),
+    },
+  };
+}
+
+async function applyAdminMetricAdjustment({ userId, metricKey, reason, requestId, adjustment, adminAuth, ip, userAgent }) {
+  const metricConfig = ADMIN_ADJUSTABLE_METRICS[metricKey];
+  if (!metricConfig) {
+    const error = new Error("Métrica não pode ser ajustada manualmente.");
+    error.status = 400;
+    throw error;
+  }
+
+  const user = await getEntityById("User", userId);
+  if (!user) {
+    const error = new Error("Usuário não encontrado.");
+    error.status = 404;
+    throw error;
+  }
+
+  if (metricConfig.pointsLedger) {
+    const existing = await pool.query("SELECT * FROM points_ledger WHERE request_id = $1 LIMIT 1", [requestId]);
+    if (existing.rows[0]) {
+      const balanceResult = await pool.query("SELECT COALESCE(SUM(amount), 0) AS total FROM points_ledger WHERE user_id = $1", [userId]);
+      return {
+        ok: true,
+        idempotent: true,
+        metric_key: metricKey,
+        previous_value: null,
+        adjustment,
+        final_value: Number(balanceResult.rows[0]?.total || 0),
+      };
+    }
+
+    const beforeResult = await pool.query("SELECT COALESCE(SUM(amount), 0) AS total FROM points_ledger WHERE user_id = $1", [userId]);
+    const beforeValue = Number(beforeResult.rows[0]?.total || 0);
+    await pool.query(
+      `INSERT INTO points_ledger (user_id, amount, reason, request_id, metadata)
+       VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [
+        userId,
+        Math.round(adjustment),
+        `Ajuste manual admin: ${reason}`,
+        requestId,
+        JSON.stringify({
+          type: "admin_adjustment",
+          metric_key: metricKey,
+          reason,
+          admin_user_id: adminAuth.sub,
+          admin_email: adminAuth.email,
+        }),
+      ],
+    );
+    const finalValue = beforeValue + Math.round(adjustment);
+    await appendAdminAudit({
+      domain: "user_metric_adjustment",
+      action: "adjust_points_balance",
+      targetKey: userId,
+      beforeData: { metric_key: metricKey, value: beforeValue },
+      afterData: { metric_key: metricKey, value: finalValue },
+      metadata: { user_id: userId, metric_key: metricKey, adjustment: Math.round(adjustment), reason, request_id: requestId },
+      adminUserId: adminAuth.sub,
+      adminEmail: adminAuth.email,
+    });
+    await createSecurityEvent({
+      user_id: adminAuth.sub,
+      type: "ADMIN_METRIC_ADJUSTED",
+      ip,
+      user_agent: userAgent,
+      metadata: { target_user_id: userId, metric_key: metricKey, adjustment: Math.round(adjustment), request_id: requestId },
+    });
+    return {
+      ok: true,
+      idempotent: false,
+      metric_key: metricKey,
+      previous_value: beforeValue,
+      adjustment: Math.round(adjustment),
+      final_value: finalValue,
+    };
+  }
+
+  const cycleKey = metricConfig.cycleScoped ? String((await buildGamificationState()).cycle?.cycle_key || "") : "";
+  if (metricConfig.cycleScoped && !cycleKey) {
+    const error = new Error("Não há ciclo semanal ativo para ajustar esta métrica.");
+    error.status = 400;
+    throw error;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const existing = await client.query(
+      `SELECT *
+         FROM user_metric_ledger
+        WHERE user_id = $1
+          AND metric_key = $2
+          AND cycle_key = $3
+          AND source_type = 'admin_adjustment'
+          AND source_ref = $4
+        LIMIT 1`,
+      [userId, metricKey, cycleKey, requestId],
+    );
+    const currentBalance = await client.query(
+      `SELECT *
+         FROM user_metric_balances
+        WHERE user_id = $1
+          AND metric_key = $2
+          AND cycle_key = $3
+        FOR UPDATE`,
+      [userId, metricKey, cycleKey],
+    );
+    const beforeValue = Number(currentBalance.rows[0]?.amount || 0);
+    const roundedAdjustment = Math.round(adjustment);
+    const wasIdempotent = Boolean(existing.rows[0]);
+    if (!existing.rows[0]) {
+      await upsertLedgerEntry(client, {
+        userId,
+        metricKey,
+        cycleKey,
+        amount: roundedAdjustment,
+        sourceType: "admin_adjustment",
+        sourceRef: requestId,
+        occurredAt: new Date().toISOString(),
+        metadata: {
+          reason,
+          admin_user_id: adminAuth.sub,
+          admin_email: adminAuth.email,
+        },
+      });
+      await setBalance(client, {
+        userId,
+        metricKey,
+        cycleKey,
+        amount: beforeValue + roundedAdjustment,
+        metadata: {
+          last_adjustment_reason: reason,
+          adjusted_by: adminAuth.email,
+        },
+      });
+    }
+    await client.query("COMMIT");
+    const refreshed = await pool.query(
+      `SELECT amount
+         FROM user_metric_balances
+        WHERE user_id = $1
+          AND metric_key = $2
+          AND cycle_key = $3
+        LIMIT 1`,
+      [userId, metricKey, cycleKey],
+    );
+    const finalValue = Number(refreshed.rows[0]?.amount || beforeValue);
+    if (!wasIdempotent) {
+      await appendAdminAudit({
+        domain: "user_metric_adjustment",
+        action: "adjust_metric",
+        targetKey: userId,
+        beforeData: { metric_key: metricKey, cycle_key: cycleKey, value: beforeValue },
+        afterData: { metric_key: metricKey, cycle_key: cycleKey, value: finalValue },
+        metadata: { user_id: userId, metric_key: metricKey, cycle_key: cycleKey, adjustment: roundedAdjustment, reason, request_id: requestId },
+        adminUserId: adminAuth.sub,
+        adminEmail: adminAuth.email,
+      });
+      await createSecurityEvent({
+        user_id: adminAuth.sub,
+        type: "ADMIN_METRIC_ADJUSTED",
+        ip,
+        user_agent: userAgent,
+        metadata: { target_user_id: userId, metric_key: metricKey, cycle_key: cycleKey, adjustment: roundedAdjustment, request_id: requestId },
+      });
+    }
+    return {
+      ok: true,
+      idempotent: wasIdempotent,
+      metric_key: metricKey,
+      cycle_key: cycleKey,
+      previous_value: beforeValue,
+      adjustment: roundedAdjustment,
+      final_value: finalValue,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function listRecentAdminAdjustments(limit = 20) {
   const result = await pool.query(
     `SELECT *
@@ -1615,7 +1820,7 @@ router.get("/feed/wins", requireAuth, async (_req, res) => {
         user_avatar: user?.avatar_emoji || "",
         profile_avatar_id: user?.profile_avatar_id || "",
         profile_image_mode: user?.profile_image_mode || "avatar",
-        profile_image_url: user?.profile_image_status === "approved" ? user?.profile_image_url || "" : "",
+        profile_image_url: user?.profile_image_status === "approved" ? `/api/auth/profile-image/${user?.id}` : "",
         source_type: item.source_type || "",
         source_label: mapPrizeSourceLabel(item.source_type),
         reward_label: buildPrizeRewardLabel(item),
@@ -1729,7 +1934,7 @@ router.get("/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
   );
   const enrichedUser = {
     ...item,
-    avatar_url: user.profile_image_url || "",
+    avatar_url: user.profile_image_status === "approved" ? `/api/auth/profile-image/${user.id}` : "",
     created_at: user.created_at || user.created_date || null,
     updated_at: user.updated_at || user.updated_date || null,
     login_count: Number(loginCountResult.rows[0]?.total || 0),
@@ -1867,180 +2072,167 @@ router.post("/admin/users/:id/adjust-metric", requireAuth, requireAdmin, async (
   if (!userId || !metricKey || !reason || !requestId || !Number.isFinite(adjustment) || adjustment === 0) {
     return res.status(400).json({ error: "Envie userId, metricKey, adjustment, reason e requestId válidos." });
   }
+  const result = await applyAdminMetricAdjustment({
+    userId,
+    metricKey,
+    reason,
+    requestId,
+    adjustment,
+    adminAuth: req.auth,
+    ip: String(req.ip || req.headers["x-forwarded-for"] || ""),
+    userAgent: String(req.headers["user-agent"] || ""),
+  });
+  return res.status(result.idempotent ? 200 : 201).json(result);
+});
 
-  const metricConfig = ADMIN_ADJUSTABLE_METRICS[metricKey];
-  if (!metricConfig) {
-    return res.status(400).json({ error: "Métrica não pode ser ajustada manualmente." });
+router.post("/admin/users/:id/reset-metrics", requireAuth, requireAdmin, async (req, res) => {
+  const userId = String(req.params.id || "").trim();
+  const requestId = String(req.body?.requestId || "").trim();
+  const reason = String(req.body?.reason || "").trim() || "Reset administrativo do usuário";
+
+  if (!userId || !requestId) {
+    return res.status(400).json({ error: "Envie userId e requestId válidos." });
   }
 
-  const user = await getEntityById("User", userId);
-  if (!user) {
+  const snapshot = await getAdminUserMetricSnapshot(userId);
+  if (!snapshot) {
     return res.status(404).json({ error: "Usuário não encontrado." });
   }
 
-  if (metricConfig.pointsLedger) {
-    const existing = await pool.query("SELECT * FROM points_ledger WHERE request_id = $1 LIMIT 1", [requestId]);
-    if (existing.rows[0]) {
-      const balanceResult = await pool.query("SELECT COALESCE(SUM(amount), 0) AS total FROM points_ledger WHERE user_id = $1", [userId]);
-      return res.json({
-        ok: true,
-        idempotent: true,
-        metric_key: metricKey,
-        previous_value: null,
-        adjustment,
-        final_value: Number(balanceResult.rows[0]?.total || 0),
-      });
-    }
-
-    const beforeResult = await pool.query("SELECT COALESCE(SUM(amount), 0) AS total FROM points_ledger WHERE user_id = $1", [userId]);
-    const beforeValue = Number(beforeResult.rows[0]?.total || 0);
-    await pool.query(
-      `INSERT INTO points_ledger (user_id, amount, reason, request_id, metadata)
-       VALUES ($1, $2, $3, $4, $5::jsonb)`,
-      [
-        userId,
-        Math.round(adjustment),
-        `Ajuste manual admin: ${reason}`,
-        requestId,
-        JSON.stringify({
-          type: "admin_adjustment",
-          metric_key: metricKey,
-          reason,
-          admin_user_id: req.auth.sub,
-          admin_email: req.auth.email,
-        }),
-      ],
-    );
-    const finalValue = beforeValue + Math.round(adjustment);
-    await appendAdminAudit({
-      domain: "user_metric_adjustment",
-      action: "adjust_points_balance",
-      targetKey: userId,
-      beforeData: { metric_key: metricKey, value: beforeValue },
-      afterData: { metric_key: metricKey, value: finalValue },
-      metadata: { user_id: userId, metric_key: metricKey, adjustment: Math.round(adjustment), reason, request_id: requestId },
-      adminUserId: req.auth.sub,
-      adminEmail: req.auth.email,
-    });
-    await createSecurityEvent({
-      user_id: req.auth.sub,
-      type: "ADMIN_METRIC_ADJUSTED",
+  const adjustments = [];
+  for (const [metricKey, currentValue] of Object.entries(snapshot.metrics || {})) {
+    const numericValue = Number(currentValue || 0);
+    if (numericValue === 0) continue;
+    const result = await applyAdminMetricAdjustment({
+      userId,
+      metricKey,
+      reason: `${reason} (${ADMIN_ADJUSTABLE_METRICS[metricKey]?.label || metricKey})`,
+      requestId: `${requestId}:${metricKey}`,
+      adjustment: -numericValue,
+      adminAuth: req.auth,
       ip: String(req.ip || req.headers["x-forwarded-for"] || ""),
-      user_agent: String(req.headers["user-agent"] || ""),
-      metadata: { target_user_id: userId, metric_key: metricKey, adjustment: Math.round(adjustment), request_id: requestId },
+      userAgent: String(req.headers["user-agent"] || ""),
     });
-    return res.status(201).json({
-      ok: true,
-      idempotent: false,
-      metric_key: metricKey,
-      previous_value: beforeValue,
-      adjustment: Math.round(adjustment),
-      final_value: finalValue,
-    });
+    adjustments.push(result);
   }
 
-  const cycleKey = metricConfig.cycleScoped ? String((await buildGamificationState()).cycle?.cycle_key || "") : "";
-  if (metricConfig.cycleScoped && !cycleKey) {
-    return res.status(400).json({ error: "Não há ciclo semanal ativo para ajustar esta métrica." });
+  await appendAdminAudit({
+    domain: "user_metric_reset",
+    action: "reset_metrics",
+    targetKey: userId,
+    beforeData: snapshot.metrics,
+    afterData: Object.fromEntries(Object.keys(snapshot.metrics).map((key) => [key, 0])),
+    metadata: {
+      user_id: userId,
+      request_id: requestId,
+      reason,
+      snapshot_cycle_key: snapshot.cycle_key,
+      restored: false,
+    },
+    adminUserId: req.auth.sub,
+    adminEmail: req.auth.email,
+  });
+
+  return res.status(201).json({
+    ok: true,
+    user_id: userId,
+    reset_count: adjustments.length,
+    snapshot: snapshot.metrics,
+  });
+});
+
+router.post("/admin/users/:id/restore-last-reset", requireAuth, requireAdmin, async (req, res) => {
+  const userId = String(req.params.id || "").trim();
+  const requestId = String(req.body?.requestId || "").trim();
+  const reason = String(req.body?.reason || "").trim() || "Restauração administrativa do usuário";
+
+  if (!userId || !requestId) {
+    return res.status(400).json({ error: "Envie userId e requestId válidos." });
   }
 
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const existing = await client.query(
-      `SELECT *
-         FROM user_metric_ledger
-        WHERE user_id = $1
-          AND metric_key = $2
-          AND cycle_key = $3
-          AND source_type = 'admin_adjustment'
-          AND source_ref = $4
-        LIMIT 1`,
-      [userId, metricKey, cycleKey, requestId],
-    );
-    const currentBalance = await client.query(
-      `SELECT *
-         FROM user_metric_balances
-        WHERE user_id = $1
-          AND metric_key = $2
-          AND cycle_key = $3
-        FOR UPDATE`,
-      [userId, metricKey, cycleKey],
-    );
-    const beforeValue = Number(currentBalance.rows[0]?.amount || 0);
-    const roundedAdjustment = Math.round(adjustment);
-    const wasIdempotent = Boolean(existing.rows[0]);
-    if (!existing.rows[0]) {
-      await upsertLedgerEntry(client, {
-        userId,
-        metricKey,
-        cycleKey,
-        amount: roundedAdjustment,
-        sourceType: "admin_adjustment",
-        sourceRef: requestId,
-        occurredAt: new Date().toISOString(),
-        metadata: {
-          reason,
-          admin_user_id: req.auth.sub,
-          admin_email: req.auth.email,
-        },
-      });
-      await setBalance(client, {
-        userId,
-        metricKey,
-        cycleKey,
-        amount: beforeValue + roundedAdjustment,
-        metadata: {
-          last_adjustment_reason: reason,
-          adjusted_by: req.auth.email,
-        },
-      });
-    }
-    await client.query("COMMIT");
-    const refreshed = await pool.query(
-      `SELECT amount
-         FROM user_metric_balances
-        WHERE user_id = $1
-          AND metric_key = $2
-         AND cycle_key = $3
-        LIMIT 1`,
-      [userId, metricKey, cycleKey],
-    );
-    const finalValue = Number(refreshed.rows[0]?.amount || beforeValue);
-    if (!wasIdempotent) {
-      await appendAdminAudit({
-        domain: "user_metric_adjustment",
-        action: "adjust_metric",
-        targetKey: userId,
-        beforeData: { metric_key: metricKey, cycle_key: cycleKey, value: beforeValue },
-        afterData: { metric_key: metricKey, cycle_key: cycleKey, value: finalValue },
-        metadata: { user_id: userId, metric_key: metricKey, cycle_key: cycleKey, adjustment: roundedAdjustment, reason, request_id: requestId },
-        adminUserId: req.auth.sub,
-        adminEmail: req.auth.email,
-      });
-      await createSecurityEvent({
-        user_id: req.auth.sub,
-        type: "ADMIN_METRIC_ADJUSTED",
-        ip: String(req.ip || req.headers["x-forwarded-for"] || ""),
-        user_agent: String(req.headers["user-agent"] || ""),
-        metadata: { target_user_id: userId, metric_key: metricKey, cycle_key: cycleKey, adjustment: roundedAdjustment, request_id: requestId },
-      });
-    }
-    return res.status(existing.rows[0] ? 200 : 201).json({
-      ok: true,
-      idempotent: wasIdempotent,
-      metric_key: metricKey,
-      cycle_key: cycleKey,
-      previous_value: beforeValue,
-      adjustment: roundedAdjustment,
-      final_value: finalValue,
-    });
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
+  const resetAuditResult = await pool.query(
+    `SELECT *
+       FROM admin_config_audit_logs
+      WHERE domain = 'user_metric_reset'
+        AND action = 'reset_metrics'
+        AND target_key = $1
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [userId],
+  );
+  const resetAudit = resetAuditResult.rows[0];
+  if (!resetAudit) {
+    return res.status(404).json({ error: "Nenhum reset recente encontrado para restaurar." });
   }
+
+  if (Boolean(resetAudit.metadata?.restored)) {
+    return res.status(409).json({ error: "O último reset já foi restaurado." });
+  }
+
+  const current = await getAdminUserMetricSnapshot(userId);
+  if (!current) {
+    return res.status(404).json({ error: "Usuário não encontrado." });
+  }
+
+  const snapshot = resetAudit.before_data || {};
+  if (Number(snapshot.weekly_points || 0) !== 0 && String(resetAudit.metadata?.snapshot_cycle_key || "") !== String(current.cycle_key || "")) {
+    return res.status(400).json({ error: "O ciclo semanal mudou após o reset. Não é seguro restaurar os pontos semanais automaticamente." });
+  }
+
+  const adjustments = [];
+  for (const [metricKey, targetValue] of Object.entries(snapshot)) {
+    const delta = Number(targetValue || 0) - Number(current.metrics?.[metricKey] || 0);
+    if (!Number.isFinite(delta) || delta === 0) continue;
+    const result = await applyAdminMetricAdjustment({
+      userId,
+      metricKey,
+      reason: `${reason} (${ADMIN_ADJUSTABLE_METRICS[metricKey]?.label || metricKey})`,
+      requestId: `${requestId}:${metricKey}`,
+      adjustment: delta,
+      adminAuth: req.auth,
+      ip: String(req.ip || req.headers["x-forwarded-for"] || ""),
+      userAgent: String(req.headers["user-agent"] || ""),
+    });
+    adjustments.push(result);
+  }
+
+  await pool.query(
+    `UPDATE admin_config_audit_logs
+        SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+      WHERE id = $1`,
+    [
+      resetAudit.id,
+      JSON.stringify({
+        restored: true,
+        restored_at: new Date().toISOString(),
+        restore_request_id: requestId,
+      }),
+    ],
+  );
+
+  await appendAdminAudit({
+    domain: "user_metric_reset",
+    action: "restore_metrics",
+    targetKey: userId,
+    beforeData: current.metrics,
+    afterData: snapshot,
+    metadata: {
+      user_id: userId,
+      request_id: requestId,
+      reason,
+      restored_from_audit_id: resetAudit.id,
+      snapshot_cycle_key: resetAudit.metadata?.snapshot_cycle_key || "",
+    },
+    adminUserId: req.auth.sub,
+    adminEmail: req.auth.email,
+  });
+
+  return res.status(201).json({
+    ok: true,
+    user_id: userId,
+    restored_count: adjustments.length,
+    snapshot,
+  });
 });
 
 router.get("/leaderboards/weekly", requireAuth, async (_req, res) => {

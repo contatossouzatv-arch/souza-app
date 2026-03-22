@@ -1236,6 +1236,28 @@ export const base44 = {
       });
     },
 
+    async resetMetrics(id, payload = {}) {
+      return request(`/api/admin/users/${encodeURIComponent(id)}/reset-metrics`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          requestId: payload.requestId || createRequestId("admin-user-reset"),
+        }),
+      });
+    },
+
+    async restoreLastReset(id, payload = {}) {
+      return request(`/api/admin/users/${encodeURIComponent(id)}/restore-last-reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          requestId: payload.requestId || createRequestId("admin-user-restore"),
+        }),
+      });
+    },
+
     async recentAdjustments() {
       return request("/api/admin/users/adjustments/recent");
     },

@@ -24,7 +24,10 @@ function sanitizePublicUser(row = {}) {
     platform_id: String(row.platform_id || ""),
     profile_avatar_id: String(row.profile_avatar_id || ""),
     profile_image_mode: String(row.profile_image_mode || "avatar"),
-    profile_image_url: String(row.profile_image_url || ""),
+    profile_image_url:
+      String(row.profile_image_status || "none") === "approved" && row.id
+        ? `/api/auth/profile-image/${row.id}`
+        : String(row.profile_image_url || ""),
     profile_image_status: String(row.profile_image_status || "none"),
     account_status: String(row.account_status || "active"),
     created_date: row.created_date || null,

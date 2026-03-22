@@ -517,11 +517,59 @@ function formatBadgeRuleText(rule) {
   if (!rule) return "";
   const customDescription = String(rule.description || "").trim();
   if (customDescription) return customDescription;
-  if (rule.metric === "positionTop") {
-    return `Fique no Top ${rule.threshold} de depositantes do ciclo ativo.`;
+  const badgeId = String(rule.id || "").trim();
+  const badgeLabel = String(rule.label || "").trim();
+  const threshold = Number(rule.threshold || 0);
+  const friendlyDescriptions = {
+    "starter-install":
+      "Você já começou sua jornada no App do Souza. Continue participando para liberar conquistas cada vez mais especiais.",
+    "first-step":
+      "Dê seus primeiros passos no app e mostre que você chegou para jogar sério. Cada participação te aproxima de novas conquistas.",
+    "deposit-300":
+      "Movimente sua conta e alcance R$ 300 em depósitos aprovados para liberar este selo especial.",
+    "premium-depositor":
+      "Esse selo é para quem se destaca entre os grandes movimentadores do app. Continue evoluindo seus depósitos para conquistá-lo.",
+    top10:
+      "Entre para a elite do momento ficando entre os maiores depositantes do ciclo ativo.",
+    winner:
+      "Conquiste seu primeiro prêmio no app e desbloqueie esse selo de vencedor.",
+    winner10:
+      "Ganhe 10 prêmios e prove que você já faz parte do time dos campeões do App do Souza.",
+    "tickets-500":
+      "Acumule 500 bilhetes e mostre a força da sua jornada dentro do app.",
+    "checkin-30":
+      "Marque presença por 30 dias e transforme sua constância em uma conquista especial.",
+    "followers-50":
+      "Chegue a 50 seguidores no seu perfil e mostre que sua presença chama atenção na comunidade.",
+    "live-10":
+      "Participe de 10 lives e desbloqueie esse selo feito para quem acompanha tudo de perto.",
+    "super-fan-live":
+      "Esse selo é para quem vive as lives intensamente. Continue participando e mostre que você é fã de verdade.",
+  };
+  if (friendlyDescriptions[badgeId]) {
+    return friendlyDescriptions[badgeId];
   }
-  const metricText = BADGE_METRIC_LABEL[rule.metric] || "Metrica";
-  return `Atinga ${rule.threshold} em: ${metricText}.`;
+  if (/top\s*10/i.test(badgeLabel)) {
+    return "Fique entre os maiores destaques do ciclo e conquiste seu lugar no Top 10.";
+  }
+  if (rule.metric === "positionTop") {
+    return `Fique entre os ${threshold} maiores depositantes do ciclo ativo para liberar este selo.`;
+  }
+  const metricText = BADGE_METRIC_LABEL[rule.metric] || "essa meta";
+  const metricFriendlyText = {
+    totalParticipations: `Participe ${threshold} vezes para conquistar este selo e mostrar sua presença no app.`,
+    totalApproved: `Alcance ${threshold} em depósitos aprovados para desbloquear esta conquista.`,
+    totalWins: `Ganhe ${threshold} prêmio${threshold === 1 ? "" : "s"} para liberar este selo.`,
+    liveParticipations: `Marque presença em ${threshold} live${threshold === 1 ? "" : "s"} para conquistar este selo.`,
+    ticketCount: `Acumule ${threshold} bilhetes e avance para desbloquear esta conquista.`,
+    followerCount: `Chegue a ${threshold} seguidor${threshold === 1 ? "" : "es"} para liberar este selo especial.`,
+    checkInStreak: `Complete ${threshold} check-in${threshold === 1 ? "" : "s"} e conquiste este selo.`,
+    points: `Some ${threshold} ponto${threshold === 1 ? "" : "s"} para liberar esta conquista.`,
+  };
+  if (metricFriendlyText[rule.metric]) {
+    return metricFriendlyText[rule.metric];
+  }
+  return `Complete a meta de ${threshold} em ${metricText.toLowerCase()} para liberar este selo.`;
 }
 
 function buildBadgeGalleryFromRules(rules = [], unlockedBadges = []) {

@@ -137,6 +137,34 @@ export default function UsersAdminTab() {
     },
   });
 
+  const resetMetricsMutation = useMutation({
+    mutationFn: ({ userId, payload }) => base44.adminUsers.resetMetrics(userId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users-list"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-user-detail"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-user-history"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-gamification-overview"] });
+      toast({ title: "Dados zerados", description: "As métricas do usuário foram zeradas com backup para restauração." });
+    },
+    onError: (error) => {
+      toast({ variant: "destructive", title: "Falha ao zerar", description: error?.message || "Tente novamente." });
+    },
+  });
+
+  const restoreMetricsMutation = useMutation({
+    mutationFn: ({ userId, payload }) => base44.adminUsers.restoreLastReset(userId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users-list"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-user-detail"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-user-history"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-gamification-overview"] });
+      toast({ title: "Dados restaurados", description: "O último reset deste usuário foi restaurado." });
+    },
+    onError: (error) => {
+      toast({ variant: "destructive", title: "Falha ao restaurar", description: error?.message || "Tente novamente." });
+    },
+  });
+
   function handleCopy(text, label = "Resumo copiado") {
     navigator.clipboard.writeText(text || "").then(() => {
       toast({ title: label, description: "As informações foram copiadas para a área de transferência." });
@@ -146,6 +174,32 @@ export default function UsersAdminTab() {
   function openAdjust(user) {
     setAdjustModalUser(user);
     setAdjustForm({ metricKey: "xp_total", adjustment: "", reason: "" });
+  }
+
+  function handleResetUserMetrics(user) {
+    if (!user?.id) return;
+    if (!window.confirm(`Zerar os pontos e métricas de ${user.full_name || "este usuário"}?\n\nSerá criado um backup para permitir recuperação se você clicar errado.`)) {
+      return;
+    }
+    resetMetricsMutation.mutate({
+      userId: user.id,
+      payload: {
+        reason: "Reset administrativo manual pelo painel de usuários",
+      },
+    });
+  }
+
+  function handleRestoreUserMetrics(user) {
+    if (!user?.id) return;
+    if (!window.confirm(`Restaurar o último reset de ${user.full_name || "este usuário"}?\n\nIsso reaplica o backup salvo no último zeramento.`)) {
+      return;
+    }
+    restoreMetricsMutation.mutate({
+      userId: user.id,
+      payload: {
+        reason: "Restauração administrativa manual pelo painel de usuários",
+      },
+    });
   }
 
   const items = data?.items || [];
@@ -343,6 +397,24 @@ export default function UsersAdminTab() {
                   <Button type="button" variant="outline" onClick={() => handleCopy(userDetail.user.summary_text, "Resumo do usuário copiado")} className="border-slate-700 bg-slate-950 text-white">
                     <Copy className="mr-2 h-4 w-4" />
                     Copiar resumo do usuário
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleRestoreUserMetrics(userDetail.user)}
+                    disabled={restoreMetricsMutation.isPending || resetMetricsMutation.isPending}
+                    className="border-emerald-700 bg-emerald-950/40 text-emerald-100 hover:bg-emerald-900/60"
+                  >
+                    {restoreMetricsMutation.isPending ? "Restaurando..." : "Recuperar dados"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleResetUserMetrics(userDetail.user)}
+                    disabled={resetMetricsMutation.isPending || restoreMetricsMutation.isPending}
+                    className="border-amber-700 bg-amber-950/40 text-amber-100 hover:bg-amber-900/60"
+                  >
+                    {resetMetricsMutation.isPending ? "Zerando..." : "Zerar dados"}
                   </Button>
                   <Button type="button" onClick={() => openAdjust(userDetail.user)} className="bg-cyan-500 text-slate-950 hover:bg-cyan-400">
                     Ajustar métrica

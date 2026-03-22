@@ -22,8 +22,10 @@ import {
   findUserRowByEmail,
   listUsersByProfileImageStatus,
   markPasswordResetTokenUsed,
+  getUserProfileImages,
   revokeRefreshTokenById,
   revokeRefreshTokensByUserId,
+  upsertUserProfileImages,
   updateUserById,
   findUserByGoogleId,
   updateUserGoogleLink,
@@ -63,14 +65,7 @@ const forgotRateLimiter = rateLimit({
 });
 
 const profileImageUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, profilePendingDir),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname || "").toLowerCase() || ".jpg";
-      const safeExt = [".jpg", ".jpeg", ".png", ".webp"].includes(ext) ? ext : ".jpg";
-      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${safeExt}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: Math.max(1, env.profileImageMaxSizeMb) * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = ["image/jpeg", "image/png", "image/webp"];
@@ -166,9 +161,9 @@ function verifyTotp(secret, otp) {
   return false;
 }
 
-function buildFileUrl(req, filename) {
+function buildProfileImageUrl(req, userId) {
   const configuredBase = String(env.uploadsBaseUrl || "").trim().replace(/\/$/, "");
-  const relativePath = `/uploads/profile/${filename}`;
+  const relativePath = `/api/auth/profile-image/${userId}`;
 
   // In local/dev, storing relative paths avoids "localhost" URLs that break on mobile.
   if (!configuredBase) {
@@ -285,7 +280,7 @@ async function issueSession(req, user, familyId = null) {
   return { token, refreshToken, user };
 }
 
-router.post("/register", async (req, res) => {
+router.post("/register", loginRateLimiter, async (req, res) => {
   const { email, password, full_name, nick, phone } = req.body || {};
   const normalizedEmail = sanitizeEmail(email);
   const normalizedName = String(full_name || "").trim();
@@ -378,7 +373,7 @@ router.post("/login", loginRateLimiter, async (req, res) => {
   return res.json(session);
 });
 
-router.post("/google", async (req, res) => {
+router.post("/google", loginRateLimiter, async (req, res) => {
   const { credential, otp } = req.body || {};
   if (!credential) {
     return res.status(400).json({ error: "credential is required" });
@@ -810,20 +805,33 @@ router.post(
     };
 
     if (moderation.status === "approved") {
-      const publicFilename = `profile-${req.auth.sub}-${Date.now()}${path.extname(req.file.filename)}`;
-      const publicPath = path.resolve(profilePublicDir, publicFilename);
-      await fs.promises.rename(req.file.path, publicPath);
-
       removePublicFileByUrl(user.profile_image_url);
-      updatePayload.profile_image_url = buildFileUrl(req, publicFilename);
+      await upsertUserProfileImages(req.auth.sub, {
+        approved_mime_type: req.file.mimetype,
+        approved_file_name: req.file.originalname || `profile-${req.auth.sub}`,
+        approved_data: req.file.buffer,
+        pending_mime_type: null,
+        pending_file_name: null,
+        pending_data: null,
+      });
+      updatePayload.profile_image_url = buildProfileImageUrl(req, req.auth.sub);
       updatePayload.profile_image_reject_reason = "";
     } else if (moderation.status === "rejected") {
-      await fs.promises.unlink(req.file.path).catch(() => {});
+      await upsertUserProfileImages(req.auth.sub, {
+        pending_mime_type: null,
+        pending_file_name: null,
+        pending_data: null,
+      });
       updatePayload.profile_image_url = "";
     } else {
       // manual_review: keep file private and hide from public profile until approval
+      await upsertUserProfileImages(req.auth.sub, {
+        pending_mime_type: req.file.mimetype,
+        pending_file_name: req.file.originalname || `pending-${req.auth.sub}`,
+        pending_data: req.file.buffer,
+      });
       updatePayload.profile_image_url = "";
-      updatePayload.profile_image_pending_name = req.file.filename;
+      updatePayload.profile_image_pending_name = req.file.originalname || `pending-${req.auth.sub}`;
     }
 
     const updated = await updateUserById(req.auth.sub, updatePayload);
@@ -847,6 +855,11 @@ router.delete("/me/profile-image/pending", requireAuth, async (req, res) => {
     const pendingPath = path.resolve(profilePendingDir, user.profile_image_pending_name);
     await fs.promises.unlink(pendingPath).catch(() => {});
   }
+  await upsertUserProfileImages(req.auth.sub, {
+    pending_mime_type: null,
+    pending_file_name: null,
+    pending_data: null,
+  });
 
   const updated = await updateUserById(req.auth.sub, {
     profile_image_status: "none",
@@ -862,6 +875,13 @@ router.delete("/me/profile-image/pending", requireAuth, async (req, res) => {
 router.get("/me/profile-image/private", requireAuth, async (req, res) => {
   const user = await findUserPrivateById(req.auth.sub);
   if (!user) return res.status(401).json({ error: "User not found" });
+
+  const profileImages = await getUserProfileImages(req.auth.sub);
+  if (profileImages?.pending_data) {
+    res.setHeader("Content-Type", profileImages.pending_mime_type || "image/jpeg");
+    res.setHeader("Cache-Control", "private, no-store");
+    return res.send(profileImages.pending_data);
+  }
 
   if (!canAccessPendingFile(user.profile_image_pending_name)) {
     return res.status(404).json({ error: "Imagem privada nao encontrada." });
@@ -897,9 +917,23 @@ router.get("/admin/profile-images/:userId/preview", requireAuth, requireAdmin, a
   const user = await findUserPrivateById(req.params.userId);
   if (!user) return res.status(404).json({ error: "Usuario nao encontrado." });
 
+  const profileImages = await getUserProfileImages(user.id);
+
+  if (user.profile_image_status === "manual_review" && profileImages?.pending_data) {
+    res.setHeader("Content-Type", profileImages.pending_mime_type || "image/jpeg");
+    res.setHeader("Cache-Control", "private, no-store");
+    return res.send(profileImages.pending_data);
+  }
+
   if (user.profile_image_status === "manual_review" && canAccessPendingFile(user.profile_image_pending_name)) {
     const pendingPath = path.resolve(profilePendingDir, user.profile_image_pending_name);
     return res.sendFile(pendingPath);
+  }
+
+  if (user.profile_image_status === "approved" && profileImages?.approved_data) {
+    res.setHeader("Content-Type", profileImages.approved_mime_type || "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    return res.send(profileImages.approved_data);
   }
 
   if (user.profile_image_status === "approved" && user.profile_image_url) {
@@ -927,22 +961,35 @@ router.post("/admin/profile-images/:userId/approve", requireAuth, requireAdmin, 
     return res.status(400).json({ error: "Apenas fotos em analise podem ser aprovadas." });
   }
 
-  if (!canAccessPendingFile(user.profile_image_pending_name)) {
-    return res.status(404).json({ error: "Arquivo pendente nao encontrado." });
+  const profileImages = await getUserProfileImages(user.id);
+  if (profileImages?.pending_data) {
+    removePublicFileByUrl(user.profile_image_url);
+    await upsertUserProfileImages(user.id, {
+      approved_mime_type: profileImages.pending_mime_type || "image/jpeg",
+      approved_file_name: profileImages.pending_file_name || `profile-${user.id}`,
+      approved_data: profileImages.pending_data,
+      pending_mime_type: null,
+      pending_file_name: null,
+      pending_data: null,
+    });
+  } else {
+    if (!canAccessPendingFile(user.profile_image_pending_name)) {
+      return res.status(404).json({ error: "Arquivo pendente nao encontrado." });
+    }
+
+    const ext = path.extname(user.profile_image_pending_name || "").toLowerCase() || ".jpg";
+    const safeExt = [".jpg", ".jpeg", ".png", ".webp"].includes(ext) ? ext : ".jpg";
+    const publicFilename = `profile-${user.id}-${Date.now()}${safeExt}`;
+    const sourcePath = path.resolve(profilePendingDir, user.profile_image_pending_name);
+    const targetPath = path.resolve(profilePublicDir, publicFilename);
+
+    await fs.promises.rename(sourcePath, targetPath);
   }
-
-  const ext = path.extname(user.profile_image_pending_name || "").toLowerCase() || ".jpg";
-  const safeExt = [".jpg", ".jpeg", ".png", ".webp"].includes(ext) ? ext : ".jpg";
-  const publicFilename = `profile-${user.id}-${Date.now()}${safeExt}`;
-  const sourcePath = path.resolve(profilePendingDir, user.profile_image_pending_name);
-  const targetPath = path.resolve(profilePublicDir, publicFilename);
-
-  await fs.promises.rename(sourcePath, targetPath);
   removePublicFileByUrl(user.profile_image_url);
 
   const updated = await updateUserById(user.id, {
     profile_image_status: "approved",
-    profile_image_url: buildFileUrl(req, publicFilename),
+    profile_image_url: buildProfileImageUrl(req, user.id),
     profile_image_pending_name: "",
     profile_image_reject_reason: "",
     profile_image_mode: "photo",
@@ -961,6 +1008,11 @@ router.post("/admin/profile-images/:userId/reject", requireAuth, requireAdmin, a
     const pendingPath = path.resolve(profilePendingDir, user.profile_image_pending_name);
     await fs.promises.unlink(pendingPath).catch(() => {});
   }
+  await upsertUserProfileImages(user.id, {
+    pending_mime_type: null,
+    pending_file_name: null,
+    pending_data: null,
+  });
 
   const updated = await updateUserById(user.id, {
     profile_image_status: "rejected",
@@ -970,6 +1022,36 @@ router.post("/admin/profile-images/:userId/reject", requireAuth, requireAdmin, a
   });
 
   return res.json({ ok: true, user: updated });
+});
+
+router.get("/profile-image/:userId", async (req, res) => {
+  const user = await findUserPrivateById(req.params.userId);
+  if (!user || user.profile_image_status !== "approved") {
+    return res.status(404).json({ error: "Imagem nao encontrada." });
+  }
+
+  const profileImages = await getUserProfileImages(user.id);
+  if (profileImages?.approved_data) {
+    res.setHeader("Content-Type", profileImages.approved_mime_type || "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    return res.send(profileImages.approved_data);
+  }
+
+  if (user.profile_image_url) {
+    const marker = "/uploads/profile/";
+    const idx = user.profile_image_url.indexOf(marker);
+    if (idx !== -1) {
+      const fileName = user.profile_image_url.slice(idx + marker.length);
+      if (fileName && !fileName.includes("/") && !fileName.includes("\\")) {
+        const filePath = path.resolve(profilePublicDir, fileName);
+        if (fs.existsSync(filePath)) {
+          return res.sendFile(filePath);
+        }
+      }
+    }
+  }
+
+  return res.status(404).json({ error: "Imagem nao encontrada." });
 });
 
 router.patch("/me", requireAuth, async (req, res) => {

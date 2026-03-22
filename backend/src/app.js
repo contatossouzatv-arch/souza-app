@@ -34,7 +34,7 @@ function buildCors() {
   });
 }
 
-function buildRateLimiter() {
+function buildRateLimiter({ windowMs, limit, prefix = "ratelimit:" } = {}) {
   const isProd = env.nodeEnv === "production";
 
   if (!isProd) {
@@ -44,8 +44,8 @@ function buildRateLimiter() {
   }
 
   const baseConfig = {
-    windowMs: 60 * 1000,
-    limit: 120,
+    windowMs: windowMs ?? Math.max(1, env.rateLimitApiWindowMin) * 60 * 1000,
+    limit: limit ?? Math.max(1, env.rateLimitApiMax),
     standardHeaders: "draft-7",
     legacyHeaders: false,
     message: { error: "Too many requests" },
@@ -64,7 +64,7 @@ function buildRateLimiter() {
     ...baseConfig,
     store: new RedisStore({
       sendCommand: (...args) => redisClient.call(...args),
-      prefix: "ratelimit:",
+      prefix,
     }),
   });
 }
@@ -85,7 +85,27 @@ export function createApp(io) {
   app.options(/.*/, buildCors());
   app.use(express.json({ limit: "3mb" }));
   app.use(express.urlencoded({ extended: true }));
-  app.use(buildRateLimiter());
+
+  const apiRateLimiter = buildRateLimiter({
+    windowMs: Math.max(1, env.rateLimitApiWindowMin) * 60 * 1000,
+    limit: Math.max(1, env.rateLimitApiMax),
+    prefix: "ratelimit:api:",
+  });
+  const authApiRateLimiter = buildRateLimiter({
+    windowMs: Math.max(1, env.rateLimitAuthApiWindowMin) * 60 * 1000,
+    limit: Math.max(1, env.rateLimitAuthApiMax),
+    prefix: "ratelimit:auth:",
+  });
+  const uploadRateLimiter = buildRateLimiter({
+    windowMs: Math.max(1, env.rateLimitUploadWindowMin) * 60 * 1000,
+    limit: Math.max(1, env.rateLimitUploadMax),
+    prefix: "ratelimit:uploads:",
+  });
+  const navigationRateLimiter = buildRateLimiter({
+    windowMs: Math.max(1, env.rateLimitNavigationWindowMin) * 60 * 1000,
+    limit: Math.max(1, env.rateLimitNavigationMax),
+    prefix: "ratelimit:navigation:",
+  });
 
   app.get("/", (_req, res) => {
     res.type("text/plain").send("API SOUZA ONLINE");
@@ -102,7 +122,8 @@ export function createApp(io) {
 
   app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
-  app.use("/api/auth", authRoutes);
+  app.use("/api/auth", authApiRateLimiter, authRoutes);
+  app.use("/api", apiRateLimiter);
   app.use("/api", adminEventsRoutes);
   app.use("/api/daily-chest", dailyChestRoutes);
   app.use("/api", depositsRoutes);
@@ -111,9 +132,9 @@ export function createApp(io) {
   app.use("/api", socialRoutes);
   app.use("/api/points", pointsRoutes);
   app.use("/api/entities", createEntitiesRouter(io));
-  app.use("/api/uploads", uploadsRoutes);
+  app.use("/api/uploads", uploadRateLimiter, uploadsRoutes);
 
-  app.post("/api/logs/navigation", async (req, res) => {
+  app.post("/api/logs/navigation", navigationRateLimiter, async (req, res) => {
     try {
       await appendNavigationLog({
         pageName: req.body?.pageName || "unknown",
