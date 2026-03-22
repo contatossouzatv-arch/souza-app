@@ -17,6 +17,11 @@ export default function PlatformMigrationModal({ user, onVisibilityChange, onCon
     queryKey: ["current-platform-modal"],
     queryFn: () => base44.entities.CurrentPlatform.list(),
   });
+  const { data: platformHistory = [] } = useQuery({
+    queryKey: ["platform-history", user?.id],
+    queryFn: () => base44.entities.PlatformHistory.filter({ user_id: user.id }, "-created_date"),
+    enabled: Boolean(user?.id),
+  });
 
   const currentPlatform = platforms[0] || null;
 
@@ -24,13 +29,25 @@ export default function PlatformMigrationModal({ user, onVisibilityChange, onCon
     if (!user || !currentPlatform || !currentPlatform.active) return false;
     if (!user.onboarding_completed) return false;
 
+    const normalizedCurrentPlatformName = String(currentPlatform.name || "").trim().toLowerCase();
+    const normalizedUserPlatformId = String(user.platform_id || "").trim().toLowerCase();
+    const alreadyHasSamePlatformRegistered = platformHistory.some((entry) => {
+      const entryName = String(entry.platform_name || "").trim().toLowerCase();
+      const entryId = String(entry.platform_id || "").trim().toLowerCase();
+      if (!entryName || !entryId) return false;
+      if (entryName !== normalizedCurrentPlatformName) return false;
+      return entryId === normalizedUserPlatformId || Boolean(normalizedUserPlatformId && entryId);
+    });
+
+    if (alreadyHasSamePlatformRegistered) return false;
+
     const localConfirmed = localStorage.getItem(`platform_confirmed_${currentPlatform.platform_id}`);
     if (localConfirmed === "true") return false;
 
     if (user.confirmed_platform_id === currentPlatform.platform_id) return false;
 
     return true;
-  }, [user, currentPlatform]);
+  }, [user, currentPlatform, platformHistory]);
 
   useEffect(() => {
     if (onVisibilityChange) onVisibilityChange(shouldShowModal);

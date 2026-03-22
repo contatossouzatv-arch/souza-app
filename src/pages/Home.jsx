@@ -266,9 +266,14 @@ export default function Home() {
             <div className="rounded-xl bg-cyan-500/15 p-2">
               <Users className="h-5 w-5 text-cyan-300" />
             </div>
-            <div className="min-w-0">
-              <h2 className="text-base font-bold text-white">Últimos usuários cadastrados</h2>
-              <p className="text-sm leading-snug text-slate-400">Perfis reais do app para a galera descobrir.</p>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-bold text-white">Últimos usuários cadastrados</h2>
+                <span className="inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200">
+                  {users.length} no app
+                </span>
+              </div>
+              <p className="mt-1 text-sm leading-snug text-slate-400">Perfis reais do app para a galera descobrir.</p>
             </div>
           </div>
           <Button
