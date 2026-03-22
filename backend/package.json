@@ -5,6 +5,7 @@
     "type":  "module",
     "scripts":  {
                     "dev":  "node --watch src/server.js",
+                    "build":  "node -e \"console.log('Backend build step not required')\"",
                     "start":  "node src/server.js",
                     "start:prod":  "node src/server.js",
                     "bootstrap:admin":  "node scripts/bootstrap-admin.js"
