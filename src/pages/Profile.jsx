@@ -852,6 +852,13 @@ export default function Profile() {
     const rawValue = achievementRulesSettings.find((item) => item.key === PROFILE_ENGAGEMENT_GUIDE_KEY)?.value || "";
     return normalizeEngagementGuideConfig(parseJsonSetting(rawValue, DEFAULT_PROFILE_ENGAGEMENT_GUIDE_CONFIG));
   }, [achievementRulesSettings]);
+  const avatarSrcById = useMemo(() => {
+    const map = {};
+    avatarOptions.forEach((item) => {
+      map[item.id] = item.src;
+    });
+    return map;
+  }, []);
 
   const { data: discoverProfilesData } = useQuery({
     queryKey: ["profile-discover-profiles", user?.id],
@@ -1426,13 +1433,6 @@ export default function Profile() {
     avatarOptions.find((item) => item.id === profilePrefs.avatarId) ||
     avatarOptions.find((item) => item.id === DEFAULT_AVATAR_ID) ||
     avatarOptions[0];
-  const avatarSrcById = useMemo(() => {
-    const map = {};
-    avatarOptions.forEach((item) => {
-      map[item.id] = item.src;
-    });
-    return map;
-  }, []);
   const profileImageSrc =
     user?.profile_image_status === "manual_review" || user?.profile_image_status === "pending"
       ? privatePhotoPreview || selectedAvatar?.src
