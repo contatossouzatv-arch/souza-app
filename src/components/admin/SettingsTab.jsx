@@ -6,31 +6,65 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/use-toast";
-import { Save } from "lucide-react";
+import { Plus, Save, Trash2 } from "lucide-react";
 
 const DEFAULT_SETTINGS = {
   platform_link: "",
-  deposit_check_link: "",
-  deposit_check_name: "",
-  deposit_check_link_2: "",
-  deposit_check_name_2: "",
   live_link: "",
   cashback_redeem_link: "",
 };
 
 const DESCRIPTIONS = {
   platform_link: "Link de cadastro da plataforma",
-  deposit_check_link: "Link para conferir depositos",
-  deposit_check_name: "Nome da plataforma 1 para conferencia",
-  deposit_check_link_2: "Link para conferir depositos da plataforma 2",
-  deposit_check_name_2: "Nome da plataforma 2 para conferencia",
   live_link: "Link da live ao vivo",
   cashback_redeem_link: "Link do WhatsApp para resgate",
 };
 
+function getPlatformSettingKey(base, index) {
+  return index === 0 ? base : `${base}_${index + 1}`;
+}
+
+function getPlatformDescription(base, index) {
+  const label = index + 1;
+  if (base === "deposit_check_link") return `Link para conferir depositos da plataforma ${label}`;
+  if (base === "deposit_check_name") return `Nome da plataforma ${label} para conferencia`;
+  return "";
+}
+
+function normalizePlatformsFromSettings(appSettings = []) {
+  const map = new Map();
+
+  appSettings.forEach((item) => {
+    const key = String(item?.key || "").trim();
+    let match = key.match(/^deposit_check_link(?:_(\d+))?$/);
+    if (match) {
+      const index = match[1] ? Math.max(0, Number(match[1]) - 1) : 0;
+      const current = map.get(index) || { name: "", link: "" };
+      current.link = item?.value || "";
+      map.set(index, current);
+      return;
+    }
+
+    match = key.match(/^deposit_check_name(?:_(\d+))?$/);
+    if (match) {
+      const index = match[1] ? Math.max(0, Number(match[1]) - 1) : 0;
+      const current = map.get(index) || { name: "", link: "" };
+      current.name = item?.value || "";
+      map.set(index, current);
+    }
+  });
+
+  const items = Array.from(map.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([, value]) => ({ name: value.name || "", link: value.link || "" }));
+
+  return items.length ? items : [{ name: "", link: "" }, { name: "", link: "" }];
+}
+
 export default function SettingsTab() {
   const queryClient = useQueryClient();
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [depositPlatforms, setDepositPlatforms] = useState([{ name: "", link: "" }, { name: "", link: "" }]);
 
   const { data: appSettings = [] } = useQuery({
     queryKey: ["app-settings"],
@@ -45,6 +79,7 @@ export default function SettingsTab() {
       }
     });
     setSettings(loaded);
+    setDepositPlatforms(normalizePlatformsFromSettings(appSettings));
   }, [appSettings]);
 
   const saveMutation = useMutation({
@@ -60,6 +95,31 @@ export default function SettingsTab() {
             description: DESCRIPTIONS[key] || "",
           });
         }
+      }
+
+      const platformKeysToDelete = appSettings.filter((entry) => /^deposit_check_(link|name)(?:_\d+)?$/.test(String(entry.key || "")));
+      for (const entry of platformKeysToDelete) {
+        await base44.entities.AppSettings.delete(entry.id);
+      }
+
+      for (const [index, platform] of depositPlatforms.entries()) {
+        const normalizedName = String(platform.name || "").trim();
+        const normalizedLink = String(platform.link || "").trim();
+        if (!normalizedName && !normalizedLink) continue;
+
+        const nameKey = getPlatformSettingKey("deposit_check_name", index);
+        const linkKey = getPlatformSettingKey("deposit_check_link", index);
+
+        await base44.entities.AppSettings.create({
+          key: nameKey,
+          value: normalizedName,
+          description: getPlatformDescription("deposit_check_name", index),
+        });
+        await base44.entities.AppSettings.create({
+          key: linkKey,
+          value: normalizedLink,
+          description: getPlatformDescription("deposit_check_link", index),
+        });
       }
     },
     onSuccess: () => {
@@ -96,55 +156,66 @@ export default function SettingsTab() {
         </div>
 
         <div>
-          <Label htmlFor="deposit_check_link" className="text-purple-200">
-            Link para Conferir Depósitos
-          </Label>
-          <Input
-            id="deposit_check_link"
-            value={settings.deposit_check_link}
-            onChange={(e) => setSettings({ ...settings, deposit_check_link: e.target.value })}
-            placeholder="https://..."
-            className="border-purple-700 bg-purple-900/50 text-white"
-          />
-        </div>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <Label className="text-purple-200">Plataformas para Conferir Depósitos</Label>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDepositPlatforms((prev) => [...prev, { name: "", link: "" }])}
+              className="border-purple-700 bg-purple-950/60 text-white hover:bg-purple-900"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Adicionar novo
+            </Button>
+          </div>
 
-        <div>
-          <Label htmlFor="deposit_check_name" className="text-purple-200">
-            Nome da Plataforma 1
-          </Label>
-          <Input
-            id="deposit_check_name"
-            value={settings.deposit_check_name}
-            onChange={(e) => setSettings({ ...settings, deposit_check_name: e.target.value })}
-            placeholder="Ex: Plataforma A"
-            className="border-purple-700 bg-purple-900/50 text-white"
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="deposit_check_link_2" className="text-purple-200">
-            Link para Conferir Depósitos (Plataforma 2)
-          </Label>
-          <Input
-            id="deposit_check_link_2"
-            value={settings.deposit_check_link_2}
-            onChange={(e) => setSettings({ ...settings, deposit_check_link_2: e.target.value })}
-            placeholder="https://..."
-            className="border-purple-700 bg-purple-900/50 text-white"
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="deposit_check_name_2" className="text-purple-200">
-            Nome da Plataforma 2
-          </Label>
-          <Input
-            id="deposit_check_name_2"
-            value={settings.deposit_check_name_2}
-            onChange={(e) => setSettings({ ...settings, deposit_check_name_2: e.target.value })}
-            placeholder="Ex: Plataforma B"
-            className="border-purple-700 bg-purple-900/50 text-white"
-          />
+          <div className="space-y-3">
+            {depositPlatforms.map((platform, index) => (
+              <div key={`deposit-platform-${index}`} className="rounded-2xl border border-purple-800/50 bg-purple-950/30 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-white">Plataforma {index + 1}</p>
+                  {depositPlatforms.length > 1 ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setDepositPlatforms((prev) => prev.filter((_, itemIndex) => itemIndex !== index))}
+                      className="h-8 px-2 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  ) : null}
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-purple-200">Nome da Plataforma {index + 1}</Label>
+                    <Input
+                      value={platform.name}
+                      onChange={(e) =>
+                        setDepositPlatforms((prev) =>
+                          prev.map((item, itemIndex) => (itemIndex === index ? { ...item, name: e.target.value } : item))
+                        )
+                      }
+                      placeholder={`Ex: Plataforma ${index + 1}`}
+                      className="border-purple-700 bg-purple-900/50 text-white"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-purple-200">Link para Conferir Depósitos</Label>
+                    <Input
+                      value={platform.link}
+                      onChange={(e) =>
+                        setDepositPlatforms((prev) =>
+                          prev.map((item, itemIndex) => (itemIndex === index ? { ...item, link: e.target.value } : item))
+                        )
+                      }
+                      placeholder="https://..."
+                      className="border-purple-700 bg-purple-900/50 text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div>

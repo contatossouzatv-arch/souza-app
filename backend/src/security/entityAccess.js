@@ -72,6 +72,7 @@ const PUBLIC_APP_SETTINGS_KEYS = new Set([
   "daily_chest_xp_per_open",
   "deposit_check_link",
   "deposit_check_link_2",
+  "deposit_check_link_3",
   "depositant_draw_active",
   "deposits_enabled",
   "live_link",
@@ -90,6 +91,7 @@ function isPublicAppSettingKey(key) {
   if (!normalized) return false;
   if (PUBLIC_APP_SETTINGS_KEYS.has(normalized)) return true;
   return (
+    normalized.startsWith("deposit_check_link_") ||
     normalized.startsWith("banner_text_") ||
     normalized.startsWith("banner_link_") ||
     normalized.startsWith("instant_raffle_")

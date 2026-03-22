@@ -4,7 +4,7 @@ import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { loadProfilePrefs } from "@/lib/profilePrefs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BellRing, Heart, Megaphone, Trophy } from "lucide-react";
+import { BellRing, Heart, Megaphone, Trophy, Users } from "lucide-react";
 import { format } from "date-fns";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import RichTextMessage from "@/components/RichTextMessage";
@@ -62,6 +62,12 @@ export default function Home() {
     staleTime: 60000,
   });
 
+  const { data: recentProfilesData } = useQuery({
+    queryKey: ["inicio-recent-profiles"],
+    queryFn: () => base44.social.discover({ limit: 10, offset: 0 }),
+    staleTime: 60000,
+  });
+
   useEffect(() => {
     setLikes(getStoredLikes());
   }, []);
@@ -103,6 +109,21 @@ export default function Home() {
       avatarUrl: creatorPhoto || avatarFromSelection || defaultAvatar,
     };
   }, [users, userPrefsById]);
+
+  const recentProfiles = useMemo(() => {
+    return (recentProfilesData?.items || []).map((profile) => {
+      const avatarUrl =
+        profile.profile_image_mode === "photo" && profile.profile_image_url
+          ? resolveAssetUrl(profile.profile_image_url)
+          : avatarById[profile.profile_avatar_id] || defaultAvatar;
+      return {
+        id: profile.id,
+        name: profile.nick || "Usuário",
+        handle: profile.handle || "",
+        avatarUrl,
+      };
+    });
+  }, [recentProfilesData?.items]);
 
   const winnerPosts = useMemo(() => {
     return (winnerFeed?.items || [])
@@ -209,6 +230,14 @@ export default function Home() {
     navigate(createPageUrl("Profile"));
   };
 
+  const openPublicProfile = (profileId) => {
+    navigate(`/profile?user=${encodeURIComponent(profileId)}`);
+  };
+
+  const openProfilesGallery = () => {
+    navigate(createPageUrl("ProfilesGallery"));
+  };
+
   if (isLoading || winnersLoading) {
     return (
       <div className="space-y-3">
@@ -229,6 +258,53 @@ export default function Home() {
             <p className="text-sm text-slate-400">Avisos e posts para a galera acompanhar e interagir.</p>
           </div>
         </div>
+      </Card>
+
+      <Card className="border-slate-800 bg-slate-900/70 p-4">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-cyan-500/15 p-2">
+              <Users className="h-5 w-5 text-cyan-300" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white">Últimos usuários cadastrados</h2>
+              <p className="text-sm text-slate-400">Perfis reais do app para a galera descobrir.</p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={openProfilesGallery}
+            className="border-slate-700 bg-slate-950 text-white hover:bg-slate-800"
+          >
+            Ver galeria
+          </Button>
+        </div>
+
+        {recentProfiles.length ? (
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {recentProfiles.map((profile) => (
+              <button
+                key={profile.id}
+                type="button"
+                onClick={() => openPublicProfile(profile.id)}
+                className="w-[104px] shrink-0 rounded-2xl border border-slate-800 bg-slate-950/80 p-3 text-center transition hover:border-cyan-400/50 hover:bg-slate-900"
+              >
+                <img
+                  src={profile.avatarUrl}
+                  alt={profile.name}
+                  className="mx-auto h-16 w-16 rounded-full border border-slate-700 object-cover"
+                />
+                <p className="mt-2 truncate text-sm font-semibold text-white">{profile.name}</p>
+                <p className="truncate text-[11px] text-slate-400">@{profile.handle || "usuario"}</p>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/60 p-4 text-sm text-slate-400">
+            Os próximos perfis cadastrados vão aparecer aqui.
+          </div>
+        )}
       </Card>
 
       {feedItems.length === 0 ? (

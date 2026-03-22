@@ -1020,6 +1020,13 @@ export const base44 = {
       return request("/api/social/followers/my");
     },
 
+    async discover({ limit = 12, offset = 0 } = {}) {
+      const params = new URLSearchParams();
+      params.set("limit", String(limit));
+      params.set("offset", String(offset));
+      return request(`/api/social/discover?${params.toString()}`);
+    },
+
     async follow(targetUserId, requestId) {
       return request(`/api/social/follow/${encodeURIComponent(targetUserId)}`, {
         method: "POST",
@@ -1057,6 +1064,14 @@ export const base44 = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestId: requestId || createRequestId("social-auto-follow-creator") }),
+      });
+    },
+
+    async autoLikeCreator(requestId) {
+      return request("/api/social/auto-like-creator", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: requestId || createRequestId("social-auto-like-creator") }),
       });
     },
   },

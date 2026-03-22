@@ -32,9 +32,14 @@ function formatPhone(value) {
     p2 ? `(${ddd}) ${p1}-${p2}` : p1 ? `(${ddd}) ${p1}` : `(${ddd}`
   );
 }
-async function syncAutoFollowCreatorForCurrentUser() {
+async function syncAutoCreatorEngagementForCurrentUser() {
   try {
     await base44.social.autoFollowCreator();
+  } catch {
+    // ignore
+  }
+  try {
+    await base44.social.autoLikeCreator();
   } catch {
     // ignore
   }
@@ -90,7 +95,7 @@ export default function Login() {
             setLoading(true);
             setError("");
             await base44.auth.loginWithGoogle(response.credential);
-            await syncAutoFollowCreatorForCurrentUser();
+            await syncAutoCreatorEngagementForCurrentUser();
             await checkAppState();
             navigate("/");
           } catch (err) {
@@ -247,7 +252,7 @@ export default function Login() {
         nick: registerData.nick,
         phone: registerData.phone,
       });
-      await syncAutoFollowCreatorForCurrentUser();
+      await syncAutoCreatorEngagementForCurrentUser();
       await checkAppState();
       navigate("/");
     } catch (err) {

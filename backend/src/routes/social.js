@@ -130,6 +130,18 @@ function mapSocialProfile(row) {
   };
 }
 
+function normalizeListLimit(value, fallback = 12, max = 60) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(max, Math.floor(parsed));
+}
+
+function normalizeListOffset(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.floor(parsed);
+}
+
 async function findEngagementEventByRequestId(client, requestId) {
   if (!requestId) return null;
   const result = await client.query(
@@ -245,6 +257,48 @@ async function listRelationProfiles(client, type, userId) {
 
   const result = await client.query(relationSql, [userId]);
   return result.rows.map(mapSocialProfile);
+}
+
+async function listDiscoverProfiles(client, { limit = 12, offset = 0 } = {}) {
+  const queryLimit = Math.max(1, Number(limit || 12));
+  const queryOffset = Math.max(0, Number(offset || 0));
+  const result = await client.query(
+    `SELECT u.*,
+        COALESCE(followers.count, 0) AS followers,
+        COALESCE(following.count, 0) AS following,
+        COALESCE(likes.count, 0) AS likes
+     FROM users u
+     LEFT JOIN (
+       SELECT target_user_id, COUNT(*)::int AS count
+       FROM user_follows
+       WHERE active = true
+       GROUP BY target_user_id
+     ) followers ON followers.target_user_id = u.id
+     LEFT JOIN (
+       SELECT follower_user_id, COUNT(*)::int AS count
+       FROM user_follows
+       WHERE active = true
+       GROUP BY follower_user_id
+     ) following ON following.follower_user_id = u.id
+     LEFT JOIN (
+       SELECT target_user_id, COUNT(*)::int AS count
+       FROM profile_likes
+       WHERE active = true
+       GROUP BY target_user_id
+     ) likes ON likes.target_user_id = u.id
+     WHERE COALESCE(u.account_status, 'active') <> 'deactivated'
+     ORDER BY u.created_at DESC
+     LIMIT $1 OFFSET $2`,
+    [queryLimit + 1, queryOffset]
+  );
+
+  const rows = result.rows || [];
+  const items = rows.slice(0, queryLimit).map(mapSocialProfile);
+  return {
+    items,
+    nextOffset: rows.length > queryLimit ? queryOffset + queryLimit : null,
+    hasMore: rows.length > queryLimit,
+  };
 }
 
 router.get("/check-in/state", requireAuth, async (req, res) => {
@@ -406,6 +460,18 @@ router.get("/social/followers/my", requireAuth, async (req, res) => {
   try {
     const items = await listRelationProfiles(client, "followers", req.auth.sub);
     res.json(items);
+  } finally {
+    client.release();
+  }
+});
+
+router.get("/social/discover", requireAuth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const limit = normalizeListLimit(req.query?.limit, 12, 60);
+    const offset = normalizeListOffset(req.query?.offset);
+    const result = await listDiscoverProfiles(client, { limit, offset });
+    res.json(result);
   } finally {
     client.release();
   }
@@ -641,6 +707,27 @@ router.post("/social/auto-follow-creator", requireAuth, async (req, res) => {
   req.params.targetUserId = creatorId;
   req.body = { ...(req.body || {}), requestId: normalizeRequestId(req.body?.requestId, `auto-follow-creator:${userId}:${creatorId}`) };
   return upsertFollowState(req, res, true);
+});
+
+router.post("/social/auto-like-creator", requireAuth, async (req, res) => {
+  const userId = req.auth.sub;
+  const creatorResult = await pool.query(
+    `SELECT id
+     FROM users
+     WHERE role = 'admin'
+       AND id <> $1
+     ORDER BY created_at ASC
+     LIMIT 1`,
+    [userId]
+  );
+  const creatorId = creatorResult.rows[0]?.id || "";
+  if (!creatorId) {
+    return res.json({ ok: true, liked: false, reason: "creator_not_found" });
+  }
+
+  req.params.targetUserId = creatorId;
+  req.body = { ...(req.body || {}), requestId: normalizeRequestId(req.body?.requestId, `auto-like-creator:${userId}:${creatorId}`) };
+  return upsertLikeState(req, res, true);
 });
 
 export default router;

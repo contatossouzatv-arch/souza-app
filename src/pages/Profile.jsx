@@ -2984,30 +2984,32 @@ export default function Profile() {
               {renderLevelHud(publicLevelProgress)}
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={isSelectedRealProfile ? toggleAuthoritativePublicFollow : () => toggleSimFollow(selectedPublicProfile.id)}
-                disabled={isOwnSelectedPublicProfile || (isSelectedRealProfile && followMutation.isPending)}
-                className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
-                  publicState?.isFollowing
-                    ? "bg-cyan-500/25 text-cyan-100 ring-1 ring-cyan-400/40"
-                    : "bg-slate-800 text-slate-200 hover:bg-slate-700"
-                }`}
-              >
-                {isOwnSelectedPublicProfile ? "Seu perfil" : publicState?.isFollowing ? "Seguindo" : "Seguir"}
-              </button>
-              <button
-                type="button"
-                onClick={isSelectedRealProfile ? toggleAuthoritativePublicLike : () => toggleSimLike(selectedPublicProfile.id)}
-                disabled={isOwnSelectedPublicProfile || (isSelectedRealProfile && likeMutation.isPending)}
-                className={`rounded-xl px-3 py-2 text-xs font-bold text-white transition ${
-                  publicState?.isLiked ? "bg-pink-500 hover:bg-pink-400" : "bg-pink-600/60 hover:bg-pink-500/80"
-                }`}
-              >
-                {isOwnSelectedPublicProfile ? "Seu perfil" : publicState?.isLiked ? "Descurtir" : "Curtir"}
-              </button>
-            </div>
+            {isOwnSelectedPublicProfile ? null : (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={isSelectedRealProfile ? toggleAuthoritativePublicFollow : () => toggleSimFollow(selectedPublicProfile.id)}
+                  disabled={isSelectedRealProfile && followMutation.isPending}
+                  className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
+                    publicState?.isFollowing
+                      ? "bg-cyan-500/25 text-cyan-100 ring-1 ring-cyan-400/40"
+                      : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  }`}
+                >
+                  {publicState?.isFollowing ? "Seguindo" : "Seguir"}
+                </button>
+                <button
+                  type="button"
+                  onClick={isSelectedRealProfile ? toggleAuthoritativePublicLike : () => toggleSimLike(selectedPublicProfile.id)}
+                  disabled={isSelectedRealProfile && likeMutation.isPending}
+                  className={`rounded-xl px-3 py-2 text-xs font-bold text-white transition ${
+                    publicState?.isLiked ? "bg-pink-500 hover:bg-pink-400" : "bg-pink-600/60 hover:bg-pink-500/80"
+                  }`}
+                >
+                  {publicState?.isLiked ? "Descurtir" : "Curtir"}
+                </button>
+              </div>
+            )}
 
             <div className="mt-3 grid grid-cols-3 gap-2 text-center text-white">
               <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-2">
@@ -3396,32 +3398,34 @@ export default function Profile() {
             Editar rápido
           </button>
 
-          <div className="mt-3 w-full rounded-2xl border border-slate-700/80 bg-slate-900/80 p-1">
-            <div className="grid grid-cols-2 gap-1">
-              <button
-                type="button"
-                onClick={updateFollow}
-                className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition ${
-                  social.isFollowing
-                    ? "bg-cyan-500/25 text-cyan-100 ring-1 ring-cyan-400/40"
-                    : "bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
-                }`}
-              >
-                <UserPlus className="h-3.5 w-3.5" />
-                {social.isFollowing ? "Seguindo" : "Seguir"}
-              </button>
-              <button
-                type="button"
-                onClick={likeProfile}
-                className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold text-white transition ${
-                  social.isLiked ? "bg-pink-500 hover:bg-pink-400" : "bg-pink-600/60 hover:bg-pink-500/80"
-                }`}
-              >
-                <Heart className="h-3.5 w-3.5" />
-                {social.isLiked ? "Descurtir" : "Curtir"}
-              </button>
+          {!isViewingPublicProfile ? null : (
+            <div className="mt-3 w-full rounded-2xl border border-slate-700/80 bg-slate-900/80 p-1">
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  onClick={updateFollow}
+                  className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition ${
+                    social.isFollowing
+                      ? "bg-cyan-500/25 text-cyan-100 ring-1 ring-cyan-400/40"
+                      : "bg-transparent text-slate-300 hover:bg-slate-800 hover:text-white"
+                  }`}
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  {social.isFollowing ? "Seguindo" : "Seguir"}
+                </button>
+                <button
+                  type="button"
+                  onClick={likeProfile}
+                  className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold text-white transition ${
+                    social.isLiked ? "bg-pink-500 hover:bg-pink-400" : "bg-pink-600/60 hover:bg-pink-500/80"
+                  }`}
+                >
+                  <Heart className="h-3.5 w-3.5" />
+                  {social.isLiked ? "Descurtir" : "Curtir"}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
             <div className="mt-2 grid grid-cols-2 gap-2">
               <button

@@ -56,6 +56,7 @@ const Deposits = lazy(() => import("./pages/Deposits"));
 const Home = lazy(() => import("./pages/Home"));
 const LiveDrawDisplay = lazy(() => import("./pages/LiveDrawDisplay"));
 const Profile = lazy(() => import("./pages/Profile"));
+const ProfilesGallery = lazy(() => import("./pages/ProfilesGallery"));
 const Settings = lazy(() => import("./pages/Settings"));
 const __Layout = lazy(() => import("./Layout.jsx"));
 
@@ -68,6 +69,7 @@ export const PAGES = {
     "Home": Home,
     "LiveDrawDisplay": LiveDrawDisplay,
     "Profile": Profile,
+    "ProfilesGallery": ProfilesGallery,
     "Settings": Settings,
 }
 

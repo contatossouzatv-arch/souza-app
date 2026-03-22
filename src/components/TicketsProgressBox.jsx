@@ -70,14 +70,37 @@ export default function TicketsProgressBox({
 
   const depositsEnabled = settings.find((s) => s.key === "deposits_enabled")?.value === "true";
   const ticketsActive = settings.find((s) => s.key === "tickets_box_active")?.value === "true";
-  const depositCheckLink = settings.find((s) => s.key === "deposit_check_link")?.value || "";
-  const depositCheckLink2 = settings.find((s) => s.key === "deposit_check_link_2")?.value || "";
-  const platformName1 = activePlatforms?.[0]?.name || "Plataforma 1";
-  const platformName2 = activePlatforms?.[1]?.name || "Plataforma 2";
-  const depositCheckOptions = [
-    depositCheckLink ? { value: "platform_1", label: platformName1, link: depositCheckLink } : null,
-    depositCheckLink2 ? { value: "platform_2", label: platformName2, link: depositCheckLink2 } : null,
-  ].filter(Boolean);
+  const depositCheckOptions = React.useMemo(() => {
+    const map = new Map();
+
+    settings.forEach((entry) => {
+      const key = String(entry?.key || "").trim();
+      let match = key.match(/^deposit_check_link(?:_(\d+))?$/);
+      if (match) {
+        const index = match[1] ? Math.max(0, Number(match[1]) - 1) : 0;
+        const current = map.get(index) || { label: "", link: "" };
+        current.link = entry?.value || "";
+        map.set(index, current);
+        return;
+      }
+      match = key.match(/^deposit_check_name(?:_(\d+))?$/);
+      if (match) {
+        const index = match[1] ? Math.max(0, Number(match[1]) - 1) : 0;
+        const current = map.get(index) || { label: "", link: "" };
+        current.label = entry?.value || "";
+        map.set(index, current);
+      }
+    });
+
+    return Array.from(map.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([index, value]) => ({
+        value: `platform_${index + 1}`,
+        label: String(value.label || activePlatforms?.[index]?.name || `Plataforma ${index + 1}`),
+        link: String(value.link || ""),
+      }))
+      .filter((item) => item.link);
+  }, [activePlatforms, settings]);
 
   const getSettingValue = (key, defaultValue) => {
     const setting = settings.find((s) => s.key === key);
