@@ -9,6 +9,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   // </React.StrictMode>,
 )
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((error) => {
+      console.error('Falha ao registrar service worker:', error);
+    });
+  });
+}
+
 if (import.meta.hot) {
   import.meta.hot.on('vite:beforeUpdate', () => {
     window.parent?.postMessage({ type: 'sandbox:beforeUpdate' }, '*');

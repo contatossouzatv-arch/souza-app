@@ -5,7 +5,7 @@ import path from "node:path";
 import rateLimit from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
 import Redis from "ioredis";
-import { env } from "./config/env.js";
+import { env, isAllowedOrigin } from "./config/env.js";
 import authRoutes from "./routes/auth.js";
 import adminEventsRoutes from "./routes/adminEvents.js";
 import dailyChestRoutes from "./routes/dailyChest.js";
@@ -23,13 +23,14 @@ function buildCors() {
     return cors({ origin: true, credentials: false });
   }
 
-  const allowList = new Set(env.origins);
   return cors({
     origin(origin, callback) {
-      if (!origin || allowList.has(origin)) return callback(null, true);
+      if (isAllowedOrigin(origin)) return callback(null, true);
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
+    methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   });
 }
 
@@ -81,6 +82,7 @@ export function createApp(io) {
     })
   );
   app.use(buildCors());
+  app.options(/.*/, buildCors());
   app.use(express.json({ limit: "3mb" }));
   app.use(express.urlencoded({ extended: true }));
   app.use(buildRateLimiter());

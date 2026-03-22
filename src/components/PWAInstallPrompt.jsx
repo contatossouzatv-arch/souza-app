@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bell, Download, ExternalLink, Smartphone } from "lucide-react";
+import { Bell, Download, ExternalLink, Smartphone, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 function isMobileDevice() {
@@ -19,6 +19,7 @@ export default function PWAInstallPrompt({ blocking = false }) {
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
   const [showPrompt, setShowPrompt] = useState(() => (blocking ? isMobileDevice() && !isStandaloneMode() : false));
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState(() =>
     typeof Notification === "undefined" ? "unsupported" : Notification.permission
   );
@@ -86,7 +87,7 @@ export default function PWAInstallPrompt({ blocking = false }) {
     await requestNotifications();
   };
 
-  if (!isMobile || installed || !showPrompt) return null;
+  if (!isMobile || installed || !showPrompt || dismissed) return null;
 
   return (
     <AnimatePresence>
@@ -102,6 +103,14 @@ export default function PWAInstallPrompt({ blocking = false }) {
           exit={{ opacity: 0, y: 16, scale: 0.98 }}
           className={`w-full ${blocking ? "max-w-md" : "max-w-lg mx-auto"} overflow-hidden rounded-[2rem] border border-cyan-400/30 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_36%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-6 shadow-[0_24px_90px_rgba(8,145,178,0.28)]`}
         >
+          <button
+            type="button"
+            onClick={() => setDismissed(true)}
+            className="absolute right-4 top-4 text-slate-500 transition hover:text-slate-300"
+            aria-label="Fechar aviso de instalação"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
           <div className="flex items-start gap-4">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-cyan-500/14 text-cyan-200">
               <Smartphone className="h-7 w-7" />
@@ -110,7 +119,7 @@ export default function PWAInstallPrompt({ blocking = false }) {
               <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-200/80">Experiência Recomendada</p>
               <h3 className="mt-2 text-2xl font-black text-white">Instale o app para continuar</h3>
               <p className="mt-3 text-sm leading-6 text-slate-300">
-                Para usar o Souza com mais estabilidade, abertura rápida e notificações, o acesso no celular deve ser feito pelo app instalado.
+                Para usar o App do Souza com mais estabilidade, abertura rápida e notificações, o acesso no celular deve ser feito pelo app instalado.
               </p>
             </div>
           </div>

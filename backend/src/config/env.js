@@ -51,6 +51,37 @@ export const env = {
   profileImageMaxSizeMb: Number(process.env.PROFILE_IMAGE_MAX_SIZE_MB || 5),
 };
 
+const defaultAllowedOrigins = [
+  "https://souzatv.app",
+  "https://www.souzatv.app",
+];
+
+const normalizedOriginSet = new Set(
+  [...env.origins, ...defaultAllowedOrigins]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+);
+
+export function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (env.origin === "*") return true;
+
+  const value = String(origin || "").trim();
+  if (!value) return true;
+  if (normalizedOriginSet.has(value)) return true;
+
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:") return false;
+    if (parsed.hostname === "souzatv.app" || parsed.hostname === "www.souzatv.app") return true;
+    if (parsed.hostname.endsWith(".vercel.app")) return true;
+  } catch {
+    return false;
+  }
+
+  return false;
+}
+
 if (!env.databaseUrl) {
   throw new Error("DATABASE_URL is required");
 }

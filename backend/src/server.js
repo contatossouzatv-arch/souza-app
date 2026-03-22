@@ -3,7 +3,7 @@ import { createAdapter } from "@socket.io/redis-adapter";
 import Redis from "ioredis";
 import bcrypt from "bcryptjs";
 import { Server } from "socket.io";
-import { env } from "./config/env.js";
+import { env, isAllowedOrigin } from "./config/env.js";
 import { createApp } from "./app.js";
 import { ensureDb, ensureDevAdmin, seedDefaults } from "./db/index.js";
 
@@ -23,8 +23,11 @@ async function bootstrap() {
   const appPlaceholder = http.createServer();
   const io = new Server(appPlaceholder, {
     cors: {
-      origin: env.origin === "*" ? true : env.origins,
-      credentials: false,
+      origin(origin, callback) {
+        if (isAllowedOrigin(origin)) return callback(null, true);
+        return callback(new Error("Not allowed by CORS"));
+      },
+      credentials: true,
     },
   });
 
