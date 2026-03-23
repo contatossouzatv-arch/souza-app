@@ -1,7 +1,5 @@
 import React from "react";
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import chestModelUrl from "../../../assets-para-app/bau+3d+souza+diario.glb?url";
 import chestBackgroundUrl from "../../../assets-para-app/bkagorund bau diario horizonte.png?url";
 
 function createGlowTexture() {
@@ -801,38 +799,7 @@ export default function DailyChestScene({
         }
     }
 
-    const gltfLoader = new GLTFLoader(loadingManager);
     let mounted = true;
-    gltfLoader.load(
-      chestModelUrl,
-      (gltf) => {
-        if (!mounted) return;
-        closedChest.clear();
-        disposeObject(proceduralFallback);
-        proceduralFallback = null;
-        const model = gltf.scene || gltf.scenes?.[0];
-        fitObjectToHeight(model, 2.25);
-        model.rotation.y = -Math.PI * 0.5;
-        model.traverse((node) => {
-          if (!node?.isMesh) return;
-          node.castShadow = !isLowPerf;
-          node.receiveShadow = true;
-          if (node.material) {
-            node.material = Array.isArray(node.material)
-              ? node.material.map((material) => material.clone())
-              : node.material.clone();
-            const materials = Array.isArray(node.material) ? node.material : [node.material];
-            materials.forEach((material) => {
-              material.emissive = material.emissive || new THREE.Color("#000000");
-              material.emissiveIntensity = 0.08;
-            });
-          }
-        });
-        closedChest.add(model);
-      },
-      undefined,
-      () => {}
-    );
 
     const stateRef = {
       lastTime: performance.now(),

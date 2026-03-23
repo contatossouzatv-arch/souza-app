@@ -1585,12 +1585,18 @@ export default function Profile() {
 
   const randomizedOtherProfiles = useMemo(() => {
     const selectedId = selectedPublicProfile?.id;
-    const candidates = simulatedProfiles.filter((profile) => {
+    const prioritizedCandidates = simulatedProfiles.filter((profile) => {
       if (selectedId && profile.id === selectedId) return false;
       const state = simState[profile.id];
       // Para rotacionar recomendações, removemos perfis já "concluídos" (seguindo + curtido).
       return !(state?.isFollowing && state?.isLiked);
     });
+
+    const fallbackCandidates = simulatedProfiles.filter((profile) => {
+      if (selectedId && profile.id === selectedId) return false;
+      return true;
+    });
+    const candidates = prioritizedCandidates.length > 0 ? prioritizedCandidates : fallbackCandidates;
 
     const shuffled = [...candidates];
     for (let index = shuffled.length - 1; index > 0; index -= 1) {
