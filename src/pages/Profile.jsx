@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowLeft, Award, CalendarDays, CheckCircle2, Eye, Heart, HelpCircle, ImageUp, Loader2, Lock, Pencil, Sparkles, Star, Trophy, UserPlus, Wallet, XCircle } from "lucide-react";
+import { ArrowLeft, Award, Bell, CalendarDays, CheckCircle2, Eye, Heart, HelpCircle, ImageUp, Loader2, Lock, Pencil, Sparkles, Star, Trophy, UserPlus, Wallet, XCircle } from "lucide-react";
 import TechLoader from "@/components/TechLoader";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/AuthContext";
@@ -763,6 +763,7 @@ export default function Profile() {
   const [isPhotoMenuOpen, setIsPhotoMenuOpen] = useState(false);
   const [isPhotoViewerOpen, setIsPhotoViewerOpen] = useState(false);
   const [isPublicPhotoViewerOpen, setIsPublicPhotoViewerOpen] = useState(false);
+  const [isProfileNotificationsOpen, setIsProfileNotificationsOpen] = useState(false);
   const [activeBadgeCelebration, setActiveBadgeCelebration] = useState(null);
   const [profileImageFallbackStep, setProfileImageFallbackStep] = useState(0);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -888,20 +889,62 @@ export default function Profile() {
           daysSinceJoin,
           totalWins: 0,
           participations: 0,
+          avatar_emoji: String(profile.avatar_emoji || ""),
+          profile_avatar_id: String(profile.profile_avatar_id || ""),
+          profile_image_mode: String(profile.profile_image_mode || "avatar"),
+          profile_image_status: String(profile.profile_image_status || ""),
+          profile_image_url: String(profile.profile_image_url || ""),
         };
       }),
     [discoverProfilesData?.items]
   );
+  const realProfilesById = useMemo(() => {
+    const map = {};
+    const addProfile = (profile) => {
+      if (!profile?.id) return;
+      map[profile.id] = {
+        ...(map[profile.id] || {}),
+        ...profile,
+      };
+    };
+
+    addProfile(user);
+    (discoverProfilesData?.items || []).forEach(addProfile);
+    (myFollowingProfiles || []).forEach(addProfile);
+    (myFollowerProfiles || []).forEach(addProfile);
+    return map;
+  }, [discoverProfilesData?.items, myFollowerProfiles, myFollowingProfiles, user]);
   const simulatedProfiles = useMemo(() => {
     return simulatedBaseProfiles
-      .map((profile) => ({
-        ...profile,
-        points: profile.activityCount * 3 + profile.followers * 2,
-        tickets: Math.max(0, profile.followers + profile.likes),
-        totalApproved: 0,
-      }))
+      .map((profile) => {
+        const leaderboardProfile = competitionEntryByUserId[profile.id] || {};
+        const xpTotal = Math.max(0, Number(leaderboardProfile.xp_total || 0));
+        const engagementPoints = Math.max(0, Number(leaderboardProfile.engagement_points || 0));
+        const followers = Math.max(0, Number(profile.followers || leaderboardProfile.totalFollowers || 0));
+        const engagementScore = followers + xpTotal + engagementPoints;
+        return {
+          ...profile,
+          points: engagementPoints,
+          xpTotal,
+          engagementPoints,
+          engagementScore,
+          tickets: Math.max(0, profile.followers + profile.likes),
+          totalApproved: Number(leaderboardProfile.totalApproved || 0),
+          totalWins: Number(leaderboardProfile.totalWins || 0),
+          participations: Number(leaderboardProfile.totalParticipations || 0),
+          liveParticipations: Number(leaderboardProfile.liveParticipations || 0),
+          gameParticipations: Number(leaderboardProfile.gameParticipations || 0),
+          instantParticipations: Number(leaderboardProfile.instantParticipations || 0),
+          following: Number(profile.following || leaderboardProfile.followingCount || 0),
+          followers,
+          likes: Number(profile.likes || leaderboardProfile.totalLikes || 0),
+        };
+      })
       .sort((a, b) => {
-        if (b.points !== a.points) return b.points - a.points;
+        if (b.engagementScore !== a.engagementScore) return b.engagementScore - a.engagementScore;
+        if (b.followers !== a.followers) return b.followers - a.followers;
+        if (b.xpTotal !== a.xpTotal) return b.xpTotal - a.xpTotal;
+        if (b.engagementPoints !== a.engagementPoints) return b.engagementPoints - a.engagementPoints;
         if (b.followers !== a.followers) return b.followers - a.followers;
         return b.likes - a.likes;
       })
@@ -909,7 +952,7 @@ export default function Profile() {
         ...profile,
         position: index + 1,
       }));
-  }, [simulatedBaseProfiles]);
+  }, [competitionEntryByUserId, simulatedBaseProfiles]);
 
   useEffect(() => {
     if (authUser && authUser !== user) setUser(authUser);
@@ -1245,6 +1288,7 @@ export default function Profile() {
         points: 0,
         progress: 0,
         xpTotal: 0,
+        xp_total: 0,
         weeklyPoints: 0,
       },
     [profileGamification]
@@ -1301,7 +1345,8 @@ export default function Profile() {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  const levelProgress = useMemo(() => getLevelProgress(metrics.points), [metrics.points]);
+  const authoritativeXpTotal = Number(metrics.xpTotal ?? metrics.xp_total ?? 0);
+  const levelProgress = useMemo(() => getLevelProgress(authoritativeXpTotal), [authoritativeXpTotal]);
   const weeklyPointsHistory = useMemo(
     () => buildPointsHistorySummary(profileHistory?.ledger || [], ["weekly_points"]),
     [profileHistory?.ledger]
@@ -1460,6 +1505,11 @@ export default function Profile() {
     setProfileImageFallbackStep(0);
   }, [profileImageSrc, secondaryProfileImageSrc, selectedAvatar?.src]);
 
+  const followingProfileIds = useMemo(
+    () => new Set((myFollowingProfiles || []).map((profile) => String(profile?.id || ""))),
+    [myFollowingProfiles]
+  );
+
   const mapRealSocialProfile = React.useCallback(
     (profile) => {
       const leaderboardProfile = competitionEntryByUserId[profile.id];
@@ -1476,12 +1526,16 @@ export default function Profile() {
           followers: Number(profile.followers || 0),
           following: Number(profile.following || 0),
           likes: Number(profile.likes || 0),
+          isFollowing:
+            typeof simState?.[profile.id]?.isFollowing === "boolean"
+              ? Boolean(simState[profile.id].isFollowing)
+              : followingProfileIds.has(String(profile.id || "")),
           tickets: leaderboardProfile?.stats?.approvedDeposits || leaderboardProfile?.stats?.approvedAmount || 0,
           points: Number(leaderboardProfile?.weekly_points ?? leaderboardProfile?.points ?? 0),
           position: leaderboardProfile?.position || 0,
         };
     },
-    [avatarSrcById, competitionEntryByUserId]
+    [avatarSrcById, competitionEntryByUserId, followingProfileIds, simState]
   );
 
   const followingProfiles = useMemo(
@@ -1528,29 +1582,30 @@ export default function Profile() {
     if (!selectedPublicProfileHandle && !selectedPublicProfileId) return null;
     if (selectedPublicProfileId && competitionEntryByUserId[selectedPublicProfileId]) {
       const entry = competitionEntryByUserId[selectedPublicProfileId];
-      const avatarMatch = avatarOptions.find((item) => item.id === entry.profile_avatar_id);
+      const resolvedProfile = realProfilesById[selectedPublicProfileId] || entry;
+      const avatarMatch = avatarOptions.find((item) => item.id === resolvedProfile.profile_avatar_id || item.id === entry.profile_avatar_id);
       return {
         id: entry.user_id,
-        nick: entry.nick,
-        handle: String(entry.nick || "usuario").toLowerCase().replace(/\s+/g, "."),
+        nick: resolvedProfile.nick || entry.nick,
+        handle: resolvedProfile.handle || String(resolvedProfile.nick || entry.nick || "usuario").toLowerCase().replace(/\s+/g, "."),
         avatarSrc:
-          getProfileAvatarSrc(entry, avatarSrcById, avatarMatch?.src || selectedAvatar?.src || defaultAvatar) ||
+          getProfileAvatarSrc(resolvedProfile, avatarSrcById, avatarMatch?.src || defaultAvatar) ||
           avatarMatch?.src ||
-          selectedAvatar?.src ||
           defaultAvatar,
+        avatar_emoji: String(resolvedProfile.avatar_emoji || entry.avatar_emoji || ""),
         points: Number(entry.weekly_points ?? entry.points ?? 0),
-        tickets: entry.stats?.approvedDeposits || 0,
+        tickets: Number(entry.totalTickets || 0),
         participations:
-          (entry.stats?.liveParticipations || 0) +
-          (entry.stats?.gameParticipations || 0) +
-          (entry.stats?.instantParticipations || 0),
+          Number(entry.liveParticipations || 0) +
+          Number(entry.gameParticipations || 0) +
+          Number(entry.instantParticipations || 0),
         position: entry.position,
-        totalWins: entry.stats?.validatedWins || 0,
-        totalApproved: entry.stats?.approvedAmount || 0,
-        liveParticipations: entry.stats?.liveParticipations || 0,
-        following: entry.followingCount || 0,
-        followers: entry.totalFollowers || 0,
-        likes: entry.totalLikes || 0,
+        totalWins: Number(entry.totalWins || 0),
+        totalApproved: Number(entry.totalApproved || 0),
+        liveParticipations: Number(entry.liveParticipations || 0),
+        following: Number(entry.followingCount || 0),
+        followers: Number(entry.totalFollowers || 0),
+        likes: Number(entry.totalLikes || 0),
       };
     }
     const baseProfile = selectedPublicProfileHandle
@@ -1570,11 +1625,42 @@ export default function Profile() {
     simState,
     competitionEntryByUserId,
     avatarOptions,
-    selectedAvatar?.src,
+    realProfilesById,
   ]);
 
   const isSelectedRealProfile = Boolean(selectedPublicProfile?.id);
   const isOwnSelectedPublicProfile = Boolean(selectedPublicProfile?.id && selectedPublicProfile.id === user?.id);
+
+  const { data: profileNotifications = [] } = useQuery({
+    queryKey: ["profile-notifications", user?.id],
+    queryFn: () => base44.entities.ProfileNotification.list("-created_date", 50),
+    enabled: Boolean(user?.id) && !isViewingPublicProfile,
+    staleTime: 15000,
+    refetchInterval: 30000,
+    refetchIntervalInBackground: true,
+  });
+
+  const markProfileNotificationsReadMutation = useMutation({
+    mutationFn: async (notificationIds) => {
+      const ids = Array.isArray(notificationIds) ? notificationIds.filter(Boolean) : [];
+      await Promise.all(
+        ids.map((id) =>
+          base44.entities.ProfileNotification.update(id, {
+            status: "read",
+            read_at: new Date().toISOString(),
+          })
+        )
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["profile-notifications", user?.id] });
+    },
+  });
+
+  const unreadProfileNotifications = useMemo(
+    () => profileNotifications.filter((item) => String(item?.status || "unread").toLowerCase() !== "read"),
+    [profileNotifications]
+  );
 
   const { data: selectedPublicSocialState } = useQuery({
     queryKey: ["social-target-state", user?.id, selectedPublicProfile?.id],
@@ -1909,6 +1995,13 @@ export default function Profile() {
     }
   }, [queryClient, selectedPublicProfile?.id, user?.id]);
 
+  useEffect(() => {
+    if (!isProfileNotificationsOpen) return;
+    if (!unreadProfileNotifications.length) return;
+    if (markProfileNotificationsReadMutation.isPending) return;
+    markProfileNotificationsReadMutation.mutate(unreadProfileNotifications.map((item) => item.id));
+  }, [isProfileNotificationsOpen, unreadProfileNotifications, markProfileNotificationsReadMutation]);
+
   const followMutation = useMutation({
     mutationFn: ({ targetUserId, shouldFollow }) =>
       shouldFollow ? base44.social.follow(targetUserId) : base44.social.unfollow(targetUserId),
@@ -2083,6 +2176,46 @@ export default function Profile() {
         }
       } catch {
         syncDiscoverCardState(targetUserId, current);
+      }
+    },
+    [followMutation, simState, syncDiscoverCardState, user?.id]
+  );
+
+  const toggleSocialListFollow = React.useCallback(
+    async (profile) => {
+      const targetUserId = String(profile?.id || "");
+      if (!targetUserId || targetUserId === String(user?.id || "")) return;
+
+      const current = {
+        isFollowing:
+          typeof simState?.[targetUserId]?.isFollowing === "boolean"
+            ? Boolean(simState[targetUserId].isFollowing)
+            : Boolean(profile?.isFollowing),
+        followers: Number(simState?.[targetUserId]?.followers ?? profile?.followers ?? 0),
+      };
+      const shouldFollow = !current.isFollowing;
+
+      syncDiscoverCardState(targetUserId, {
+        ...(simState?.[targetUserId] || {}),
+        isFollowing: shouldFollow,
+        followers: Math.max(0, current.followers + (shouldFollow ? 1 : -1)),
+      });
+
+      try {
+        const response = await followMutation.mutateAsync({ targetUserId, shouldFollow });
+        if (response?.state) {
+          syncDiscoverCardState(targetUserId, (prev) => ({
+            ...prev,
+            isFollowing: Boolean(response.state.isFollowing),
+            followers: Number(response.state.followers ?? prev?.followers ?? current.followers),
+          }));
+        }
+      } catch {
+        syncDiscoverCardState(targetUserId, {
+          ...(simState?.[targetUserId] || {}),
+          isFollowing: current.isFollowing,
+          followers: current.followers,
+        });
       }
     },
     [followMutation, simState, syncDiscoverCardState, user?.id]
@@ -2492,8 +2625,8 @@ export default function Profile() {
     navigate(createPageUrl("Profile"));
   };
 
-  const getLevelLabelFromPoints = (pointsValue) => {
-    const level = getLevelProgress(Number(pointsValue || 0)).level;
+  const getLevelLabelFromXp = (xpValue) => {
+    const level = getLevelProgress(Number(xpValue || 0)).level;
     return `LV ${level}`;
   };
 
@@ -2748,6 +2881,24 @@ export default function Profile() {
           </motion.div>
         ) : null}
       </AnimatePresence>
+    </div>
+  );
+
+  const renderProfileNotificationsHud = () => (
+    <div className="absolute left-2 top-2 z-20">
+      <button
+        type="button"
+        onClick={() => setIsProfileNotificationsOpen(true)}
+        className="relative inline-flex items-center justify-center rounded-full border border-fuchsia-400/45 bg-slate-950/90 p-2 text-fuchsia-100 shadow-[0_0_0_1px_rgba(232,121,249,0.18),0_8px_18px_rgba(126,34,206,0.22)] backdrop-blur-sm transition hover:border-fuchsia-300/70 hover:text-white"
+        aria-label="Abrir notificações do perfil"
+      >
+        <Bell className="h-4 w-4" />
+        {unreadProfileNotifications.length > 0 ? (
+          <span className="absolute -right-1 -top-1 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-fuchsia-500 px-1 text-[10px] font-black text-white ring-2 ring-slate-950">
+            {Math.min(99, unreadProfileNotifications.length)}
+          </span>
+        ) : null}
+      </button>
     </div>
   );
 
@@ -3078,6 +3229,7 @@ export default function Profile() {
       ? {
           totalTickets: activeCycle ? (selectedPublicProfile.tickets ?? selectedPublicProfile.points ?? 0) : 0,
           points: selectedPublicProfile.points,
+          xpTotal: Number(selectedPublicProfile.xpTotal ?? selectedPublicProfile.xp_total ?? 0),
           position: activeCycle ? selectedPublicProfile.position : 0,
           totalWins: selectedPublicProfile.totalWins,
           totalApproved: selectedPublicProfile.totalApproved,
@@ -3105,7 +3257,7 @@ export default function Profile() {
     const publicProgressBadges = publicMetrics ? [buildProgressBadge(publicMetrics, pointsRules)] : [];
     const publicBadgeGallery = buildBadgeGalleryFromRules(badgeRules, publicAchievements);
     const publicSuperFanProgress = publicProgressBadges[0]?.progress ?? 0;
-    const publicLevelProgress = getLevelProgress(publicMetrics?.points || 0);
+    const publicLevelProgress = getLevelProgress(publicMetrics?.xpTotal || 0);
     const publicCompetitionEntry =
       (selectedPublicProfile?.id && competitionEntryByUserId[selectedPublicProfile.id]) ||
       {
@@ -3425,7 +3577,7 @@ export default function Profile() {
                     <div className="mb-2 grid grid-cols-3 gap-1 text-center">
                       <div className="rounded-lg bg-slate-900 p-1.5">
                         <p className="text-center text-[10px] text-slate-400">LV</p>
-                        <p className="text-xs font-bold text-cyan-200">{getLevelLabelFromPoints(profile.points)}</p>
+                        <p className="text-xs font-bold text-cyan-200">{getLevelLabelFromXp(profile.xpTotal ?? profile.xp_total ?? 0)}</p>
                       </div>
                       <div className="rounded-lg bg-slate-900 p-1.5">
                         <p className="text-center text-[10px] text-slate-400">Prêmios</p>
@@ -3592,6 +3744,7 @@ export default function Profile() {
             )}
           </div>
 
+          {renderProfileNotificationsHud()}
           {renderLevelHud(levelProgress)}
 
           <button
@@ -3795,7 +3948,7 @@ export default function Profile() {
                 <div className="mb-2 grid grid-cols-3 gap-1 text-center">
                   <div className="rounded-lg bg-slate-900 p-1.5">
                     <p className="text-center text-[10px] text-slate-400">LV</p>
-                    <p className="text-xs font-bold text-cyan-200">{getLevelLabelFromPoints(profile.points)}</p>
+                    <p className="text-xs font-bold text-cyan-200">{getLevelLabelFromXp(profile.xpTotal ?? profile.xp_total ?? 0)}</p>
                   </div>
                   <div className="rounded-lg bg-slate-900 p-1.5">
                     <p className="text-center text-[10px] text-slate-400">Prêmios</p>
@@ -4033,6 +4186,77 @@ export default function Profile() {
                 )}
               </div>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isProfileNotificationsOpen} onOpenChange={setIsProfileNotificationsOpen}>
+        <DialogContent className="max-w-lg border-fuchsia-500/30 bg-slate-950 text-white shadow-[0_0_45px_rgba(217,70,239,0.14)]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-black text-fuchsia-100">
+              <Bell className="h-5 w-5 text-fuchsia-300" />
+              Central do perfil
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-300">
+              Aqui aparecem novos seguidores, curtidas e outros avisos importantes do seu perfil.
+            </p>
+
+            {profileNotifications.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-5 text-center text-sm text-slate-400">
+                Nenhuma notificação por enquanto.
+              </div>
+            ) : (
+              <div className="hide-scrollbar max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+                {profileNotifications.map((notification) => {
+                  const actorAvatarSrc =
+                    getProfileAvatarSrc(notification, avatarSrcById, defaultAvatar) || defaultAvatar;
+                  const actorLabel = notification.actor_nick
+                    ? `@${notification.actor_nick}`
+                    : notification.actor_name || "Usuário";
+                  const isUnread = String(notification.status || "unread").toLowerCase() !== "read";
+                  return (
+                    <div
+                      key={notification.id}
+                      className={`rounded-2xl border p-3 ${
+                        isUnread
+                          ? "border-fuchsia-400/35 bg-fuchsia-500/10"
+                          : "border-slate-800 bg-slate-900/70"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <img
+                          src={actorAvatarSrc}
+                          alt={notification.actor_name || "Usuário"}
+                          className="h-11 w-11 rounded-full border border-slate-700 object-cover"
+                          onError={(event) => {
+                            event.currentTarget.src = defaultAvatar;
+                          }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-bold text-white">{notification.title || "Notificação"}</p>
+                            {isUnread ? (
+                              <span className="inline-flex rounded-full bg-fuchsia-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
+                                Novo
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 text-sm text-slate-200">{notification.message || "Você recebeu uma nova interação no perfil."}</p>
+                          <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-400">
+                            <span className="truncate">{actorLabel}</span>
+                            <span>
+                              {notification.created_date ? format(new Date(notification.created_date), "dd/MM HH:mm") : "Agora"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -4376,10 +4600,23 @@ export default function Profile() {
                       @{profile.handle}
                     </button>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs text-slate-300">{activeCycle ? (profile.tickets ?? profile.points) : 0} bilhetes</p>
-                    <p className="text-[11px] text-slate-400">{activeCycle ? `#${profile.position}` : "-"}</p>
-                  </div>
+                  {String(profile.id || "") !== String(user?.id || "") ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={followMutation.isPending}
+                      onClick={() => toggleSocialListFollow(profile)}
+                      className={
+                        profile.isFollowing
+                          ? "min-w-[104px] rounded-full border border-emerald-400/40 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/20"
+                          : "min-w-[104px] rounded-full bg-cyan-500 text-slate-950 hover:bg-cyan-400"
+                      }
+                    >
+                      {profile.isFollowing ? "Seguindo" : "Seguir"}
+                    </Button>
+                  ) : (
+                    <span className="rounded-full border border-slate-700 px-3 py-1 text-[11px] text-slate-400">Você</span>
+                  )}
                 </div>
               ))
             )}

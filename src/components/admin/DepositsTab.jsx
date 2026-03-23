@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -68,6 +69,7 @@ const EMPTY_INVALIDATE_FORM = {
 export default function DepositsTab() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedProofByDeposit, setSelectedProofByDeposit] = useState({});
   const [editingDeposit, setEditingDeposit] = useState(null);
   const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
   const [adjustingDeposit, setAdjustingDeposit] = useState(null);
@@ -100,6 +102,23 @@ export default function DepositsTab() {
   });
 
   const historyItems = historyResponse?.items || [];
+
+  const getDepositProofLinks = (deposit) => {
+    const links = [];
+    const pushLink = (value) => {
+      const normalized = String(value || "").trim();
+      if (!normalized || links.includes(normalized)) return;
+      links.push(normalized);
+    };
+
+    pushLink(deposit?.proof_image_url);
+
+    if (Array.isArray(deposit?.proof_image_urls)) {
+      deposit.proof_image_urls.forEach(pushLink);
+    }
+
+    return links;
+  };
 
   const filteredDeposits = useMemo(() => {
     if (!searchTerm) return deposits;
@@ -353,17 +372,39 @@ export default function DepositsTab() {
                     {deposit.created_date ? format(new Date(deposit.created_date), "dd/MM/yyyy HH:mm") : "-"}
                   </TableCell>
                   <TableCell>
-                    {deposit.proof_image_url ? (
-                      <a
-                        href={deposit.proof_image_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 rounded-lg border border-blue-500/50 bg-blue-600/20 px-3 py-1 text-xs text-blue-300 transition-all hover:bg-blue-600/40 hover:text-blue-200"
-                      >
-                        <ImageIcon className="h-3 w-3" />
-                        Ver
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
+                    {getDepositProofLinks(deposit).length > 0 ? (
+                      <div className="min-w-[220px] space-y-2">
+                        <Select
+                          value={selectedProofByDeposit[deposit.id] || getDepositProofLinks(deposit)[0]}
+                          onValueChange={(value) =>
+                            setSelectedProofByDeposit((prev) => ({
+                              ...prev,
+                              [deposit.id]: value,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="h-9 border-blue-500/40 bg-slate-950/60 text-xs text-blue-100">
+                            <SelectValue placeholder="Selecione um comprovante" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {getDepositProofLinks(deposit).map((link, index) => (
+                              <SelectItem key={`${deposit.id}-proof-${index}`} value={link}>
+                                {`Comprovante ${index + 1}`}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <a
+                          href={selectedProofByDeposit[deposit.id] || getDepositProofLinks(deposit)[0]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-lg border border-blue-500/50 bg-blue-600/20 px-3 py-1 text-xs text-blue-300 transition-all hover:bg-blue-600/40 hover:text-blue-200"
+                        >
+                          <ImageIcon className="h-3 w-3" />
+                          Abrir imagem
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </div>
                     ) : (
                       <span className="text-xs text-red-400">Sem comprovante</span>
                     )}

@@ -1962,27 +1962,42 @@ async function buildAdminUserAccessDashboard(lastActivityMap = new Map()) {
 
   const [dayResult, monthResult, trendResult] = await Promise.all([
     pool.query(
-      `SELECT COUNT(*)::int AS total
-         FROM login_attempts
-        WHERE success = true
-          AND created_at >= $1`,
+      `SELECT COUNT(DISTINCT user_id)::int AS total
+         FROM (
+           SELECT user_id, occurred_at AS activity_at FROM user_metric_ledger
+           UNION ALL
+           SELECT user_id, created_at AS activity_at FROM points_ledger
+           UNION ALL
+           SELECT user_id, opened_at AS activity_at FROM daily_chest_openings
+         ) activities
+        WHERE activity_at >= $1`,
       [dayStart.toISOString()],
     ),
     pool.query(
-      `SELECT COUNT(*)::int AS total
-         FROM login_attempts
-        WHERE success = true
-          AND created_at >= $1`,
+      `SELECT COUNT(DISTINCT user_id)::int AS total
+         FROM (
+           SELECT user_id, occurred_at AS activity_at FROM user_metric_ledger
+           UNION ALL
+           SELECT user_id, created_at AS activity_at FROM points_ledger
+           UNION ALL
+           SELECT user_id, opened_at AS activity_at FROM daily_chest_openings
+         ) activities
+        WHERE activity_at >= $1`,
       [monthStart.toISOString()],
     ),
     pool.query(
-      `SELECT to_char(date_trunc('day', created_at), 'DD/MM') AS label,
-              COUNT(*)::int AS total
-         FROM login_attempts
-        WHERE success = true
-          AND created_at >= NOW() - INTERVAL '6 days'
+      `SELECT to_char(date_trunc('day', activity_at), 'DD/MM') AS label,
+              COUNT(DISTINCT user_id)::int AS total
+         FROM (
+           SELECT user_id, occurred_at AS activity_at FROM user_metric_ledger
+           UNION ALL
+           SELECT user_id, created_at AS activity_at FROM points_ledger
+           UNION ALL
+           SELECT user_id, opened_at AS activity_at FROM daily_chest_openings
+         ) activities
+        WHERE activity_at >= NOW() - INTERVAL '6 days'
         GROUP BY 1
-        ORDER BY MIN(date_trunc('day', created_at)) ASC`,
+        ORDER BY MIN(date_trunc('day', activity_at)) ASC`,
     ),
   ]);
 

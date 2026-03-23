@@ -128,6 +128,31 @@ function sanitizePushNotificationRead(row = {}, auth) {
   };
 }
 
+function sanitizeProfileNotificationRead(row = {}, auth) {
+  if (String(auth?.role || "user") === "admin") return row;
+  if (String(row?.user_id || "") !== String(auth?.sub || "")) return null;
+  return {
+    id: row.id,
+    user_id: trimString(row.user_id, 120),
+    actor_user_id: trimString(row.actor_user_id, 120),
+    actor_name: trimString(row.actor_name, 160),
+    actor_nick: trimString(row.actor_nick, 120),
+    actor_avatar_emoji: trimString(row.actor_avatar_emoji, 32),
+    actor_profile_avatar_id: trimString(row.actor_profile_avatar_id, 120),
+    actor_profile_image_mode: trimString(row.actor_profile_image_mode, 32),
+    actor_profile_image_status: trimString(row.actor_profile_image_status, 32),
+    actor_profile_image_url: trimString(row.actor_profile_image_url, 1000),
+    type: trimString(row.type, 80),
+    title: trimString(row.title, 160),
+    message: trimString(row.message, 500),
+    status: trimString(row.status || "unread", 32),
+    metadata: row.metadata && typeof row.metadata === "object" ? row.metadata : {},
+    created_date: row.created_date || null,
+    updated_date: row.updated_date || null,
+    read_at: row.read_at || null,
+  };
+}
+
 function sanitizePublicWinnerAuditRead(row = {}, auth) {
   if (String(auth?.role || "user") === "admin") return sanitizeAuditLike(row);
   if (String(row?.status || "").toLowerCase() !== "validated") return null;
@@ -178,6 +203,14 @@ const POLICY_BY_ENTITY = {
     update: "admin",
     delete: "admin",
     sanitizeRead: sanitizePushNotificationRead,
+  },
+  ProfileNotification: {
+    read: "owner",
+    create: "admin",
+    update: "owner",
+    delete: "admin",
+    ownerField: "user_id",
+    sanitizeRead: sanitizeProfileNotificationRead,
   },
   DrawWinnerAudit: {
     read: "auth",

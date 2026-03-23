@@ -89,18 +89,19 @@ export default function Home() {
   const creatorProfile = useMemo(() => {
     const admin = users.find((item) => String(item.role || "").toLowerCase() === "admin");
     if (!admin) return null;
-      const creatorPhoto =
+    const creatorPhoto =
       admin.profile_image_mode === "photo" &&
       admin.profile_image_status === "approved" &&
       admin.profile_image_url
         ? resolveAssetUrl(admin.profile_image_url)
         : null;
-      return {
-        name: admin.full_name || admin.nick || "Souza",
-        nick: admin.nick || "souza",
-        avatarEmoji: admin.avatar_emoji || "S",
+    return {
+      id: admin.id,
+      name: admin.full_name || admin.nick || "Souza",
+      nick: admin.nick || "souza",
+      avatarEmoji: admin.avatar_emoji || "S",
       avatarUrl: creatorPhoto || getProfileAvatarSrc(admin, avatarById, defaultAvatar) || defaultAvatar,
-      };
+    };
   }, [users]);
 
   const recentProfiles = useMemo(() => {
@@ -128,10 +129,12 @@ export default function Home() {
 
         return {
           id: `winner-${item.id}`,
+          authorId: creatorProfile?.id || "",
           authorName: creatorProfile?.name || "Souza",
           authorNick: creatorProfile?.nick || "souza",
           authorAvatarEmoji: creatorProfile?.avatarEmoji || "S",
           authorAvatarUrl: creatorProfile?.avatarUrl || null,
+          userId: item.user_id || profile?.id || "",
           userName: item.user_name || profile?.full_name || "Participante",
           userNick: item.user_nick || profile?.nick || "",
           avatarEmoji: item.user_avatar || profile?.avatar_emoji || "U",
@@ -219,6 +222,7 @@ export default function Home() {
   };
 
   const openPublicProfile = (profileId) => {
+    if (!profileId) return;
     navigate(`/profile?user=${encodeURIComponent(profileId)}`);
   };
 
@@ -390,7 +394,7 @@ export default function Home() {
                 >
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <button type="button" onClick={openProfilePage} className="rounded-full">
+                      <button type="button" onClick={() => openPublicProfile(item.authorId)} className="rounded-full">
                         <img
                           src={item.authorAvatarUrl || defaultAvatar}
                           alt={item.authorName}
@@ -404,7 +408,7 @@ export default function Home() {
                         <p className="text-sm font-bold text-emerald-100">{item.authorName}</p>
                         <button
                           type="button"
-                          onClick={openProfilePage}
+                          onClick={() => openPublicProfile(item.authorId)}
                           className="text-xs text-emerald-200/80 transition hover:text-emerald-100 hover:underline"
                         >
                           {item.authorNick ? `@${item.authorNick}` : "@souza"}
@@ -421,7 +425,7 @@ export default function Home() {
                     <p className="mt-1 text-sm text-slate-200">
                       <button
                         type="button"
-                        onClick={openProfilePage}
+                        onClick={() => openPublicProfile(item.userId)}
                         className="font-semibold text-emerald-100 transition hover:text-emerald-50 hover:underline"
                       >
                         {item.userNick ? `@${item.userNick}` : item.userName}

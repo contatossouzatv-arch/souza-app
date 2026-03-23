@@ -8,8 +8,17 @@ import { Input } from "@/components/ui/input";
 import { Download, Search, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
-function resolveValidationCode(audit) {
-  return String(audit?.validation_code || audit?.opening_id || audit?.winner_id || audit?.participant_id || audit?.id || "").trim();
+function resolveValidationCode(audit, prizeItem = null) {
+  return String(
+    prizeItem?.metadata?.validation_code ||
+    prizeItem?.metadata?.grant_result?.validationCode ||
+    audit?.validation_code ||
+    audit?.opening_id ||
+    audit?.winner_id ||
+    audit?.participant_id ||
+    audit?.id ||
+    ""
+  ).trim();
 }
 
 function resolveRewardKind(audit) {
@@ -27,18 +36,23 @@ export default function AuditTab() {
 
   const { data: audits = [] } = useQuery({
     queryKey: ["winner-audits"],
-    queryFn: () => base44.entities.DrawWinnerAudit.list("-drawn_at"),
+    queryFn: () => base44.entities.DrawWinnerAudit.list("-drawn_at", 1000),
   });
 
   const { data: users = [] } = useQuery({
     queryKey: ["audit-users"],
-    queryFn: () => base44.entities.User.list(),
+    queryFn: () => base44.entities.User.list("-created_date", 1000),
     staleTime: 60000,
   });
 
   const { data: platformHistory = [] } = useQuery({
     queryKey: ["audit-platform-history"],
-    queryFn: () => base44.entities.PlatformHistory.list("-created_date"),
+    queryFn: () => base44.entities.PlatformHistory.list("-created_date", 1000),
+    staleTime: 60000,
+  });
+  const { data: prizeGalleryItems = [] } = useQuery({
+    queryKey: ["audit-prize-gallery"],
+    queryFn: () => base44.entities.UserPrizeGalleryItem.list("-claimed_at", 1000),
     staleTime: 60000,
   });
 
@@ -73,8 +87,20 @@ export default function AuditTab() {
   }, [historyByUserId]);
 
   const normalizedAudits = React.useMemo(() => {
+    const prizeByAuditKey = new Map();
+    prizeGalleryItems.forEach((item) => {
+      const auditId = String(item?.metadata?.audit_id || "").trim();
+      if (auditId) prizeByAuditKey.set(`audit:${auditId}`, item);
+      const openingId = String(item?.source_ref_id || item?.metadata?.opening_id || "").trim();
+      if (openingId) prizeByAuditKey.set(`opening:${openingId}`, item);
+    });
+
     return audits.map((audit) => {
       const user = usersById.get(audit.user_id);
+      const matchedPrize =
+        prizeByAuditKey.get(`audit:${String(audit.id || "").trim()}`) ||
+        prizeByAuditKey.get(`opening:${String(audit.opening_id || "").trim()}`) ||
+        null;
       const platformId = audit.user_platform_id || audit.platform_id || user?.platform_id || "";
       const platformName = resolvePlatformName(audit, user, platformId);
       const prizeAmountNumber = Number(audit.prize_amount || 0);
@@ -96,13 +122,13 @@ export default function AuditTab() {
         game_call: audit.game_call || "",
         status: audit.status || "validated",
         reward_type: resolveRewardKind(audit),
-        validation_code: resolveValidationCode(audit),
+        validation_code: resolveValidationCode(audit, matchedPrize),
         redemption_status: audit.redemption_status || "pending",
         redeemed_at: audit.redeemed_at || null,
         prize_amount: Number.isFinite(prizeAmountNumber) ? prizeAmountNumber : 0,
       };
     });
-  }, [audits, usersById, resolvePlatformName]);
+  }, [audits, prizeGalleryItems, usersById, resolvePlatformName]);
 
   const deleteAuditMutation = useMutation({
     mutationFn: (auditId) => base44.adminAudit.deleteWinnerAudit(auditId),
@@ -161,6 +187,19 @@ export default function AuditTab() {
       alert(`Resgate confirmado para ${targetAudit.user_name}.`);
     } catch (error) {
       alert("Erro ao confirmar resgate: " + (error?.message || "Tente novamente."));
+    }
+  };
+
+  const handleManualRedeem = async (audit) => {
+    if (String(audit.redemption_status || "").toLowerCase() === "redeemed") {
+      alert("Esse prêmio já foi marcado como resgatado.");
+      return;
+    }
+    try {
+      await redeemAuditMutation.mutateAsync(audit);
+      alert(`Resgate marcado manualmente para ${audit.user_name}.`);
+    } catch (error) {
+      alert("Erro ao validar manualmente: " + (error?.message || "Tente novamente."));
     }
   };
 
@@ -374,9 +413,19 @@ Data Validação: ${validationDate}
                       ) : null}
                     </td>
                     <td className="p-3">
-                      <Button size="sm" variant="destructive" onClick={() => handleDelete(audit)} className="bg-red-600 hover:bg-red-700">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleManualRedeem(audit)}
+                          disabled={redeemAuditMutation.isPending || audit.redemption_status === "redeemed"}
+                          className="bg-emerald-600 hover:bg-emerald-700"
+                        >
+                          Validar manual
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => handleDelete(audit)} className="bg-red-600 hover:bg-red-700">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))

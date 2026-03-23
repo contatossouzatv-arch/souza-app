@@ -281,15 +281,21 @@ function countRewardTypeWinsForDay(openings = [], rewardType) {
   }, 0);
 }
 
+function isBalanceLikeRewardType(rewardType) {
+  return ["points_balance", "saldo", "bonus", "cash_prize"].includes(String(rewardType || "").trim().toLowerCase());
+}
+
 function filterRewardPoolForUserDay(rewardPool = [], openings = [], settings) {
   const maxBalanceWins = Math.max(0, Number(settings?.balanceWinsPerUserDay || 0));
   if (maxBalanceWins <= 0) return rewardPool;
 
-  const balanceWinsToday = countRewardTypeWinsForDay(openings, "points_balance");
+  const balanceWinsToday = openings.reduce((sum, entry) => {
+    const snapshotType = String(entry?.reward_snapshot?.rewardType || "").trim().toLowerCase();
+    return isBalanceLikeRewardType(snapshotType) ? sum + 1 : sum;
+  }, 0);
   if (balanceWinsToday < maxBalanceWins) return rewardPool;
 
-  const filtered = rewardPool.filter((reward) => String(reward?.rewardType || "").trim().toLowerCase() !== "points_balance");
-  return filtered.length > 0 ? filtered : rewardPool;
+  return rewardPool.filter((reward) => !isBalanceLikeRewardType(reward?.rewardType));
 }
 
 function summarizeSlots({ openings = [], baseSlots = 0, bonusSlots = 0, baseUnlocked = false }) {
@@ -581,8 +587,9 @@ async function resolveChestStateForUser(userId) {
   const settings = await loadDailyChestSettings();
   const windowInfo = getLocalWindow(settings);
   const rewardPool = await loadRewardPoolForDay(windowInfo.chestDayKey, settings, windowInfo.now);
-  const rewardPreview = rewardPool[0] || null;
   const openings = await listDailyChestOpeningsByUserDay(userId, windowInfo.chestDayKey);
+  const filteredRewardPool = filterRewardPoolForUserDay(rewardPool, openings, settings);
+  const rewardPreview = filteredRewardPool[0] || null;
   const activeOpening =
     openings.find((entry) => entry.status === "opened" || entry.status === "claimed_pending") ||
     null;
@@ -604,7 +611,7 @@ async function resolveChestStateForUser(userId) {
     settings,
     opening: activeOpening || openings[0] || null,
     rewardPreview,
-    rewardPool,
+    rewardPool: filteredRewardPool,
     windowInfo,
     isUnlocked: scheduleUnlocked,
     accessGate,
@@ -923,6 +930,15 @@ async function createDailyChestAuditRecord({ userId, opening, grantResult, chest
   const rewardType = String(snapshot?.rewardType || "").trim().toLowerCase();
   if (!shouldCreateAuditForReward(rewardType)) return null;
 
+  const openingId = String(opening?.id || "").trim();
+  if (openingId) {
+    const existingAudits = await listEntity("DrawWinnerAudit", "-drawn_at", 1000);
+    const existing = existingAudits.find((entry) => String(entry?.opening_id || "").trim() === openingId);
+    if (existing) {
+      return existing;
+    }
+  }
+
   const user = await getEntityById("User", userId);
   const now = new Date().toISOString();
   return createEntity("DrawWinnerAudit", {
@@ -1048,6 +1064,10 @@ router.post("/open", requireAuth, async (req, res) => {
 
   if (slotType === "bonus" && slotSummary.availableBonus <= 0) {
     return res.status(409).json({ error: "Voce nao tem giros extras disponíveis agora." });
+  }
+
+  if (filteredRewardPool.length <= 0) {
+    return res.status(409).json({ error: "Voce ja atingiu o limite de bancas permitido para hoje." });
   }
 
   const selectedReward = await reserveRewardFromPool(filteredRewardPool, windowInfo.chestDayKey);

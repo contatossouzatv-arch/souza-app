@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createSecurityEvent, findUserById, listEntity, pool } from "../db/index.js";
+import { createEntity, createSecurityEvent, findUserById, listEntity, pool } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
@@ -147,6 +147,35 @@ function normalizeListOffset(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return 0;
   return Math.floor(parsed);
+}
+
+async function createProfileNotification({
+  targetUserId,
+  actor,
+  type,
+  title,
+  message,
+  metadata = {},
+}) {
+  if (!targetUserId || !actor?.id) return null;
+  if (String(targetUserId) === String(actor.id)) return null;
+  return createEntity("ProfileNotification", {
+    user_id: String(targetUserId),
+    actor_user_id: String(actor.id),
+    actor_name: String(actor.full_name || actor.nick || "Usuário").trim(),
+    actor_nick: String(actor.nick || "").trim(),
+    actor_avatar_emoji: String(actor.avatar_emoji || "").trim(),
+    actor_profile_avatar_id: String(actor.profile_avatar_id || "").trim(),
+    actor_profile_image_mode: String(actor.profile_image_mode || "avatar").trim(),
+    actor_profile_image_status: String(actor.profile_image_status || "").trim(),
+    actor_profile_image_url: String(actor.profile_image_url || "").trim(),
+    type: String(type || "info").trim(),
+    title: String(title || "").trim(),
+    message: String(message || "").trim(),
+    status: "unread",
+    read_at: null,
+    metadata,
+  });
 }
 
 async function findEngagementEventByRequestId(client, requestId) {
@@ -446,7 +475,7 @@ router.get("/social/state/:targetUserId", requireAuth, async (req, res) => {
   const viewerUserId = req.auth.sub;
   const targetUserId = req.params.targetUserId === "me" ? viewerUserId : String(req.params.targetUserId || "");
 
-  const target = await findUserById(targetUserId);
+  const [target, actor] = await Promise.all([findUserById(targetUserId), findUserById(userId)]);
   if (!target) {
     return res.status(404).json({ error: "Perfil não encontrado" });
   }
@@ -504,7 +533,7 @@ async function upsertFollowState(req, res, active) {
     return res.status(400).json({ error: "Não é permitido seguir o próprio perfil" });
   }
 
-  const target = await findUserById(targetUserId);
+  const [target, actor] = await Promise.all([findUserById(targetUserId), findUserById(userId)]);
   if (!target) {
     return res.status(404).json({ error: "Perfil não encontrado" });
   }
@@ -582,7 +611,22 @@ async function upsertFollowState(req, res, active) {
       metadata: { target_user_id: targetUserId, request_id: requestId },
     });
 
+    if (active && applied && actor) {
+      await createProfileNotification({
+        targetUserId,
+        actor,
+        type: "follow",
+        title: "Novo seguidor",
+        message: `${actor.full_name || actor.nick || "Alguém"} seguiu você.`,
+        metadata: {
+          relation_id: relation?.id || "",
+          request_id: requestId,
+        },
+      });
+    }
+
     emitEntityChanged(req, "user_follows", relation?.id || targetUserId, applied ? "updated" : "duplicate");
+    emitEntityChanged(req, "ProfileNotification", targetUserId, active && applied ? "created" : "updated");
     emitEntityChanged(req, "gamification", userId, "updated");
     emitEntityChanged(req, "gamification", targetUserId, "updated");
 
@@ -685,7 +729,22 @@ async function upsertLikeState(req, res, active) {
       metadata: { target_user_id: targetUserId, request_id: requestId },
     });
 
+    if (active && applied && actor) {
+      await createProfileNotification({
+        targetUserId,
+        actor,
+        type: "like",
+        title: "Novo like no perfil",
+        message: `${actor.full_name || actor.nick || "Alguém"} curtiu seu perfil.`,
+        metadata: {
+          relation_id: relation?.id || "",
+          request_id: requestId,
+        },
+      });
+    }
+
     emitEntityChanged(req, "profile_likes", relation?.id || targetUserId, applied ? "updated" : "duplicate");
+    emitEntityChanged(req, "ProfileNotification", targetUserId, active && applied ? "created" : "updated");
     emitEntityChanged(req, "gamification", userId, "updated");
     emitEntityChanged(req, "gamification", targetUserId, "updated");
 
