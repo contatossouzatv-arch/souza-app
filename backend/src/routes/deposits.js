@@ -8,6 +8,7 @@ import {
   getDepositAdminHistory,
   invalidateDepositAdmin,
   listAdminDeposits,
+  listDepositCycleLeaderboard,
   listDepositsByUserId,
   approveDepositRecord,
   rejectDepositRecord,
@@ -89,6 +90,14 @@ router.post("/deposits", requireAuth, async (req, res) => {
 router.get("/deposits/my", requireAuth, async (req, res) => {
   const deposits = await listDepositsByUserId(req.auth.sub);
   return res.json({ items: deposits });
+});
+
+router.get("/deposits/leaderboard", requireAuth, async (req, res) => {
+  const items = await listDepositCycleLeaderboard({
+    cycleId: String(req.query.cycleId || "").trim(),
+    limit: req.query.limit,
+  });
+  return res.json({ items });
 });
 
 router.get("/admin/deposits", requireAuth, requireAdmin, async (req, res) => {

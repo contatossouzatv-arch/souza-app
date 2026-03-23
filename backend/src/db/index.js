@@ -1988,6 +1988,45 @@ export async function listAdminDeposits({ status = "", cycleId = "", limit } = {
   return applyLimit(rows, limit);
 }
 
+export async function listDepositCycleLeaderboard({ cycleId = "", limit = 10 } = {}) {
+  const values = [];
+  const where = [
+    "entity_name = 'Deposit'",
+    "data->>'status' = 'approved'",
+    "COALESCE(data->>'user_id', '') <> ''",
+  ];
+
+  if (cycleId) {
+    values.push(String(cycleId));
+    where.push(`data->>'cycle_id' = $${values.length}`);
+  }
+
+  values.push(Number(limit) > 0 ? Number(limit) : 10);
+
+  const result = await pool.query(
+    `SELECT
+       data->>'user_id' AS user_id,
+       MAX(NULLIF(data->>'user_name', '')) AS user_name,
+       COALESCE(SUM((data->>'amount')::numeric), 0) AS total_amount,
+       COUNT(*)::int AS deposits_count,
+       COALESCE(SUM(COALESCE((data->>'tickets_count')::numeric, 0)), 0)::int AS tickets_count
+     FROM entity_records
+     WHERE ${where.join(" AND ")}
+     GROUP BY data->>'user_id'
+     ORDER BY total_amount DESC, deposits_count DESC, user_id ASC
+     LIMIT $${values.length}`,
+    values
+  );
+
+  return result.rows.map((row) => ({
+    user_id: String(row.user_id || ""),
+    user_name: String(row.user_name || ""),
+    total: Number(row.total_amount || 0),
+    deposits_count: Number(row.deposits_count || 0),
+    tickets_count: Number(row.tickets_count || 0),
+  }));
+}
+
 export async function getDepositAdminHistory(depositId) {
   return listDepositProcessingEventsByDepositId(depositId);
 }
@@ -2791,11 +2830,6 @@ export async function submitGameCall({ raffleId, userId, gameCall, requestId = "
 }
 
 export async function joinInstantRaffle({ raffleId, userId, platformId = "", requestId = "" }) {
-  const normalizedPlatformId = String(platformId || "").trim().slice(0, 120);
-  if (!normalizedPlatformId) {
-    throw createHttpError("ID da plataforma obrigatório.", 400);
-  }
-
   return createOrReuseParticipation({
     domain: "instant_raffle_participation",
     requestId,
@@ -2807,6 +2841,10 @@ export async function joinInstantRaffle({ raffleId, userId, platformId = "", req
     buildNewData: ({ raffle, user }) => {
       if (raffle.winners_drawn) {
         throw createHttpError("Este sorteio já foi encerrado.", 409);
+      }
+      const normalizedPlatformId = String(platformId || user?.platform_id || "").trim().slice(0, 120);
+      if (!normalizedPlatformId) {
+        throw createHttpError("ID da plataforma obrigatório.", 400);
       }
       return {
         raffle_id: raffle.id,

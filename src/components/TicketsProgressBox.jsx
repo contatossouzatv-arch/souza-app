@@ -14,6 +14,26 @@ import depositSuccessSound from "../../assets-para-app/moeda effect song deposit
 
 const SUPPORTED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp|gif)$/i;
 const SUPPORTED_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
+const MAX_PROOF_IMAGE_SIZE_BYTES = 40 * 1024 * 1024;
+
+function buildProofUploadErrorMessage(error, failedCount = 0) {
+  const rawMessage = String(error?.message || "").trim();
+  const lowerMessage = rawMessage.toLowerCase();
+
+  if (error?.status === 413 || lowerMessage.includes("file too large")) {
+    return "Nao foi possivel carregar o comprovante porque o arquivo excede o limite permitido. Tente novamente com uma imagem menor.";
+  }
+  if (error?.status === 401 || error?.status === 403) {
+    return "Sua sessao expirou durante o envio do comprovante. Entre novamente e tente de novo.";
+  }
+  if (lowerMessage.includes("failed to fetch") || lowerMessage.includes("networkerror") || lowerMessage.includes("network request failed")) {
+    return "Nao foi possivel carregar o arquivo. Verifique sua internet e tente novamente.";
+  }
+  if (failedCount > 1) {
+    return `Nao foi possivel carregar ${failedCount} comprovantes. Tente novamente.`;
+  }
+  return "Nao foi possivel carregar o arquivo. Tente novamente.";
+}
 
 export default function TicketsProgressBox({
   totalApproved,
@@ -35,6 +55,7 @@ export default function TicketsProgressBox({
   const [selectedPlatformKey, setSelectedPlatformKey] = useState(ADD_NEW_PLATFORM_VALUE);
   const [proofImages, setProofImages] = useState([]);
   const [proofPreviewUrls, setProofPreviewUrls] = useState([]);
+  const [proofUploadError, setProofUploadError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState("");
   const [showCheckMenu, setShowCheckMenu] = useState(false);
@@ -281,11 +302,21 @@ export default function TicketsProgressBox({
     const startedAt = Date.now();
     setLoading(true);
     setSubmissionStatus("loading");
+    setProofUploadError("");
     try {
-      const uploadedFiles = await Promise.all(
+      const uploadResults = await Promise.allSettled(
         proofImages.map((file) => base44.integrations.Core.UploadFile({ file }))
       );
-      const fileUrls = uploadedFiles.map((item) => item.file_url).filter(Boolean);
+      const failedUploads = uploadResults.filter((result) => result.status === "rejected");
+      if (failedUploads.length > 0) {
+        const uploadError = failedUploads[0].reason;
+        const uploadMessage = buildProofUploadErrorMessage(uploadError, failedUploads.length);
+        setProofUploadError(uploadMessage);
+        throw new Error(uploadMessage);
+      }
+      const fileUrls = uploadResults
+        .map((result) => (result.status === "fulfilled" ? result.value?.file_url : ""))
+        .filter(Boolean);
 
       await base44.deposits.create({
         amount: parseFloat(amount),
@@ -320,6 +351,7 @@ export default function TicketsProgressBox({
         setPlatformId("");
       }
       setProofImages([]);
+      setProofUploadError("");
       setPreviewImageUrl("");
       setPreviewOpen(false);
 
@@ -583,16 +615,23 @@ export default function TicketsProgressBox({
                   if (!selected.length) return;
                   const valid = [];
                   let invalidCount = 0;
+                  let oversizedCount = 0;
 
                   selected.forEach((file) => {
                     const normalizedType = String(file.type || "").toLowerCase();
                     const isSupportedType =
                       (normalizedType && SUPPORTED_IMAGE_MIME_TYPES.has(normalizedType)) ||
                       SUPPORTED_IMAGE_EXTENSIONS.test(String(file.name || ""));
+                    if (!isSupportedType) {
+                      invalidCount += 1;
+                      return;
+                    }
+                    if (Number(file.size || 0) > MAX_PROOF_IMAGE_SIZE_BYTES) {
+                      oversizedCount += 1;
+                      return;
+                    }
                     if (isSupportedType) {
                       valid.push(file);
-                    } else {
-                      invalidCount += 1;
                     }
                   });
 
@@ -604,11 +643,21 @@ export default function TicketsProgressBox({
                     });
                   }
 
+                  if (oversizedCount > 0) {
+                    toast({
+                      variant: "destructive",
+                      title: "Arquivo muito grande",
+                      description: "Cada comprovante deve ter no maximo 40 MB.",
+                    });
+                  }
+
                   if (!valid.length) {
+                    setProofUploadError("Nenhum comprovante valido foi selecionado. Use uma imagem suportada de ate 40 MB.");
                     e.target.value = "";
                     return;
                   }
 
+                  setProofUploadError("");
                   setProofImages((prev) => {
                     const map = new Map(prev.map((file) => [`${file.name}-${file.size}-${file.lastModified}`, file]));
                     valid.forEach((file) => {
@@ -621,6 +670,11 @@ export default function TicketsProgressBox({
                 }}
                 className="h-auto min-h-12 bg-slate-900/70 border-slate-700 py-2 text-white file:mr-3 file:rounded-full file:border-0 file:bg-indigo-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-indigo-500"
               />
+              {proofUploadError ? (
+                <div className="rounded-lg border border-red-500/40 bg-red-950/40 px-3 py-2 text-xs text-red-200">
+                  {proofUploadError}
+                </div>
+              ) : null}
               {proofImages.length > 0 ? (
                 <div className="space-y-2">
                   <p className="text-xs text-slate-400">Comprovantes selecionados: {proofImages.length}</p>

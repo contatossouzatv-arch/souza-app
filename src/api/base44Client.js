@@ -557,6 +557,13 @@ export const base44 = {
       return request("/api/deposits/my");
     },
 
+    async leaderboard({ cycleId = "", limit } = {}) {
+      const params = new URLSearchParams();
+      if (cycleId) params.set("cycleId", cycleId);
+      if (limit) params.set("limit", String(limit));
+      return request(`/api/deposits/leaderboard${params.toString() ? `?${params.toString()}` : ""}`);
+    },
+
     async adminList({ status = "", cycleId = "", limit } = {}) {
       const params = new URLSearchParams();
       if (status) params.set("status", status);

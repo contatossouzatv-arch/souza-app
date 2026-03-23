@@ -4,13 +4,10 @@ import { Trophy, Sparkles, Zap, Check, Gift, ExternalLink, PartyPopper, Frown, X
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 
 export default function InstantRaffleBox({ user }) {
   const queryClient = useQueryClient();
-  const [platformId, setPlatformId] = useState(user?.platform_id || "");
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [isShaking, setIsShaking] = useState(false);
 
@@ -105,7 +102,7 @@ export default function InstantRaffleBox({ user }) {
   }, [usersById]);
 
   const participateMutation = useMutation({
-    mutationFn: async () => base44.instantRaffles.join(activeRaffle.id, { platformId }),
+    mutationFn: async () => base44.instantRaffles.join(activeRaffle.id),
     onMutate: () => {
       setIsProcessing(true);
       return { timestamp: Date.now() };
@@ -194,11 +191,6 @@ export default function InstantRaffleBox({ user }) {
 
 
   const handleParticipate = () => {
-    if (!platformId.trim()) {
-      alert("Por favor, digite seu ID da plataforma");
-      return;
-    }
-    
     // Previne cliques múltiplos enquanto está processando
     if (participateMutation.isPending || isProcessing) {
       return;
@@ -392,16 +384,6 @@ export default function InstantRaffleBox({ user }) {
               className="max-w-md mx-auto space-y-3 md:space-y-4"
             >
               <Card className="bg-white/90 backdrop-blur-sm p-4 md:p-6">
-                <Label htmlFor="platformId" className="text-gray-800 font-bold mb-2 block text-sm md:text-base">
-                  Digite seu ID da Plataforma
-                </Label>
-                <Input
-                  id="platformId"
-                  value={platformId}
-                  onChange={(e) => setPlatformId(e.target.value)}
-                  placeholder="Seu ID"
-                  className="mb-3 md:mb-4 text-base md:text-lg"
-                />
                 <Button
                   onClick={handleParticipate}
                   disabled={participateMutation.isPending || isProcessing || hasParticipated}

@@ -94,6 +94,16 @@ export default function Deposits() {
   });
   const activeCycle = cycles.find((c) => c.active);
 
+  const { data: leaderboard = [], isLoading: leaderboardLoading } = useQuery({
+    queryKey: ["deposit-cycle-leaderboard", activeCycle?.id],
+    queryFn: async () => {
+      const response = await base44.deposits.leaderboard({ cycleId: activeCycle?.id, limit: 20 });
+      return response.items || [];
+    },
+    enabled: !!user && !!activeCycle?.id,
+    staleTime: 30000,
+  });
+
   const cycleApprovedDeposits = deposits.filter(
     (d) => d.status === "approved" && d.cycle_id === activeCycle?.id
   );
@@ -110,16 +120,7 @@ export default function Deposits() {
     0
   );
 
-  const rankingMap = {};
-  allDeposits
-    .filter((d) => d.status === "approved" && activeCycle && d.cycle_id === activeCycle.id)
-    .forEach((d) => {
-      if (!rankingMap[d.user_id]) {
-        rankingMap[d.user_id] = { user_id: d.user_id, total: 0 };
-      }
-      rankingMap[d.user_id].total += parseFloat(d.amount) || 0;
-    });
-  const rankings = Object.values(rankingMap).sort((a, b) => b.total - a.total);
+  const rankings = leaderboard;
   const top3 = rankings.slice(0, 3);
   const userPosition = rankings.findIndex((u) => u.user_id === user?.id) + 1;
 
@@ -132,7 +133,14 @@ export default function Deposits() {
   const depositantDrawEndDate = activeCycle?.draw_date || getSettingValue("depositant_draw_end_date");
 
   const isLoading =
-    isLoadingAuth || !user || depositsLoading || allDepositsLoading || settingsLoading || usersLoading || drawWinnersLoading;
+    isLoadingAuth ||
+    !user ||
+    depositsLoading ||
+    allDepositsLoading ||
+    settingsLoading ||
+    usersLoading ||
+    drawWinnersLoading ||
+    (Boolean(activeCycle?.id) && leaderboardLoading);
 
   if (isLoading) {
     return <TechLoader />;
@@ -410,7 +418,7 @@ export default function Deposits() {
             {depositantDrawEndDate ? (
               <div className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 p-3 text-center">
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200">
-                  Contagem para o sorteio
+                  CONTAGEM PARA O FIM DO CICLO!
                 </p>
                 <div className="flex items-center justify-center">
                   <CountdownTimer endDateString={depositantDrawEndDate} />

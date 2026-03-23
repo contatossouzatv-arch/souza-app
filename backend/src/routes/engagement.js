@@ -33,7 +33,7 @@ async function logSecurityEvent(req, type, metadata = {}) {
 
 router.post("/live-draws/:id/join", requireAuth, async (req, res) => {
   const raffleId = String(req.params.id || "").trim();
-  if (!raffleId) return res.status(400).json({ error: "Raffle id obrigatório." });
+  if (!raffleId) return res.status(400).json({ error: "Raffle id obrigatÃ³rio." });
 
   const result = await joinLiveDraw({
     raffleId,
@@ -52,7 +52,7 @@ router.post("/live-draws/:id/join", requireAuth, async (req, res) => {
 
 router.post("/game-call/:id/join", requireAuth, async (req, res) => {
   const raffleId = String(req.params.id || "").trim();
-  if (!raffleId) return res.status(400).json({ error: "Raffle id obrigatório." });
+  if (!raffleId) return res.status(400).json({ error: "Raffle id obrigatÃ³rio." });
 
   const result = await joinGameCall({
     raffleId,
@@ -72,7 +72,7 @@ router.post("/game-call/:id/join", requireAuth, async (req, res) => {
 router.post("/game-call/:id/submit", requireAuth, async (req, res) => {
   const raffleId = String(req.params.id || "").trim();
   const gameCall = String(req.body?.gameCall || "").trim();
-  if (!raffleId) return res.status(400).json({ error: "Raffle id obrigatório." });
+  if (!raffleId) return res.status(400).json({ error: "Raffle id obrigatÃ³rio." });
   if (!gameCall) return res.status(400).json({ error: "Digite a call do jogo." });
 
   const result = await submitGameCall({
@@ -94,8 +94,7 @@ router.post("/game-call/:id/submit", requireAuth, async (req, res) => {
 router.post("/instant-raffles/:id/join", requireAuth, async (req, res) => {
   const raffleId = String(req.params.id || "").trim();
   const platformId = String(req.body?.platformId || "").trim();
-  if (!raffleId) return res.status(400).json({ error: "Raffle id obrigatório." });
-  if (!platformId) return res.status(400).json({ error: "ID da plataforma obrigatório." });
+  if (!raffleId) return res.status(400).json({ error: "Raffle id obrigatÃ³rio." });
 
   const result = await joinInstantRaffle({
     raffleId,
@@ -115,7 +114,7 @@ router.post("/instant-raffles/:id/join", requireAuth, async (req, res) => {
 
 router.post("/instant-raffles/:id/dismiss", requireAuth, async (req, res) => {
   const raffleId = String(req.params.id || "").trim();
-  if (!raffleId) return res.status(400).json({ error: "Raffle id obrigatório." });
+  if (!raffleId) return res.status(400).json({ error: "Raffle id obrigatÃ³rio." });
 
   const result = await dismissInstantRaffle({
     raffleId,
@@ -135,7 +134,7 @@ router.post("/instant-raffles/:id/dismiss", requireAuth, async (req, res) => {
 router.post("/winnings/:kind/:id/claim", requireAuth, async (req, res) => {
   const kind = String(req.params.kind || "").trim();
   const recordId = String(req.params.id || "").trim();
-  if (!recordId) return res.status(400).json({ error: "Winning id obrigatório." });
+  if (!recordId) return res.status(400).json({ error: "Winning id obrigatÃ³rio." });
 
   const result = await claimWinning({
     kind,
@@ -145,7 +144,7 @@ router.post("/winnings/:kind/:id/claim", requireAuth, async (req, res) => {
   });
 
   if (!result) {
-    return res.status(404).json({ error: "Premiação não encontrada." });
+    return res.status(404).json({ error: "PremiaÃ§Ã£o nÃ£o encontrada." });
   }
 
   await logSecurityEvent(req, "WINNING_CLAIMED", {
@@ -160,7 +159,7 @@ router.post("/winnings/:kind/:id/claim", requireAuth, async (req, res) => {
 router.post("/winnings/:kind/:id/dismiss", requireAuth, async (req, res) => {
   const kind = String(req.params.kind || "").trim();
   const recordId = String(req.params.id || "").trim();
-  if (!recordId) return res.status(400).json({ error: "Winning id obrigatório." });
+  if (!recordId) return res.status(400).json({ error: "Winning id obrigatÃ³rio." });
 
   const result = await dismissWinning({
     kind,
@@ -170,7 +169,7 @@ router.post("/winnings/:kind/:id/dismiss", requireAuth, async (req, res) => {
   });
 
   if (!result) {
-    return res.status(404).json({ error: "Premiação não encontrada." });
+    return res.status(404).json({ error: "PremiaÃ§Ã£o nÃ£o encontrada." });
   }
 
   await logSecurityEvent(req, "WINNING_DISMISSED", {
@@ -184,7 +183,7 @@ router.post("/winnings/:kind/:id/dismiss", requireAuth, async (req, res) => {
 
 router.post("/cashback/claim", requireAuth, async (req, res) => {
   const goalType = String(req.body?.goalType || "").trim();
-  if (!goalType) return res.status(400).json({ error: "goalType obrigatório." });
+  if (!goalType) return res.status(400).json({ error: "goalType obrigatÃ³rio." });
 
   const result = await claimCashbackReward({
     userId: req.auth.sub,

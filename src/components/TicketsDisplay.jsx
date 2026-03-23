@@ -107,8 +107,8 @@ export default function TicketsDisplay({
             <div className="flex flex-col items-center justify-between gap-3 md:flex-row">
               <div className="text-center md:text-left">
                 <p className="mb-1 text-sm font-bold text-green-200 md:text-base">Bilhetes Bonus Desbloqueados!</p>
-                <p className="text-xs text-green-300">Esses bilhetes já foram concedidos pelo backend.</p>
-                <p className="mt-1 text-xs text-green-400">O cálculo agora é autoritativo por depósito aprovado.</p>
+                <p className="text-xs text-green-300">Voce liberou bilhetes extras neste ciclo.</p>
+                <p className="mt-1 text-xs text-green-400">Quanto mais depositos aprovados, maiores suas chances no sorteio.</p>
               </div>
               <span className="text-4xl font-black text-green-300 md:text-5xl">+{myBonusTickets}</span>
             </div>

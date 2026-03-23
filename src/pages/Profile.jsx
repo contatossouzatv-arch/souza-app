@@ -1518,6 +1518,16 @@ export default function Profile() {
 
   const isViewingPublicProfile = Boolean(selectedPublicProfileHandle || selectedPublicProfileId);
 
+  const { data: selectedPublicUserById } = useQuery({
+    queryKey: ["public-profile-user", selectedPublicProfileId],
+    queryFn: async () => {
+      const items = await base44.entities.User.filter({ id: selectedPublicProfileId }, undefined, 1);
+      return Array.isArray(items) ? items[0] || null : null;
+    },
+    enabled: Boolean(selectedPublicProfileId),
+    staleTime: 30000,
+  });
+
   useEffect(() => {
     if (!isViewingPublicProfile) return;
     const scrollRoot = document.querySelector('[data-app-scroll-root="true"]');
@@ -1533,7 +1543,7 @@ export default function Profile() {
     if (!selectedPublicProfileHandle && !selectedPublicProfileId) return null;
     if (selectedPublicProfileId && competitionEntryByUserId[selectedPublicProfileId]) {
       const entry = competitionEntryByUserId[selectedPublicProfileId];
-      const resolvedProfile = realProfilesById[selectedPublicProfileId] || entry;
+      const resolvedProfile = selectedPublicUserById || realProfilesById[selectedPublicProfileId] || entry;
       const avatarMatch = avatarOptions.find((item) => item.id === resolvedProfile.profile_avatar_id || item.id === entry.profile_avatar_id);
       return {
         id: entry.user_id,
@@ -1579,6 +1589,7 @@ export default function Profile() {
     competitionEntryByUserId,
     avatarOptions,
     realProfilesById,
+    selectedPublicUserById,
   ]);
 
   const isSelectedRealProfile = Boolean(selectedPublicProfile?.id);

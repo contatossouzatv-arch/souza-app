@@ -118,6 +118,7 @@ function PrizeDetailsDialog({ item, viewer, open, onOpenChange }) {
   const validationCode = String(getValidationCode(item) || "").trim();
   const adminContact = getAdminContact(item);
   const showAdminContact = isCashPrizeLike(item) && (adminContact.name || adminContact.phone);
+  const requiresAdminRedeem = isCashPrizeLike(item);
   const [copied, setCopied] = React.useState(false);
 
   React.useEffect(() => {
@@ -130,6 +131,13 @@ function PrizeDetailsDialog({ item, viewer, open, onOpenChange }) {
       await navigator.clipboard.writeText(validationCode);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
+      if (!requiresAdminRedeem) {
+        toast({
+          title: "Codigo copiado",
+          description: "Codigo de validacao copiado com sucesso.",
+        });
+        return;
+      }
       toast({
         title: "Codigo copiado",
         description: "Envie esse código ao admin para confirmar o resgate.",
@@ -141,7 +149,7 @@ function PrizeDetailsDialog({ item, viewer, open, onOpenChange }) {
         description: "Tente selecionar o código manualmente.",
       });
     }
-  }, [validationCode]);
+  }, [requiresAdminRedeem, validationCode]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
