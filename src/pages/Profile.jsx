@@ -1545,6 +1545,8 @@ export default function Profile() {
           defaultAvatar,
         avatar_emoji: String(resolvedProfile.avatar_emoji || entry.avatar_emoji || ""),
         points: Number(entry.weekly_points ?? entry.points ?? 0),
+        xpTotal: Math.max(0, Number(entry.xp_total ?? entry.xpTotal ?? resolvedProfile.xp_total ?? resolvedProfile.xpTotal ?? 0)),
+        xp_total: Math.max(0, Number(entry.xp_total ?? entry.xpTotal ?? resolvedProfile.xp_total ?? resolvedProfile.xpTotal ?? 0)),
         tickets: Number(entry.totalTickets || 0),
         participations:
           Number(entry.liveParticipations || 0) +
