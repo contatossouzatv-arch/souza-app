@@ -1439,7 +1439,7 @@ function buildCompetitionBoard(entries, cycle, config) {
       progressPct,
     },
     entries: entries.slice(0, 50),
-    rewardLabel: `${Math.max(1, Number(config.winners_count || 10))} posições premiadas`,
+    rewardLabel: `O TOP ${Math.max(1, Number(config.winners_count || 10))} vai levar bancas garantidas!`,
   };
 }
 
