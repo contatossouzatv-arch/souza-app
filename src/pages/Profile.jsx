@@ -1584,7 +1584,7 @@ export default function Profile() {
 
   const { data: profileNotifications = [] } = useQuery({
     queryKey: ["profile-notifications", user?.id],
-    queryFn: () => base44.entities.ProfileNotification.list("-created_date", 50),
+    queryFn: () => base44.entities.ProfileNotification.filter({ user_id: user.id }, "-created_date", 50),
     enabled: Boolean(user?.id) && !isViewingPublicProfile,
     staleTime: 15000,
     refetchInterval: 30000,
