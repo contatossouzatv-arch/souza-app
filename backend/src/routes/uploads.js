@@ -120,7 +120,7 @@ const storage = multer.diskStorage({
   destination: async (req, _file, cb) => {
     try {
       const subFolder = resolveScopedFolder(req);
-      const fullDir = subFolder ? path.resolve(uploadDir, subFolder) : uploadDir;
+      const fullDir = subFolder ? path.resolve(uploadsDir, subFolder) : uploadsDir;
       await fs.promises.mkdir(fullDir, { recursive: true });
       cb(null, fullDir);
     } catch (error) {
@@ -160,7 +160,7 @@ router.post("/", upload.single("file"), (req, res) => {
   }
 
   const absoluteSavedPath = path.resolve(req.file.path);
-  const relativeToUploadDir = path.relative(uploadDir, absoluteSavedPath).replace(/\\/g, "/");
+  const relativeToUploadDir = path.relative(uploadsDir, absoluteSavedPath).replace(/\\/g, "/");
   const safeRelative = String(relativeToUploadDir || req.file.filename).replace(/^\/+/, "");
   const relativeFilePath = `uploads/${safeRelative}`;
   const fileUrl = buildUploadUrl(relativeFilePath);
@@ -181,8 +181,8 @@ router.delete("/", async (req, res) => {
     return res.status(400).json({ error: "Valid upload path is required" });
   }
 
-  const absolutePath = path.resolve(uploadDir, relativePath);
-  const normalizedRoot = path.resolve(uploadDir);
+  const absolutePath = path.resolve(uploadsDir, relativePath);
+  const normalizedRoot = path.resolve(uploadsDir);
   if (!absolutePath.startsWith(normalizedRoot)) {
     return res.status(400).json({ error: "Invalid upload path" });
   }
