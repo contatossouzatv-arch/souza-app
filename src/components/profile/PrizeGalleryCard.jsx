@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { formatDailyChestPrize, getDailyChestRarityMeta } from "@/lib/dailyChest";
 import { toast } from "@/components/ui/use-toast";
+import { buildWhatsAppLink } from "@/lib/whatsapp";
 
 function getPrizeIcon(type) {
   const normalized = String(type || "").toLowerCase();
@@ -92,11 +93,24 @@ function getWinnerPhone(item, viewer) {
   );
 }
 
-function getAdminContact(item) {
+function getAdminContact(item, raffle = null) {
   const snapshot = item?.metadata?.reward_snapshot || {};
+  const fallbackPhone = String(
+    item?.metadata?.admin_phone ||
+      item?.metadata?.telegram_link ||
+      raffle?.telegram_link ||
+      ""
+  ).trim();
+
   return {
-    name: String(snapshot?.adminContactName || snapshot?.admin_contact_name || "").trim(),
-    phone: String(snapshot?.adminContactPhone || snapshot?.admin_contact_phone || "").trim(),
+    name: String(
+      snapshot?.adminContactName ||
+        snapshot?.admin_contact_name ||
+        item?.metadata?.admin_name ||
+        raffle?.admin_name ||
+        ""
+    ).trim(),
+    phone: fallbackPhone,
   };
 }
 
@@ -107,6 +121,19 @@ function isCashPrizeLike(item) {
 function PrizeDetailsDialog({ item, viewer, open, onOpenChange }) {
   if (!item) return null;
 
+  const raffleId = String(item?.metadata?.raffle_id || "").trim();
+  const isInstantRafflePrize =
+    String(item?.source_type || item?.metadata?.source_type || "").toLowerCase() === "instant_raffle";
+  const { data: relatedInstantRaffle = null } = useQuery({
+    queryKey: ["prize-gallery-instant-raffle", raffleId],
+    queryFn: async () => {
+      const raffles = await base44.entities.InstantRaffle.filter({ id: raffleId });
+      return raffles[0] || null;
+    },
+    enabled: open && isInstantRafflePrize && !!raffleId,
+    staleTime: 60000,
+  });
+
   const rarity = getDailyChestRarityMeta(item?.rarity);
   const Icon = getPrizeIcon(item?.reward_type);
   const imageUrl = resolveAssetUrl(item?.gallery_image_url || "");
@@ -116,9 +143,10 @@ function PrizeDetailsDialog({ item, viewer, open, onOpenChange }) {
   const winnerName = getWinnerName(item, viewer);
   const winnerPhone = maskPhone(getWinnerPhone(item, viewer));
   const validationCode = String(getValidationCode(item) || "").trim();
-  const adminContact = getAdminContact(item);
+  const adminContact = getAdminContact(item, relatedInstantRaffle);
   const showAdminContact = isCashPrizeLike(item) && (adminContact.name || adminContact.phone);
   const requiresAdminRedeem = isCashPrizeLike(item);
+  const adminWhatsAppLabel = buildWhatsAppLink(adminContact.phone);
   const [copied, setCopied] = React.useState(false);
 
   React.useEffect(() => {
@@ -216,6 +244,16 @@ function PrizeDetailsDialog({ item, viewer, open, onOpenChange }) {
                     <p className="truncate font-semibold text-white">{adminContact.phone || "Nao informado"}</p>
                   </div>
                 </div>
+                {adminWhatsAppLabel ? (
+                  <a
+                    href={adminWhatsAppLabel}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-3 text-sm font-bold text-emerald-200 transition hover:bg-emerald-500/20 sm:col-span-2"
+                  >
+                    Chamar no WhatsApp
+                  </a>
+                ) : null}
               </div>
             ) : null}
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

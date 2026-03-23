@@ -794,7 +794,11 @@ export default function Profile() {
     removedApprovedPhotoUrls: [],
   });
   const [social, setSocial] = useState({ followers: 0, following: 0, likes: 0, isFollowing: false, isLiked: false });
-  const [editData, setEditData] = useState({ nick: "", handle: "", avatarId: "", imageMode: "avatar" });
+  const [editData, setEditData] = useState({ nick: "", handle: "", phone: "", avatarId: "", imageMode: "avatar" });
+  const [availabilityState, setAvailabilityState] = useState({
+    nick: { checking: false, available: null, message: "" },
+    phone: { checking: false, available: null, message: "" },
+  });
   const [simState, setSimState] = useState({});
   const [badgeCelebrationQueueSignal, setBadgeCelebrationQueueSignal] = useState(0);
   const pendingCelebrationSoundUnlockRef = React.useRef(null);
@@ -974,6 +978,7 @@ export default function Profile() {
     setEditData({
       nick: user.nick || "",
       handle: normalized.handle,
+      phone: user.phone || "",
       avatarId: normalized.avatarId,
       imageMode: user.profile_image_mode || "avatar",
     });
@@ -2528,6 +2533,59 @@ export default function Profile() {
     });
   };
 
+  const normalizePhoneForAvailability = React.useCallback((value) => String(value || "").replace(/\D/g, ""), []);
+
+  useEffect(() => {
+    if (!isEditOpen || !user?.id) return;
+
+    const normalizedNick = String(editData.nick || "").trim().replace(/^@+/, "").toLowerCase();
+    const normalizedCurrentNick = String(user.nick || "").trim().replace(/^@+/, "").toLowerCase();
+    const normalizedPhone = normalizePhoneForAvailability(editData.phone);
+    const normalizedCurrentPhone = normalizePhoneForAvailability(user.phone);
+    const shouldCheckNick = normalizedNick.length > 0 && normalizedNick !== normalizedCurrentNick;
+    const shouldCheckPhone = normalizedPhone.length >= 10 && normalizedPhone !== normalizedCurrentPhone;
+
+    setAvailabilityState((prev) => ({
+      nick: shouldCheckNick ? { ...prev.nick, checking: true, message: "Pesquisando disponibilidade..." } : { checking: false, available: null, message: "" },
+      phone: shouldCheckPhone ? { ...prev.phone, checking: true, message: "Pesquisando disponibilidade..." } : { checking: false, available: null, message: "" },
+    }));
+
+    if (!shouldCheckNick && !shouldCheckPhone) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const response = await base44.auth.checkAvailability({
+          nick: shouldCheckNick ? editData.nick : "",
+          phone: shouldCheckPhone ? editData.phone : "",
+        });
+
+        setAvailabilityState({
+          nick: shouldCheckNick
+            ? {
+                checking: false,
+                available: Boolean(response?.nick?.available),
+                message: response?.nick?.available ? "Nome disponível." : "Esse nome já está em uso.",
+              }
+            : { checking: false, available: null, message: "" },
+          phone: shouldCheckPhone
+            ? {
+                checking: false,
+                available: Boolean(response?.phone?.available),
+                message: response?.phone?.available ? "Telefone disponível." : "Esse telefone já está em uso.",
+              }
+            : { checking: false, available: null, message: "" },
+        });
+      } catch {
+        setAvailabilityState((prev) => ({
+          nick: shouldCheckNick ? { ...prev.nick, checking: false, available: null, message: "Não foi possível consultar agora." } : { checking: false, available: null, message: "" },
+          phone: shouldCheckPhone ? { ...prev.phone, checking: false, available: null, message: "Não foi possível consultar agora." } : { checking: false, available: null, message: "" },
+        }));
+      }
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [editData.nick, editData.phone, isEditOpen, normalizePhoneForAvailability, user?.id, user?.nick, user?.phone]);
+
   const saveQuickEdit = async () => {
     if (!user) return;
     try {
@@ -2541,8 +2599,27 @@ export default function Profile() {
         return;
       }
 
+      if (availabilityState.nick.available === false) {
+        toast({
+          variant: "destructive",
+          title: "Nome já em uso",
+          description: "Escolha outro nome para continuar.",
+        });
+        return;
+      }
+
+      if (availabilityState.phone.available === false) {
+        toast({
+          variant: "destructive",
+          title: "Telefone já em uso",
+          description: "Use outro telefone para continuar.",
+        });
+        return;
+      }
+
       await base44.auth.updateMe({
         nick: editData.nick,
+        phone: editData.phone,
         profile_image_mode: editData.imageMode || "avatar",
         profile_avatar_id: editData.avatarId || profilePrefs.avatarId,
       });
@@ -2560,6 +2637,7 @@ export default function Profile() {
       setUser((prev) => ({
         ...prev,
         nick: editData.nick,
+        phone: editData.phone,
         profile_image_mode: editData.imageMode || "avatar",
         profile_avatar_id: editData.avatarId || profilePrefs.avatarId,
       }));
@@ -2594,8 +2672,13 @@ export default function Profile() {
     setEditData({
       nick: user?.nick || "",
       handle: profilePrefs.handle || "",
+      phone: user?.phone || "",
       avatarId: currentAvatarId,
       imageMode: user?.profile_image_mode || "avatar",
+    });
+    setAvailabilityState({
+      nick: { checking: false, available: null, message: "" },
+      phone: { checking: false, available: null, message: "" },
     });
     setIsEditOpen(true);
   };
@@ -4935,27 +5018,67 @@ export default function Profile() {
               </div>
             </div>
 
-            <div>
-              <Label className="mb-1 block text-slate-300">Nick público</Label>
-              <Input
-                value={editData.nick}
-                onChange={(e) => setEditData((prev) => ({ ...prev, nick: e.target.value }))}
-                placeholder="Seu nome público"
-                className="border-slate-700 bg-slate-900 text-white"
-              />
-            </div>
+              <div>
+                <Label className="mb-1 block text-slate-300">Nick público</Label>
+                <Input
+                  value={editData.nick}
+                  onChange={(e) => setEditData((prev) => ({ ...prev, nick: e.target.value }))}
+                  placeholder="Seu nome público"
+                  className="border-slate-700 bg-slate-900 text-white"
+                />
+                {availabilityState.nick.message ? (
+                  <p
+                    className={`mt-1 text-xs ${
+                      availabilityState.nick.checking
+                        ? "text-slate-400"
+                        : availabilityState.nick.available
+                        ? "text-emerald-300"
+                        : "text-rose-300"
+                    }`}
+                  >
+                    {availabilityState.nick.message}
+                  </p>
+                ) : null}
+              </div>
 
-            <div>
-              <Label className="mb-1 block text-slate-300">@ usuário</Label>
-              <Input
+              <div>
+                <Label className="mb-1 block text-slate-300">@ usuário</Label>
+                <Input
                 value={editData.handle}
                 onChange={(e) => setEditData((prev) => ({ ...prev, handle: e.target.value }))}
-                placeholder="seuusuario"
-                className="border-slate-700 bg-slate-900 text-white"
-              />
-            </div>
+                  placeholder="seuusuario"
+                  className="border-slate-700 bg-slate-900 text-white"
+                />
+              </div>
 
-            <Button onClick={saveQuickEdit} className="w-full bg-cyan-700 text-white hover:bg-cyan-600">
+              <div>
+                <Label className="mb-1 block text-slate-300">Telefone</Label>
+                <Input
+                  value={editData.phone}
+                  onChange={(e) => setEditData((prev) => ({ ...prev, phone: e.target.value }))}
+                  placeholder="(11) 99999-9999"
+                  className="border-slate-700 bg-slate-900 text-white"
+                />
+                {availabilityState.phone.message ? (
+                  <p
+                    className={`mt-1 text-xs ${
+                      availabilityState.phone.checking
+                        ? "text-slate-400"
+                        : availabilityState.phone.available
+                        ? "text-emerald-300"
+                        : "text-rose-300"
+                    }`}
+                  >
+                    {availabilityState.phone.message}
+                  </p>
+                ) : null}
+              </div>
+
+            <Button
+              onClick={saveQuickEdit}
+              disabled={availabilityState.nick.checking || availabilityState.phone.checking}
+              className="w-full bg-cyan-700 text-white hover:bg-cyan-600 disabled:opacity-60"
+            >
               Salvar
             </Button>
           </div>

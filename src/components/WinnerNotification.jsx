@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Trophy, ExternalLink, Check, Calendar } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
+import { buildWhatsAppLink } from "@/lib/whatsapp";
 
 export default function WinnerNotification({ userId }) {
   const queryClient = useQueryClient();
@@ -58,7 +59,9 @@ export default function WinnerNotification({ userId }) {
 
   if (!activeWinning && !activeDepositantWinning) return null;
 
-  const whatsappRedeemLink = settings.find((s) => s.key === "cashback_redeem_link")?.value || "#";
+  const whatsappRedeemLink = buildWhatsAppLink(
+    settings.find((s) => s.key === "cashback_redeem_link")?.value
+  );
   const currentWinning = activeDepositantWinning || activeWinning;
   const isDepositantWinning = Boolean(activeDepositantWinning);
 
@@ -140,15 +143,22 @@ export default function WinnerNotification({ userId }) {
               <p className="text-xs md:text-sm text-purple-200 mb-2">
                 Para resgatar seu prêmio, entre em contato via WhatsApp:
               </p>
-              <a
-                href={whatsappRedeemLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition-all text-sm md:text-base"
-              >
-                <ExternalLink className="w-4 h-4" />
-                Falar no WhatsApp
-              </a>
+              {whatsappRedeemLink ? (
+                <a
+                  href={whatsappRedeemLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition-all text-sm md:text-base"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Falar no WhatsApp
+                </a>
+              ) : (
+                <span className="inline-flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg font-bold text-sm md:text-base">
+                  <ExternalLink className="w-4 h-4" />
+                  WhatsApp indisponivel
+                </span>
+              )}
             </div>
 
             <Button

@@ -18,6 +18,16 @@ function httpError(message, status = 400) {
   return error;
 }
 
+function normalizeWhatsAppLink(rawValue) {
+  const raw = String(rawValue || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (/^(wa\.me|api\.whatsapp\.com)\//i.test(raw)) return `https://${raw}`;
+
+  const digits = raw.replace(/\D/g, "");
+  return digits ? `https://wa.me/${digits}` : "";
+}
+
 function shuffle(items = []) {
   const cloned = [...items];
   for (let index = cloned.length - 1; index > 0; index -= 1) {
@@ -87,6 +97,13 @@ async function syncInstantPrizeGalleryItem(client, { participant, raffle, active
       raffle_id: participant?.raffle_id || "",
       participant_id: participant?.id || "",
       source_type: "instant_raffle",
+      admin_name: raffle?.admin_name || "",
+      admin_phone: raffle?.telegram_link || "",
+      reward_snapshot: {
+        adminContactName: raffle?.admin_name || "",
+        adminContactPhone: raffle?.telegram_link || "",
+        rewardType: "cash_prize",
+      },
     },
   });
 }
@@ -139,7 +156,7 @@ export const instantRaffleAdmin = {
         max_winners: Math.max(1, Number(payload.maxWinners || 1)),
         draw_time: payload.drawTime,
         admin_name: String(payload.adminName || "").trim(),
-        telegram_link: String(payload.telegramLink || "").trim(),
+        telegram_link: normalizeWhatsAppLink(payload.telegramLink),
         auto_draw: Boolean(payload.autoDraw),
         active: true,
         ended: false,
@@ -174,7 +191,7 @@ export const instantRaffleAdmin = {
         max_winners: Math.max(1, Number(payload.maxWinners ?? current.max_winners ?? 1)),
         draw_time: payload.drawTime || current.draw_time,
         admin_name: String(payload.adminName ?? current.admin_name ?? "").trim(),
-        telegram_link: String(payload.telegramLink ?? current.telegram_link ?? "").trim(),
+        telegram_link: normalizeWhatsAppLink(payload.telegramLink ?? current.telegram_link ?? ""),
         auto_draw: "autoDraw" in payload ? Boolean(payload.autoDraw) : Boolean(current.auto_draw),
         updated_date: new Date().toISOString(),
       });

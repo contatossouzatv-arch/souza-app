@@ -398,6 +398,35 @@ router.post("/register", loginRateLimiter, async (req, res) => {
   return res.status(201).json(session);
 });
 
+router.get("/availability", requireAuth, async (req, res) => {
+  try {
+    const nick = String(req.query?.nick || "").trim();
+    const phone = String(req.query?.phone || "").trim();
+    const excludeUserId = String(req.auth?.sub || "").trim();
+
+    const normalizedNick = sanitizeNick(nick);
+    const normalizedPhone = sanitizePhone(phone);
+
+    const [nickOwner, phoneOwner] = await Promise.all([
+      normalizedNick ? findUserRowByNickInsensitive(normalizedNick, excludeUserId) : Promise.resolve(null),
+      normalizedPhone ? findUserRowByPhoneNormalized(normalizedPhone, excludeUserId) : Promise.resolve(null),
+    ]);
+
+    return res.json({
+      nick: {
+        value: normalizedNick,
+        available: normalizedNick ? !nickOwner : null,
+      },
+      phone: {
+        value: normalizedPhone,
+        available: normalizedPhone ? !phoneOwner : null,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Falha ao consultar disponibilidade." });
+  }
+});
+
 router.post("/login", loginRateLimiter, async (req, res) => {
   const { email, password, otp } = req.body || {};
   const normalizedEmail = sanitizeEmail(email);

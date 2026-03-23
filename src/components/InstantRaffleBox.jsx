@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { buildWhatsAppLink } from "@/lib/whatsapp";
 
 export default function InstantRaffleBox({ user }) {
   const queryClient = useQueryClient();
@@ -205,6 +206,7 @@ export default function InstantRaffleBox({ user }) {
   const hasParticipated = !!myEntry;
   const isWinner = Boolean(myEntry?.won && myEntry?.validated !== false);
   const hasEnded = activeRaffle.winners_drawn;
+  const redeemLink = buildWhatsAppLink(activeRaffle.telegram_link);
 
   // Se confirmou (ganhou e recebeu ou perdeu e fechou), some o box
   if (myEntry?.prize_claimed) return null;
@@ -510,12 +512,22 @@ export default function InstantRaffleBox({ user }) {
                     </p>
                   </div>
 
-                  <a href={activeRaffle.telegram_link} target="_blank" rel="noopener noreferrer">
-                    <Button className="w-full py-4 md:py-6 text-base md:text-lg font-bold bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white">
+                  {redeemLink ? (
+                    <a href={redeemLink} target="_blank" rel="noopener noreferrer">
+                      <Button className="w-full py-4 md:py-6 text-base md:text-lg font-bold bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white">
+                        <ExternalLink className="w-4 h-4 md:w-5 md:h-5 mr-2" />
+                        RESGATAR NO WHATSAPP
+                      </Button>
+                    </a>
+                  ) : (
+                    <Button
+                      disabled
+                      className="w-full py-4 md:py-6 text-base md:text-lg font-bold bg-slate-500 text-white cursor-not-allowed"
+                    >
                       <ExternalLink className="w-4 h-4 md:w-5 md:h-5 mr-2" />
-                      RESGATAR NO WHATSAPP
+                      WHATSAPP INDISPONIVEL
                     </Button>
-                  </a>
+                  )}
                   
                   {!myEntry.prize_claimed && (
                     <Button

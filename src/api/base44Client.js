@@ -333,6 +333,13 @@ export const base44 = {
       });
     },
 
+    async checkAvailability({ nick = "", phone = "" } = {}) {
+      const params = new URLSearchParams();
+      if (nick) params.set("nick", String(nick));
+      if (phone) params.set("phone", String(phone));
+      return request(`/api/auth/availability${params.toString() ? `?${params.toString()}` : ""}`);
+    },
+
     async deactivateMe() {
       return request("/api/auth/me/deactivate", {
         method: "POST",
