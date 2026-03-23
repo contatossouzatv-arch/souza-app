@@ -4250,7 +4250,7 @@ export default function Profile() {
                           <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-400">
                             <span className="truncate">{actorLabel}</span>
                             <span>
-                              {notification.created_date ? eo(notification.created_date) : "Agora"}
+                              {notification.created_date ? formatHistoryTimestamp(notification.created_date) : "Agora"}
                             </span>
                           </div>
                         </div>
