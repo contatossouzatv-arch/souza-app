@@ -912,24 +912,6 @@ export default function Profile() {
   }, [simulatedBaseProfiles]);
 
   useEffect(() => {
-    if (!simulatedProfiles.length) return;
-    const followingIds = new Set((myFollowingProfiles || []).map((profile) => String(profile?.id || "")));
-    setSimState((prev) => {
-      const next = { ...prev };
-      simulatedProfiles.forEach((profile) => {
-        next[profile.id] = {
-          ...(next[profile.id] || {}),
-          isFollowing: Boolean(profile.isFollowing) || followingIds.has(String(profile.id || "")),
-          isLiked: Boolean(profile.isLiked),
-          followers: Number(profile.followers || 0),
-          likes: Number(profile.likes || 0),
-        };
-      });
-      return next;
-    });
-  }, [myFollowingProfiles, simulatedProfiles]);
-
-  useEffect(() => {
     if (authUser && authUser !== user) setUser(authUser);
   }, [authUser, user]);
 
@@ -1193,6 +1175,24 @@ export default function Profile() {
     enabled: !!user,
     staleTime: 15000,
   });
+
+  useEffect(() => {
+    if (!simulatedProfiles.length) return;
+    const followingIds = new Set((myFollowingProfiles || []).map((profile) => String(profile?.id || "")));
+    setSimState((prev) => {
+      const next = { ...prev };
+      simulatedProfiles.forEach((profile) => {
+        next[profile.id] = {
+          ...(next[profile.id] || {}),
+          isFollowing: Boolean(profile.isFollowing) || followingIds.has(String(profile.id || "")),
+          isLiked: Boolean(profile.isLiked),
+          followers: Number(profile.followers || 0),
+          likes: Number(profile.likes || 0),
+        };
+      });
+      return next;
+    });
+  }, [myFollowingProfiles, simulatedProfiles]);
 
   const { data: prizeGalleryItems = [], isLoading: loadingPrizeGallery } = useQuery({
     queryKey: ["user-prize-gallery", user?.id],
