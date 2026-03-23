@@ -42,11 +42,12 @@ import {
 } from "../auth.js";
 import { env } from "../config/env.js";
 import { sendPasswordResetEmail } from "../lib/mailer.js";
+import { privateUploadsDir, uploadsDir } from "../lib/paths.js";
 
 const router = Router();
 const googleClient = new OAuth2Client();
-const profilePendingDir = path.resolve(process.cwd(), "private_uploads", "profile-pending");
-const profilePublicDir = path.resolve(process.cwd(), "uploads", "profile");
+const profilePendingDir = path.resolve(privateUploadsDir, "profile-pending");
+const profilePublicDir = path.resolve(uploadsDir, "profile");
 const bannedNameTokens = ["nude", "porn", "sexo", "sex", "nsfw"];
 
 fs.mkdirSync(profilePendingDir, { recursive: true });

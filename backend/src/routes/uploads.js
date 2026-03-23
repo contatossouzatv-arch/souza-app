@@ -4,8 +4,8 @@ import { Router } from "express";
 import multer from "multer";
 import { env } from "../config/env.js";
 import { requireAuth } from "../middleware/auth.js";
+import { uploadsDir } from "../lib/paths.js";
 
-const uploadDir = path.resolve(process.cwd(), "uploads");
 const MAX_UPLOAD_SIZE_BYTES = 40 * 1024 * 1024;
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"]);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".mov"]);

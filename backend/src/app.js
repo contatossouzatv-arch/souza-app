@@ -17,6 +17,7 @@ import createEntitiesRouter from "./routes/entities.js";
 import pointsRoutes from "./routes/points.js";
 import uploadsRoutes from "./routes/uploads.js";
 import { appendNavigationLog } from "./db/index.js";
+import { uploadsDir } from "./lib/paths.js";
 
 function buildCors() {
   if (env.origin === "*") {
@@ -120,7 +121,7 @@ export function createApp(io) {
     });
   });
 
-  app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+  app.use("/uploads", express.static(uploadsDir));
 
   app.use("/api/auth", authApiRateLimiter, authRoutes);
   app.use("/api", apiRateLimiter);
