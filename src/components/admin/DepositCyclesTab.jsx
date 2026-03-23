@@ -10,8 +10,62 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trophy, Plus, Calendar, Award, CheckCircle, Pencil, Users, DollarSign, Ticket } from "lucide-react";
 
+function buildUsersById(users = []) {
+  const map = {};
+  users.forEach((entry) => {
+    map[entry.id] = entry;
+  });
+  return map;
+}
+
+function buildDepositParticipantStats(deposits = [], usersById = {}) {
+  const stats = {};
+
+  deposits.forEach((deposit) => {
+    const profile = usersById[deposit.user_id] || {};
+
+    if (!stats[deposit.user_id]) {
+      stats[deposit.user_id] = {
+        user_id: deposit.user_id,
+        user_name: deposit.user_name || profile.full_name || profile.name || "-",
+        user_email: deposit.user_email || profile.email || "-",
+        platform_id: deposit.user_platform_id || deposit.platform_id || profile.platform_id || "-",
+        total: 0,
+        deposits_count: 0,
+        tickets_count: 0,
+      };
+    }
+
+    if (!stats[deposit.user_id].user_name || stats[deposit.user_id].user_name === "-") {
+      stats[deposit.user_id].user_name = deposit.user_name || profile.full_name || profile.name || "-";
+    }
+
+    if (!stats[deposit.user_id].user_email || stats[deposit.user_id].user_email === "-") {
+      stats[deposit.user_id].user_email = deposit.user_email || profile.email || "-";
+    }
+
+    if (!stats[deposit.user_id].platform_id || stats[deposit.user_id].platform_id === "-") {
+      stats[deposit.user_id].platform_id = deposit.user_platform_id || deposit.platform_id || profile.platform_id || "-";
+    }
+
+    stats[deposit.user_id].total += Number(deposit.amount || 0);
+    stats[deposit.user_id].deposits_count += 1;
+    stats[deposit.user_id].tickets_count += Number(
+      deposit.tickets_count || deposit.ticket_numbers?.length || 0
+    );
+  });
+
+  return Object.values(stats).sort((a, b) => b.total - a.total);
+}
+
 // Componente para exibir detalhes do ciclo ativo
 function ActiveCycleDetails({ activeCycle, onEdit, onEnd, onDelete }) {
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ["admin-deposit-cycle-users"],
+    queryFn: () => base44.entities.User.list(undefined, 1000),
+    staleTime: 60000,
+  });
+
   const { data: cycleDeposits = [] } = useQuery({
     queryKey: ['active-cycle-deposits', activeCycle.id],
     queryFn: async () => {
@@ -28,27 +82,11 @@ function ActiveCycleDetails({ activeCycle, onEdit, onEnd, onDelete }) {
     },
   });
 
+  const usersById = useMemo(() => buildUsersById(allUsers), [allUsers]);
+
   const userStats = useMemo(() => {
-    const stats = {};
-    cycleDeposits.forEach(d => {
-      if (!stats[d.user_id]) {
-        stats[d.user_id] = {
-          user_id: d.user_id,
-          user_name: d.user_name,
-          user_email: d.user_email,
-          platform_id: d.user_platform_id,
-          total: 0,
-          deposits_count: 0,
-          tickets_count: 0
-        };
-      }
-      stats[d.user_id].total += d.amount;
-      stats[d.user_id].deposits_count += 1;
-      // Usar os bilhetes já gerados no depósito
-      stats[d.user_id].tickets_count += (d.ticket_numbers?.length || 0);
-    });
-    return Object.values(stats).sort((a, b) => b.total - a.total);
-  }, [cycleDeposits]);
+    return buildDepositParticipantStats(cycleDeposits, usersById);
+  }, [cycleDeposits, usersById]);
 
   const top3 = userStats.slice(0, 3);
   const totalDeposits = cycleDeposits.reduce((sum, d) => sum + d.amount, 0);
@@ -254,6 +292,12 @@ function ActiveCycleDetails({ activeCycle, onEdit, onEnd, onDelete }) {
 
 // Componente auxiliar para exibir ciclo encerrado
 function EndedCycleCard({ cycle, onEdit, onViewTotals, onRegisterRaffle, onReactivate, onDelete }) {
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ["admin-deposit-cycle-users"],
+    queryFn: () => base44.entities.User.list(undefined, 1000),
+    staleTime: 60000,
+  });
+
   const { data: cycleDepositsForTop3 = [] } = useQuery({
     queryKey: ['cycle-deposits-top3', cycle.id],
     queryFn: async () => {
@@ -262,20 +306,11 @@ function EndedCycleCard({ cycle, onEdit, onViewTotals, onRegisterRaffle, onReact
     },
   });
 
+  const usersById = useMemo(() => buildUsersById(allUsers), [allUsers]);
+
   const userTotalsTop3 = useMemo(() => {
-    const totals = {};
-    cycleDepositsForTop3.forEach(d => {
-      if (!totals[d.user_id]) {
-        totals[d.user_id] = {
-          user_id: d.user_id,
-          user_name: d.user_name,
-          total: 0
-        };
-      }
-      totals[d.user_id].total += d.amount;
-    });
-    return Object.values(totals).sort((a, b) => b.total - a.total);
-  }, [cycleDepositsForTop3]);
+    return buildDepositParticipantStats(cycleDepositsForTop3, usersById);
+  }, [cycleDepositsForTop3, usersById]);
 
   const top1 = userTotalsTop3[0];
   const top2 = userTotalsTop3[1];
@@ -386,6 +421,12 @@ export default function DepositCyclesTab() {
   const [editDrawDate, setEditDrawDate] = useState("");
   const [viewingCycleTotals, setViewingCycleTotals] = useState(null);
 
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ["admin-deposit-cycle-users"],
+    queryFn: () => base44.entities.User.list(undefined, 1000),
+    staleTime: 60000,
+  });
+
   const { data: cycles = [] } = useQuery({
     queryKey: ['deposit-cycles'],
     queryFn: () => base44.entities.DepositantDrawCycle.list('-created_date'),
@@ -403,6 +444,7 @@ export default function DepositCyclesTab() {
 
   const activeCycle = cycles.find(c => c.active);
   const endedCycles = cycles.filter(c => !c.active);
+  const usersById = useMemo(() => buildUsersById(allUsers), [allUsers]);
 
   const [newCycleDrawDate, setNewCycleDrawDate] = useState("");
 
@@ -534,20 +576,13 @@ export default function DepositCyclesTab() {
   };
 
   const getUserTotalsForCycle = () => {
-    const userTotals = {};
-    cycleDeposits.forEach(d => {
-      if (!userTotals[d.user_id]) {
-        userTotals[d.user_id] = {
-          id: d.user_id,
-          name: d.user_name,
-          email: d.user_email,
-          platform_id: d.user_platform_id,
-          total: 0
-        };
-      }
-      userTotals[d.user_id].total += d.amount;
-    });
-    return Object.values(userTotals).sort((a, b) => b.total - a.total);
+    return buildDepositParticipantStats(cycleDeposits, usersById).map((entry) => ({
+      id: entry.user_id,
+      name: entry.user_name,
+      email: entry.user_email,
+      platform_id: entry.platform_id,
+      total: entry.total,
+    }));
   };
 
   return (

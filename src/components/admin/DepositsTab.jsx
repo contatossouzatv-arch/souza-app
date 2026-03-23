@@ -93,7 +93,33 @@ export default function DepositsTab() {
     refetchIntervalInBackground: true,
   });
 
-  const deposits = depositsResponse?.items || [];
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ["admin-deposits-users"],
+    queryFn: () => base44.entities.User.list(undefined, 1000),
+    staleTime: 60000,
+  });
+
+  const usersById = useMemo(() => {
+    const map = {};
+    allUsers.forEach((entry) => {
+      map[entry.id] = entry;
+    });
+    return map;
+  }, [allUsers]);
+
+  const deposits = useMemo(() => {
+    const items = depositsResponse?.items || [];
+    return items.map((deposit) => {
+      const profile = usersById[deposit.user_id] || {};
+      return {
+        ...deposit,
+        user_name: deposit.user_name || profile.full_name || profile.name || "Usuário",
+        user_email: deposit.user_email || profile.email || "",
+        user_platform_id:
+          deposit.user_platform_id || deposit.platform_id || profile.platform_id || "",
+      };
+    });
+  }, [depositsResponse?.items, usersById]);
 
   const { data: historyResponse } = useQuery({
     queryKey: ["admin-deposit-history", historyDeposit?.id],
