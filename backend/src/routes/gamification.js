@@ -239,12 +239,32 @@ function formatDayLabel(value) {
 function extractPhoneLabel(rawValue = "") {
   const raw = String(rawValue || "").trim();
   if (!raw) return "";
+  if (/wa\.me|whatsapp\.com/i.test(raw)) {
+    const digitsFromUrl = raw.replace(/\D/g, "");
+    if (digitsFromUrl.length < 10) return "";
+    const digits = digitsFromUrl;
+    if (digits.length <= 10) return `+${digits}`;
+    return `+${digits.slice(0, 2)} ${digits.slice(2, 4)} ${digits.slice(4, 9)}-${digits.slice(9, 13)}`.trim();
+  }
   const digits = raw.replace(/\D/g, "");
-  if (!digits) return raw;
+  if (!digits) return "";
+  if (digits.length < 10) return "";
   if (digits.length <= 2) return digits;
   if (digits.length <= 6) return `+${digits}`;
   if (digits.length <= 10) return `+${digits.slice(0, 2)} ${digits.slice(2)}`;
   return `+${digits.slice(0, 2)} ${digits.slice(2, 4)} ${digits.slice(4, 9)}-${digits.slice(9, 13)}`.trim();
+}
+
+function normalizeAdminPhone(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/wa\.me|whatsapp\.com/i.test(raw)) {
+    const digitsFromUrl = raw.replace(/\D/g, "");
+    return digitsFromUrl.length >= 10 ? raw : "";
+  }
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 10) return "";
+  return `+${digits}`;
 }
 
 function resolveAuditSourceType(audit = {}) {
@@ -2220,8 +2240,6 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
   const instantById = new Map(instantRaffles.map((item) => [String(item.id), item]));
   const liveById = new Map(liveRaffles.map((item) => [String(item.id), item]));
   const gameCallById = new Map(gameCallRaffles.map((item) => [String(item.id), item]));
-  const defaultAdminPhone = String(settings.get("cashback_redeem_link")?.value || "").trim();
-
   const groupedDays = new Map();
 
   validatedAudits.forEach((audit) => {
@@ -2261,15 +2279,14 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
     if (!dayBucket.draws_map.has(drawKey)) {
       const matchedPrize = findPrizeItemForAudit(prizeItems, audit, sourceType);
       const prizeSnapshot = matchedPrize?.metadata?.reward_snapshot || {};
-      let adminPhone = String(
+      let adminPhone = normalizeAdminPhone(
         audit?.admin_phone ||
           relatedRaffle?.telegram_link ||
           matchedPrize?.metadata?.admin_phone ||
           prizeSnapshot?.adminContactPhone ||
           prizeSnapshot?.admin_contact_phone ||
-          (sourceType === "instant_raffle" ? "" : defaultAdminPhone) ||
           ""
-      ).trim();
+      );
       let adminName = normalizeAdminName(
         audit?.admin_name ||
           relatedRaffle?.admin_name ||
@@ -2278,11 +2295,11 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
           prizeSnapshot?.admin_contact_name
       );
 
-      if (!adminPhone && sourceType === "instant_raffle") {
+      if (!adminPhone) {
         adminPhone = LEGACY_HISTORY_ADMIN_PHONE;
       }
 
-      if ((!adminName || adminName === "Admin responsavel") && sourceType === "instant_raffle") {
+      if (!adminName || adminName === "Admin responsavel") {
         adminName = LEGACY_HISTORY_ADMIN_NAME;
       }
 
