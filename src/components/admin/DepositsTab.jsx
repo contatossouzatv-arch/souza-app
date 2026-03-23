@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { base44 } from "@/api/base44Client";
+import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -134,7 +134,7 @@ export default function DepositsTab() {
     const pushLink = (value) => {
       const normalized = String(value || "").trim();
       if (!normalized || links.includes(normalized)) return;
-      links.push(normalized);
+      links.push(resolveAssetUrl(normalized));
     };
 
     pushLink(deposit?.proof_image_url);
