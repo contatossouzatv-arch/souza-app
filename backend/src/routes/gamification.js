@@ -265,6 +265,35 @@ function normalizeAdminName(value, fallback = "Admin responsavel") {
   return raw;
 }
 
+function findPrizeItemForAudit(prizeItems = [], audit = {}, sourceType = "") {
+  const auditUserId = String(audit?.user_id || "").trim();
+  const auditRaffleId = String(audit?.raffle_id || "").trim();
+  const auditAmount = Number(audit?.prize_amount || 0);
+  const sourceRefId = String(audit?.participant_id || audit?.winner_id || "").trim();
+
+  if (sourceRefId) {
+    const directMatch = prizeItems.find(
+      (item) =>
+        String(item?.source_type || "").trim() === sourceType &&
+        String(item?.source_ref_id || "").trim() === sourceRefId
+    );
+    if (directMatch) return directMatch;
+  }
+
+  return prizeItems.find((item) => {
+    if (String(item?.source_type || "").trim() !== sourceType) return false;
+    if (String(item?.user_id || "").trim() !== auditUserId) return false;
+    if (Number(item?.reward_amount || 0) !== auditAmount) return false;
+
+    const metadata = item?.metadata || {};
+    if (auditRaffleId && String(metadata?.raffle_id || "").trim() === auditRaffleId) return true;
+
+    const auditDate = new Date(audit?.validated_at || audit?.drawn_at || 0).getTime();
+    const itemDate = new Date(item?.claimed_at || item?.created_date || item?.updated_date || 0).getTime();
+    return Number.isFinite(auditDate) && Number.isFinite(itemDate) && Math.abs(itemDate - auditDate) <= 1000 * 60 * 10;
+  }) || null;
+}
+
 async function upsertAppSetting(key, value, description = "") {
   const settings = await listEntity("AppSettings");
   const existing = settings.find((entry) => entry.key === key);
@@ -2188,9 +2217,6 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
   const instantById = new Map(instantRaffles.map((item) => [String(item.id), item]));
   const liveById = new Map(liveRaffles.map((item) => [String(item.id), item]));
   const gameCallById = new Map(gameCallRaffles.map((item) => [String(item.id), item]));
-  const prizeItemsBySourceRef = new Map(
-    prizeItems.map((item) => [`${String(item.source_type || "").trim()}:${String(item.source_ref_id || "").trim()}`, item])
-  );
   const defaultAdminPhone = String(settings.get("cashback_redeem_link")?.value || "").trim();
 
   const groupedDays = new Map();
@@ -2230,10 +2256,11 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
         : `${sourceType}:${raffleId || String(audit?.raffle_title || "").trim()}`;
 
     if (!dayBucket.draws_map.has(drawKey)) {
-      const matchedPrize = prizeItemsBySourceRef.get(`${sourceType}:${String(audit?.participant_id || audit?.winner_id || "").trim()}`) || null;
+      const matchedPrize = findPrizeItemForAudit(prizeItems, audit, sourceType);
       const prizeSnapshot = matchedPrize?.metadata?.reward_snapshot || {};
       const adminPhone = String(
-        relatedRaffle?.telegram_link ||
+        audit?.admin_phone ||
+          relatedRaffle?.telegram_link ||
           matchedPrize?.metadata?.admin_phone ||
           prizeSnapshot?.adminContactPhone ||
           prizeSnapshot?.admin_contact_phone ||
@@ -2241,7 +2268,8 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
           ""
       ).trim();
       const adminName = normalizeAdminName(
-        relatedRaffle?.admin_name ||
+        audit?.admin_name ||
+          relatedRaffle?.admin_name ||
           matchedPrize?.metadata?.admin_name ||
           prizeSnapshot?.adminContactName ||
           prizeSnapshot?.admin_contact_name

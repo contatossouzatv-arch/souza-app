@@ -225,6 +225,7 @@ export const instantRaffleAdmin = {
         await createAudit(client, {
           raffle_id: raffle.id,
           raffle_title: raffle.title,
+          participant_id: winner.id,
           user_id: winner.user_id,
           user_name: winner.user_name,
           user_nick: winner.user_nick,
@@ -232,6 +233,8 @@ export const instantRaffleAdmin = {
           user_phone: winner.user_phone || "",
           user_avatar: winner.user_avatar || "",
           user_platform_id: winner.platform_id || "",
+          admin_name: raffle.admin_name || "",
+          admin_phone: raffle.telegram_link || "",
           prize_amount: Number(raffle.prize_amount || 0),
           drawn_at: now,
           status: "validated",

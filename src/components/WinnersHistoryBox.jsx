@@ -54,7 +54,7 @@ export default function WinnersHistoryBox() {
               <h3 className="text-lg font-black text-white">Historico de Ganhadores</h3>
             </div>
             <p className="mt-2 max-w-xl text-sm text-slate-400">
-              Cada box mostra um dia em que houve sorteio. Toque para abrir os vencedores confirmados daquele dia.
+              Cada dia mostra o historico dos sorteios. Clique e confira os ganhadores.
             </p>
           </div>
           <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-right">
@@ -70,29 +70,29 @@ export default function WinnersHistoryBox() {
             <p className="mt-1 text-xs text-slate-500">Quando houver vencedores validados, as datas aparecem aqui automaticamente.</p>
           </div>
         ) : (
-          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {days.map((day) => (
               <motion.button
                 key={day.day_key}
                 whileHover={{ y: -3, scale: 1.01 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setSelectedDay(day)}
-                className="group rounded-[1.8rem] border border-amber-400/15 bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-slate-900 px-4 py-4 text-left transition hover:border-amber-300/40"
+                className="group min-w-0 overflow-hidden rounded-[1.8rem] border border-amber-400/15 bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-slate-900 px-4 py-4 text-left transition hover:border-amber-300/40"
               >
                 <div className="flex h-full flex-col justify-between gap-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="rounded-2xl bg-white/10 p-2 text-amber-200">
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="shrink-0 rounded-2xl bg-white/10 p-2 text-amber-200">
                       <CalendarDays className="h-5 w-5" />
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-right">
-                      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Sorteios</p>
-                      <p className="text-sm font-black text-white">{day.total_draws || 0}</p>
+                    <div className="min-w-0 max-w-[116px] rounded-2xl border border-white/10 bg-white/5 px-2.5 py-1.5 text-right">
+                      <p className="truncate text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Sorteios</p>
+                      <p className="truncate text-sm font-black text-white">{day.total_draws || 0}</p>
                     </div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-200/80">SORTEIO DIA</p>
-                    <p className="mt-2 text-lg font-black leading-tight text-white">{day.date_label}</p>
-                    <p className="mt-1 text-xs text-slate-400">
+                    <p className="mt-2 break-words text-lg font-black leading-tight text-white">{day.date_label}</p>
+                    <p className="mt-1 break-words text-xs text-slate-400">
                       {day.total_winners || 0} ganhador{day.total_winners === 1 ? "" : "es"} confirmado{day.total_winners === 1 ? "" : "s"}
                     </p>
                   </div>
