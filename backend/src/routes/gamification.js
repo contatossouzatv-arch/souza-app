@@ -218,6 +218,43 @@ async function listAppSettingsMap() {
   return map;
 }
 
+function buildDayKey(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+}
+
+function formatDayLabel(value) {
+  if (!value) return "Data nao informada";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Data nao informada";
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+function extractPhoneLabel(rawValue = "") {
+  const raw = String(rawValue || "").trim();
+  if (!raw) return "";
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return raw;
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `+${digits}`;
+  if (digits.length <= 10) return `+${digits.slice(0, 2)} ${digits.slice(2)}`;
+  return `+${digits.slice(0, 2)} ${digits.slice(2, 4)} ${digits.slice(4, 9)}-${digits.slice(9, 13)}`.trim();
+}
+
+function resolveAuditSourceType(audit = {}) {
+  return inferPrizeSourceTypesFromAudit(audit)[0] || "live_draw";
+}
+
+function resolveAuditSourceLabel(audit = {}) {
+  return mapPrizeSourceLabel(resolveAuditSourceType(audit));
+}
+
 async function upsertAppSetting(key, value, description = "") {
   const settings = await listEntity("AppSettings");
   const existing = settings.find((entry) => entry.key === key);
@@ -2123,6 +2160,112 @@ router.get("/profile/history", requireAuth, async (req, res) => {
     })),
     prizes,
   });
+});
+
+router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
+  const [audits, users, settings, instantRaffles, liveRaffles, gameCallRaffles] = await Promise.all([
+    listEntity("DrawWinnerAudit", "-drawn_at", 1000),
+    listEntity("User", "-created_date", 1000),
+    listAppSettingsMap(),
+    listEntity("InstantRaffle", "-created_date", 300),
+    listEntity("LiveDrawRaffle", "-created_date", 300),
+    listEntity("GameCallRaffle", "-created_date", 300),
+  ]);
+
+  const validatedAudits = audits.filter((audit) => String(audit?.status || "").toLowerCase() === "validated");
+  const usersById = new Map(users.map((user) => [String(user.id), user]));
+  const instantById = new Map(instantRaffles.map((item) => [String(item.id), item]));
+  const liveById = new Map(liveRaffles.map((item) => [String(item.id), item]));
+  const gameCallById = new Map(gameCallRaffles.map((item) => [String(item.id), item]));
+  const defaultAdminPhone = String(settings.get("cashback_redeem_link")?.value || "").trim();
+
+  const groupedDays = new Map();
+
+  validatedAudits.forEach((audit) => {
+    const sourceType = resolveAuditSourceType(audit);
+    const raffleId = String(audit?.raffle_id || "").trim();
+    const user = usersById.get(String(audit?.user_id || "").trim()) || null;
+    const relatedRaffle =
+      sourceType === "instant_raffle"
+        ? instantById.get(raffleId) || null
+        : sourceType === "game_call"
+          ? gameCallById.get(raffleId) || null
+          : sourceType === "live_draw"
+            ? liveById.get(raffleId) || null
+            : null;
+
+    const auditDate = audit?.validated_at || audit?.drawn_at || audit?.created_date || null;
+    const dayKey = buildDayKey(auditDate);
+    if (!dayKey) return;
+
+    if (!groupedDays.has(dayKey)) {
+      groupedDays.set(dayKey, {
+        day_key: dayKey,
+        date_label: formatDayLabel(auditDate),
+        raw_date: auditDate,
+        total_winners: 0,
+        draws_map: new Map(),
+      });
+    }
+
+    const dayBucket = groupedDays.get(dayKey);
+    const drawKey =
+      sourceType === "deposit_draw"
+        ? `deposit_draw:${String(audit?.cycle_number || "geral").trim()}`
+        : `${sourceType}:${raffleId || String(audit?.raffle_title || "").trim()}`;
+
+    if (!dayBucket.draws_map.has(drawKey)) {
+      const adminPhone = String(relatedRaffle?.telegram_link || defaultAdminPhone || "").trim();
+
+      dayBucket.draws_map.set(drawKey, {
+        draw_key: drawKey,
+        source_type: sourceType,
+        source_label: resolveAuditSourceLabel(audit),
+        raffle_title: String(audit?.raffle_title || relatedRaffle?.title || resolveAuditSourceLabel(audit)).trim(),
+        cycle_number: audit?.cycle_number ?? null,
+        admin_name: String(relatedRaffle?.admin_name || "Admin responsavel").trim(),
+        admin_phone: adminPhone,
+        admin_phone_label: extractPhoneLabel(adminPhone),
+        winners: [],
+      });
+    }
+
+    const drawBucket = dayBucket.draws_map.get(drawKey);
+    const profileImageUrl =
+      user?.profile_image_mode === "photo" &&
+      user?.profile_image_status === "approved" &&
+      user?.id
+        ? `/api/auth/profile-image/${user.id}`
+        : "";
+
+    drawBucket.winners.push({
+      audit_id: audit.id,
+      user_id: audit.user_id,
+      name: String(audit.user_name || user?.full_name || user?.nick || "Participante").trim(),
+      nick: String(audit.user_nick || user?.nick || "").trim(),
+      avatar_emoji: String(user?.avatar_emoji || audit.user_avatar || "🎰"),
+      profile_image_url: profileImageUrl,
+      prize_amount: Number(audit.prize_amount || 0),
+      game_call: String(audit.game_call || "").trim(),
+      drawn_at: auditDate,
+    });
+
+    dayBucket.total_winners += 1;
+  });
+
+  const days = Array.from(groupedDays.values())
+    .sort((a, b) => new Date(b.raw_date || 0).getTime() - new Date(a.raw_date || 0).getTime())
+    .map((day) => ({
+      day_key: day.day_key,
+      date_label: day.date_label,
+      total_winners: day.total_winners,
+      draws: Array.from(day.draws_map.values()).map((draw) => ({
+        ...draw,
+        winners: draw.winners.sort((a, b) => new Date(b.drawn_at || 0).getTime() - new Date(a.drawn_at || 0).getTime()),
+      })),
+    }));
+
+  res.json({ days });
 });
 
 router.get("/feed/wins", requireAuth, async (_req, res) => {

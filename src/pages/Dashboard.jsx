@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Sparkles, Trophy, Gamepad2 } from "lucide-react";
 import LegalLinksBar from "@/components/LegalLinksBar";
 import PrizeGalleryCard from "@/components/profile/PrizeGalleryCard";
+import WinnersHistoryBox from "@/components/WinnersHistoryBox";
 import { useAuth } from "@/lib/AuthContext";
 
 export default function Dashboard() {
@@ -123,6 +124,10 @@ export default function Dashboard() {
             ) : null}
 
             <motion.div variants={itemVariants}>
+              <WinnersHistoryBox />
+            </motion.div>
+
+            <motion.div variants={itemVariants}>
               <PrizeGalleryCard
                 userId={user.id}
                 title="Seus Prêmios"
@@ -170,6 +175,10 @@ export default function Dashboard() {
                 countLabel="na coleção"
                 privateView={true}
               />
+
+              <div className="mt-4">
+                <WinnersHistoryBox />
+              </div>
             </div>
           </motion.div>
         )}

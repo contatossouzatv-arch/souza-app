@@ -1122,6 +1122,10 @@ export const base44 = {
       return request("/api/profile/history");
     },
 
+    async winnersHistory() {
+      return request("/api/prizes/winners-history");
+    },
+
     async feedWins() {
       return request("/api/feed/wins");
     },
