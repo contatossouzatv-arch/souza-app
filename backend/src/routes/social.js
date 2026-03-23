@@ -475,7 +475,7 @@ router.get("/social/state/:targetUserId", requireAuth, async (req, res) => {
   const viewerUserId = req.auth.sub;
   const targetUserId = req.params.targetUserId === "me" ? viewerUserId : String(req.params.targetUserId || "");
 
-  const [target, actor] = await Promise.all([findUserById(targetUserId), findUserById(userId)]);
+  const target = await findUserById(targetUserId);
   if (!target) {
     return res.status(404).json({ error: "Perfil não encontrado" });
   }
@@ -651,7 +651,7 @@ async function upsertLikeState(req, res, active) {
     return res.status(400).json({ error: "Não é permitido curtir o próprio perfil" });
   }
 
-  const target = await findUserById(targetUserId);
+  const [target, actor] = await Promise.all([findUserById(targetUserId), findUserById(userId)]);
   if (!target) {
     return res.status(404).json({ error: "Perfil não encontrado" });
   }
