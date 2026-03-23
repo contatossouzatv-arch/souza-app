@@ -255,6 +255,16 @@ function resolveAuditSourceLabel(audit = {}) {
   return mapPrizeSourceLabel(resolveAuditSourceType(audit));
 }
 
+function normalizeAdminName(value, fallback = "Admin responsavel") {
+  const raw = String(value || "").trim();
+  if (!raw) return fallback;
+  if (/wa\.me|whatsapp|https?:\/\//i.test(raw)) return fallback;
+  const digits = raw.replace(/\D/g, "");
+  const letters = raw.replace(/[^A-Za-zÀ-ÿ]/g, "");
+  if (digits.length >= 8 && letters.length <= 2) return fallback;
+  return raw;
+}
+
 async function upsertAppSetting(key, value, description = "") {
   const settings = await listEntity("AppSettings");
   const existing = settings.find((entry) => entry.key === key);
@@ -2163,13 +2173,14 @@ router.get("/profile/history", requireAuth, async (req, res) => {
 });
 
 router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
-  const [audits, users, settings, instantRaffles, liveRaffles, gameCallRaffles] = await Promise.all([
+  const [audits, users, settings, instantRaffles, liveRaffles, gameCallRaffles, prizeItems] = await Promise.all([
     listEntity("DrawWinnerAudit", "-drawn_at", 1000),
     listEntity("User", "-created_date", 1000),
     listAppSettingsMap(),
     listEntity("InstantRaffle", "-created_date", 300),
     listEntity("LiveDrawRaffle", "-created_date", 300),
     listEntity("GameCallRaffle", "-created_date", 300),
+    listEntity("UserPrizeGalleryItem", "-claimed_at", 1000),
   ]);
 
   const validatedAudits = audits.filter((audit) => String(audit?.status || "").toLowerCase() === "validated");
@@ -2177,6 +2188,9 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
   const instantById = new Map(instantRaffles.map((item) => [String(item.id), item]));
   const liveById = new Map(liveRaffles.map((item) => [String(item.id), item]));
   const gameCallById = new Map(gameCallRaffles.map((item) => [String(item.id), item]));
+  const prizeItemsBySourceRef = new Map(
+    prizeItems.map((item) => [`${String(item.source_type || "").trim()}:${String(item.source_ref_id || "").trim()}`, item])
+  );
   const defaultAdminPhone = String(settings.get("cashback_redeem_link")?.value || "").trim();
 
   const groupedDays = new Map();
@@ -2204,6 +2218,7 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
         date_label: formatDayLabel(auditDate),
         raw_date: auditDate,
         total_winners: 0,
+        total_draws: 0,
         draws_map: new Map(),
       });
     }
@@ -2215,7 +2230,22 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
         : `${sourceType}:${raffleId || String(audit?.raffle_title || "").trim()}`;
 
     if (!dayBucket.draws_map.has(drawKey)) {
-      const adminPhone = String(relatedRaffle?.telegram_link || defaultAdminPhone || "").trim();
+      const matchedPrize = prizeItemsBySourceRef.get(`${sourceType}:${String(audit?.participant_id || audit?.winner_id || "").trim()}`) || null;
+      const prizeSnapshot = matchedPrize?.metadata?.reward_snapshot || {};
+      const adminPhone = String(
+        relatedRaffle?.telegram_link ||
+          matchedPrize?.metadata?.admin_phone ||
+          prizeSnapshot?.adminContactPhone ||
+          prizeSnapshot?.admin_contact_phone ||
+          (sourceType === "instant_raffle" ? "" : defaultAdminPhone) ||
+          ""
+      ).trim();
+      const adminName = normalizeAdminName(
+        relatedRaffle?.admin_name ||
+          matchedPrize?.metadata?.admin_name ||
+          prizeSnapshot?.adminContactName ||
+          prizeSnapshot?.admin_contact_name
+      );
 
       dayBucket.draws_map.set(drawKey, {
         draw_key: drawKey,
@@ -2223,11 +2253,12 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
         source_label: resolveAuditSourceLabel(audit),
         raffle_title: String(audit?.raffle_title || relatedRaffle?.title || resolveAuditSourceLabel(audit)).trim(),
         cycle_number: audit?.cycle_number ?? null,
-        admin_name: String(relatedRaffle?.admin_name || "Admin responsavel").trim(),
+        admin_name: adminName,
         admin_phone: adminPhone,
         admin_phone_label: extractPhoneLabel(adminPhone),
         winners: [],
       });
+      dayBucket.total_draws += 1;
     }
 
     const drawBucket = dayBucket.draws_map.get(drawKey);
@@ -2259,6 +2290,7 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
       day_key: day.day_key,
       date_label: day.date_label,
       total_winners: day.total_winners,
+      total_draws: day.total_draws,
       draws: Array.from(day.draws_map.values()).map((draw) => ({
         ...draw,
         winners: draw.winners.sort((a, b) => new Date(b.drawn_at || 0).getTime() - new Date(a.drawn_at || 0).getTime()),
