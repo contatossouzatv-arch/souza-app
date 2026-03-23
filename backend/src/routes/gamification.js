@@ -1514,6 +1514,8 @@ function sanitizeChestRewardDraft(entry = {}) {
     reward_type: rewardType,
     reward_amount: Math.max(0, Number(entry.reward_amount ?? entry.rewardAmount ?? 0)),
     reward_unit: String(entry.reward_unit || entry.rewardUnit || "").trim() || rewardUnitByType[rewardType] || "",
+    admin_contact_name: String(entry.admin_contact_name || entry.adminContactName || "").trim(),
+    admin_contact_phone: String(entry.admin_contact_phone || entry.adminContactPhone || "").trim(),
     is_fallback: Boolean(entry.is_fallback ?? entry.isFallback),
     is_default: Boolean(entry.is_default ?? entry.isDefault),
   };

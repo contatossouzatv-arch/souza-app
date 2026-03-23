@@ -91,6 +91,19 @@ function getWinnerPhone(item, viewer) {
     ""
   );
 }
+
+function getAdminContact(item) {
+  const snapshot = item?.metadata?.reward_snapshot || {};
+  return {
+    name: String(snapshot?.adminContactName || snapshot?.admin_contact_name || "").trim(),
+    phone: String(snapshot?.adminContactPhone || snapshot?.admin_contact_phone || "").trim(),
+  };
+}
+
+function isCashPrizeLike(item) {
+  const rewardType = String(item?.reward_type || item?.metadata?.reward_snapshot?.rewardType || "").trim().toLowerCase();
+  return ["points_balance", "saldo", "bonus", "cash_prize"].includes(rewardType);
+}
 function PrizeDetailsDialog({ item, viewer, open, onOpenChange }) {
   if (!item) return null;
 
@@ -103,6 +116,8 @@ function PrizeDetailsDialog({ item, viewer, open, onOpenChange }) {
   const winnerName = getWinnerName(item, viewer);
   const winnerPhone = maskPhone(getWinnerPhone(item, viewer));
   const validationCode = String(getValidationCode(item) || "").trim();
+  const adminContact = getAdminContact(item);
+  const showAdminContact = isCashPrizeLike(item) && (adminContact.name || adminContact.phone);
   const [copied, setCopied] = React.useState(false);
 
   React.useEffect(() => {
@@ -177,6 +192,24 @@ function PrizeDetailsDialog({ item, viewer, open, onOpenChange }) {
                 <p className="font-semibold text-white">{item?.subtitle || item?.title || "Premiação confirmada no app."}</p>
               </div>
             </div>
+            {showAdminContact ? (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/5 px-3 py-3">
+                  <ShieldCheck className="h-4 w-4 text-emerald-300" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">ADM responsavel</p>
+                    <p className="truncate font-semibold text-white">{adminContact.name || "Nao informado"}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/5 px-3 py-3">
+                  <ShieldCheck className="h-4 w-4 text-cyan-300" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Telefone do ADM</p>
+                    <p className="truncate font-semibold text-white">{adminContact.phone || "Nao informado"}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/5 px-3 py-3">
                 <Trophy className="h-4 w-4 text-emerald-300" />

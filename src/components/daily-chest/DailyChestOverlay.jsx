@@ -45,6 +45,7 @@ export default function DailyChestOverlay({
   state,
   viewMode,
   hasRewardsAvailable = true,
+  rewardMessage = "",
   onViewModeChange,
   onTap,
   onUnlock,
@@ -82,6 +83,7 @@ export default function DailyChestOverlay({
   const slotSummary = state?.slots || {};
   const accessGate = state?.accessGate || {};
   const resetLabel = state?.resetAt ? formatCountdownLabel(state.resetAt) : "-";
+  const rewardMessageText = String(rewardMessage || "").trim();
   const canSpinBase =
     viewMode === "main" &&
     displayState !== "opening" &&
@@ -149,7 +151,7 @@ export default function DailyChestOverlay({
               <p className="text-[11px] font-black uppercase tracking-[0.28em] text-cyan-100/92">{headline}</p>
               <p className="mt-2 text-sm text-slate-200">
                 {showClaim
-                  ? "Seu premio ja saiu. Agora e so resgatar."
+                  ? rewardMessageText || "Seu premio ja saiu. Agora e so resgatar."
                   : shouldShowUnlockPanel
                   ? "Digite o codigo publicado no grupo para liberar o bau do dia."
                   : "Os giros extras continuam liberados normalmente quando voce ganhar por deposito."}

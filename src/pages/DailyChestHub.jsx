@@ -27,6 +27,25 @@ function SceneLoader() {
   );
 }
 
+function resolveRewardMessage(reward, state) {
+  const baseMessage = String(
+    reward?.subtitle ||
+    reward?.messageOfDay ||
+    reward?.message_of_day ||
+    reward?.specialLabel ||
+    reward?.special_label ||
+    state?.messageOfDay ||
+    ""
+  ).trim();
+  const rewardType = String(reward?.rewardType || reward?.reward_type || "").trim().toLowerCase();
+  if (["points_balance", "saldo", "bonus", "cash_prize"].includes(rewardType)) {
+    const adminNotice = "Verifique sua galeria de prêmios para saber qual ADM chamar.";
+    if (!baseMessage) return adminNotice;
+    return `${baseMessage} ${adminNotice}`.trim();
+  }
+  return baseMessage;
+}
+
 export default function DailyChestHub() {
   const navigate = useNavigate();
   const [tapCount, setTapCount] = React.useState(0);
@@ -133,8 +152,12 @@ export default function DailyChestHub() {
     if (remainingForType <= 0) return;
 
     const tapGoal = Math.max(1, Number(state.tapGoal || 4));
-    setTapCount(tapGoal);
+    const nextTapCount = Math.min(tapGoal, Number(tapCount || 0) + 1);
+    setTapCount(nextTapCount);
     setTapPulseToken((value) => value + 1);
+    if (nextTapCount < tapGoal) {
+      return;
+    }
     setSpinToken((value) => value + 1);
     setDisplayState("opening");
     playAudio(spinAudioRef, isInteractionSoundEnabled(), 0.9);
@@ -151,7 +174,7 @@ export default function DailyChestHub() {
         description: openError?.message || "Tente novamente em instantes.",
       });
     }
-  }, [displayState, isOpening, openChest, playAudio, state]);
+  }, [isOpening, openChest, playAudio, state, tapCount]);
 
   const handleUnlock = React.useCallback(async (code) => {
     try {
@@ -210,6 +233,7 @@ export default function DailyChestHub() {
   }
 
   const reward = state.opening?.rewardSnapshot || state.rewardPreview || {};
+  const rewardMessage = resolveRewardMessage(reward, state);
   const sceneState =
     displayState === "claimed" || displayState === "cooldown"
       ? "claimed"
@@ -234,7 +258,7 @@ export default function DailyChestHub() {
               tapPulseToken={tapPulseToken}
               spinToken={spinToken}
               rewardLabel={formatDailyChestPrize(reward)}
-              rewardDescription={reward?.messageOfDay || reward?.subtitle || state?.messageOfDay || ""}
+              rewardDescription={rewardMessage}
               rewardPool={availableRewardPool}
               slotSummary={state.slots || {}}
               statusInfo={{
@@ -284,6 +308,7 @@ export default function DailyChestHub() {
           onTap={handleSpin}
           onUnlock={handleUnlock}
           onClaim={handleClaim}
+          rewardMessage={rewardMessage}
           onBack={() => navigate("/")}
           onMenuOpenSound={() => playAudio(menuAudioRef, isMenuSoundEnabled(), 0.88)}
           isClaiming={isClaiming}

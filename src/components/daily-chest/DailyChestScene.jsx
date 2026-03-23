@@ -1,6 +1,8 @@
 import React from "react";
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import chestBackgroundUrl from "../../../assets-para-app/bkagorund bau diario horizonte.png?url";
+import chestModelUrl from "../../../assets-para-app/bau+3d+souza+diario.glb?url";
 
 function createGlowTexture() {
   const canvas = document.createElement("canvas");
@@ -443,6 +445,40 @@ export default function DailyChestScene({
 
     let proceduralFallback = createProceduralClosedChest();
     closedChest.add(proceduralFallback);
+    const gltfLoader = new GLTFLoader();
+    gltfLoader.load(
+      chestModelUrl,
+      (gltf) => {
+        if (!mounted) {
+          disposeObject(gltf.scene);
+          return;
+        }
+
+        const model = gltf.scene || gltf.scenes?.[0];
+        if (!model) return;
+
+        fitObjectToHeight(model, 3.1);
+        model.position.y += 0.05;
+        model.rotation.y = Math.PI;
+        model.traverse((node) => {
+          if (!node?.isMesh) return;
+          node.castShadow = true;
+          node.receiveShadow = true;
+          const materials = Array.isArray(node.material) ? node.material : [node.material];
+          materials.filter(Boolean).forEach((material) => {
+            if ("transparent" in material) material.transparent = false;
+            if ("opacity" in material) material.opacity = 1;
+          });
+        });
+
+        proceduralFallback.visible = false;
+        closedChest.add(model);
+      },
+      undefined,
+      () => {
+        proceduralFallback.visible = true;
+      }
+    );
 
     function createRewardTexture(label, description) {
       const canvas = document.createElement("canvas");
@@ -787,9 +823,9 @@ export default function DailyChestScene({
               eyebrow: "Regras do bau",
               title: "Como funciona hoje",
               body: [
-                "Cada bau pode ser usado uma vez por ciclo e o giro confirma o premio no backend.",
+                "Cada giro abre uma recompensa que ja foi preparada para o dia.",
                 "Depositos aprovados podem liberar baus extras no mesmo dia.",
-                `Hoje voce tem ${Math.max(0, Number(runtime.slotSummary?.total || 0))} bau(s) liberado(s) no total.`,
+                `Hoje voce tem ${Math.max(0, Number(runtime.slotSummary?.total || 0))} bau(s) disponivel(is) no total.`,
               ].join("  "),
               accent: "#67e8f9",
             },

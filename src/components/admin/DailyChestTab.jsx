@@ -65,6 +65,8 @@ const DEFAULT_REWARD = {
   daily_cap: 0,
   sort_order: 100,
   asset_ref: "",
+  admin_contact_name: "",
+  admin_contact_phone: "",
 };
 
 function createEmptyReward() {
@@ -89,6 +91,8 @@ function normalizeRewardRecord(raw = {}) {
     is_default: raw?.is_default ?? raw?.isDefault ?? DEFAULT_REWARD.is_default,
     is_fallback: raw?.is_fallback ?? raw?.isFallback ?? DEFAULT_REWARD.is_fallback,
     message_of_day: raw?.message_of_day ?? raw?.messageOfDay ?? "",
+    admin_contact_name: raw?.admin_contact_name ?? raw?.adminContactName ?? DEFAULT_REWARD.admin_contact_name,
+    admin_contact_phone: raw?.admin_contact_phone ?? raw?.adminContactPhone ?? DEFAULT_REWARD.admin_contact_phone,
     applies_on: raw?.applies_on ?? raw?.appliesOn ?? DEFAULT_REWARD.applies_on,
     active_from: raw?.active_from ?? raw?.activeFrom ?? DEFAULT_REWARD.active_from,
     active_until: raw?.active_until ?? raw?.activeUntil ?? DEFAULT_REWARD.active_until,
@@ -1317,6 +1321,25 @@ export default function DailyChestTab() {
               <Field label="Mensagem exibida" hint="Texto curto que ajuda o usuário a entender o prêmio.">
                 <Textarea value={rewardDraft.subtitle ?? ""} onChange={(event) => updateReward({ subtitle: event.target.value })} rows={3} className="border-slate-700 bg-slate-950/70 text-white md:col-span-2" />
               </Field>
+
+              {rewardDraft.reward_type === "points_balance" ? (
+                <>
+                  <Field label="Nome do ADM" hint="Esse nome fica salvo no prêmio ganho pela pessoa.">
+                    <Input
+                      value={rewardDraft.admin_contact_name ?? ""}
+                      onChange={(event) => updateReward({ admin_contact_name: event.target.value })}
+                      className="border-slate-700 bg-slate-950/70 text-white"
+                    />
+                  </Field>
+                  <Field label="Telefone do ADM" hint="Esse telefone também fica congelado no prêmio ganho.">
+                    <Input
+                      value={rewardDraft.admin_contact_phone ?? ""}
+                      onChange={(event) => updateReward({ admin_contact_phone: event.target.value })}
+                      className="border-slate-700 bg-slate-950/70 text-white"
+                    />
+                  </Field>
+                </>
+              ) : null}
 
               <Field label="Raridade visual">
                 <select value={rewardDraft.rarity ?? "rare"} onChange={(event) => updateReward({ rarity: event.target.value })} className={selectClassName()}>

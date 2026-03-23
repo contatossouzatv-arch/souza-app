@@ -183,6 +183,8 @@ function normalizeRewardConfig(source, settings) {
     isFallback: readBooleanSetting(source?.is_fallback, source?.is_default !== false),
     sortOrder: Math.max(0, Number(source?.sort_order || 100)),
     assetRef: String(source?.asset_ref || "").trim(),
+    adminContactName: String(source?.admin_contact_name || source?.adminContactName || "").trim(),
+    adminContactPhone: String(source?.admin_contact_phone || source?.adminContactPhone || "").trim(),
   };
 }
 
