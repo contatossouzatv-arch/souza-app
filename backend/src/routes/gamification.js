@@ -265,6 +265,9 @@ function normalizeAdminName(value, fallback = "Admin responsavel") {
   return raw;
 }
 
+const LEGACY_HISTORY_ADMIN_NAME = "ADM Gaby";
+const LEGACY_HISTORY_ADMIN_PHONE = "+55 83 993005535";
+
 function findPrizeItemForAudit(prizeItems = [], audit = {}, sourceType = "") {
   const auditUserId = String(audit?.user_id || "").trim();
   const auditRaffleId = String(audit?.raffle_id || "").trim();
@@ -2258,7 +2261,7 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
     if (!dayBucket.draws_map.has(drawKey)) {
       const matchedPrize = findPrizeItemForAudit(prizeItems, audit, sourceType);
       const prizeSnapshot = matchedPrize?.metadata?.reward_snapshot || {};
-      const adminPhone = String(
+      let adminPhone = String(
         audit?.admin_phone ||
           relatedRaffle?.telegram_link ||
           matchedPrize?.metadata?.admin_phone ||
@@ -2267,13 +2270,21 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
           (sourceType === "instant_raffle" ? "" : defaultAdminPhone) ||
           ""
       ).trim();
-      const adminName = normalizeAdminName(
+      let adminName = normalizeAdminName(
         audit?.admin_name ||
           relatedRaffle?.admin_name ||
           matchedPrize?.metadata?.admin_name ||
           prizeSnapshot?.adminContactName ||
           prizeSnapshot?.admin_contact_name
       );
+
+      if (!adminPhone && sourceType === "instant_raffle") {
+        adminPhone = LEGACY_HISTORY_ADMIN_PHONE;
+      }
+
+      if ((!adminName || adminName === "Admin responsavel") && sourceType === "instant_raffle") {
+        adminName = LEGACY_HISTORY_ADMIN_NAME;
+      }
 
       dayBucket.draws_map.set(drawKey, {
         draw_key: drawKey,
