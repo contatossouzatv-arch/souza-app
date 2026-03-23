@@ -1505,56 +1505,6 @@ export default function Profile() {
     setProfileImageFallbackStep(0);
   }, [profileImageSrc, secondaryProfileImageSrc, selectedAvatar?.src]);
 
-  const followingProfileIds = useMemo(
-    () => new Set((myFollowingProfiles || []).map((profile) => String(profile?.id || ""))),
-    [myFollowingProfiles]
-  );
-
-  const mapRealSocialProfile = React.useCallback(
-    (profile) => {
-      const leaderboardProfile = competitionEntryByUserId[profile.id];
-      const avatarMatch = avatarSrcById[profile.profile_avatar_id] || "";
-      const avatarSrc =
-        profile.profile_image_mode === "photo" && profile.profile_image_url
-          ? resolveAssetUrl(profile.profile_image_url)
-          : avatarMatch;
-        return {
-          id: profile.id,
-          nick: profile.nick,
-          handle: profile.handle,
-          avatarSrc,
-          followers: Number(profile.followers || 0),
-          following: Number(profile.following || 0),
-          likes: Number(profile.likes || 0),
-          isFollowing:
-            typeof simState?.[profile.id]?.isFollowing === "boolean"
-              ? Boolean(simState[profile.id].isFollowing)
-              : followingProfileIds.has(String(profile.id || "")),
-          tickets: leaderboardProfile?.stats?.approvedDeposits || leaderboardProfile?.stats?.approvedAmount || 0,
-          points: Number(leaderboardProfile?.weekly_points ?? leaderboardProfile?.points ?? 0),
-          position: leaderboardProfile?.position || 0,
-        };
-    },
-    [avatarSrcById, competitionEntryByUserId, followingProfileIds, simState]
-  );
-
-  const followingProfiles = useMemo(
-    () => myFollowingProfiles.map(mapRealSocialProfile),
-    [mapRealSocialProfile, myFollowingProfiles]
-  );
-
-  const followerProfiles = useMemo(
-    () =>
-      myFollowerProfiles
-        .map(mapRealSocialProfile)
-        .sort((a, b) => {
-          if (b.points !== a.points) return b.points - a.points;
-          return a.nick.localeCompare(b.nick);
-        }),
-    [mapRealSocialProfile, myFollowerProfiles]
-  );
-
-  const socialListProfiles = socialListType === "following" ? followingProfiles : followerProfiles;
   const selectedPublicProfileHandle = useMemo(() => {
     const params = new URLSearchParams(location.search);
     return params.get("u") || "";
@@ -2220,6 +2170,58 @@ export default function Profile() {
     },
     [followMutation, simState, syncDiscoverCardState, user?.id]
   );
+
+  const followingProfileIds = useMemo(
+    () => new Set((myFollowingProfiles || []).map((profile) => String(profile?.id || ""))),
+    [myFollowingProfiles]
+  );
+
+  const mapRealSocialProfile = React.useCallback(
+    (profile) => {
+      const leaderboardProfile = competitionEntryByUserId[profile.id];
+      const avatarMatch = avatarSrcById[profile.profile_avatar_id] || "";
+      const avatarSrc =
+        profile.profile_image_mode === "photo" && profile.profile_image_url
+          ? resolveAssetUrl(profile.profile_image_url)
+          : avatarMatch;
+
+      return {
+        id: profile.id,
+        nick: profile.nick,
+        handle: profile.handle,
+        avatarSrc,
+        followers: Number(profile.followers || 0),
+        following: Number(profile.following || 0),
+        likes: Number(profile.likes || 0),
+        isFollowing:
+          typeof simState?.[profile.id]?.isFollowing === "boolean"
+            ? Boolean(simState[profile.id].isFollowing)
+            : followingProfileIds.has(String(profile.id || "")),
+        tickets: leaderboardProfile?.stats?.approvedDeposits || leaderboardProfile?.stats?.approvedAmount || 0,
+        points: Number(leaderboardProfile?.weekly_points ?? leaderboardProfile?.points ?? 0),
+        position: leaderboardProfile?.position || 0,
+      };
+    },
+    [avatarSrcById, competitionEntryByUserId, followingProfileIds, simState]
+  );
+
+  const followingProfiles = useMemo(
+    () => myFollowingProfiles.map(mapRealSocialProfile),
+    [mapRealSocialProfile, myFollowingProfiles]
+  );
+
+  const followerProfiles = useMemo(
+    () =>
+      myFollowerProfiles
+        .map(mapRealSocialProfile)
+        .sort((a, b) => {
+          if (b.points !== a.points) return b.points - a.points;
+          return a.nick.localeCompare(b.nick);
+        }),
+    [mapRealSocialProfile, myFollowerProfiles]
+  );
+
+  const socialListProfiles = socialListType === "following" ? followingProfiles : followerProfiles;
 
   const toggleAuthoritativePublicLike = async () => {
     if (!selectedPublicProfile?.id || !isSelectedRealProfile) return;
