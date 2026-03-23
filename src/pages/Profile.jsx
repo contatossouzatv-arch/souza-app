@@ -898,61 +898,6 @@ export default function Profile() {
       }),
     [discoverProfilesData?.items]
   );
-  const realProfilesById = useMemo(() => {
-    const map = {};
-    const addProfile = (profile) => {
-      if (!profile?.id) return;
-      map[profile.id] = {
-        ...(map[profile.id] || {}),
-        ...profile,
-      };
-    };
-
-    addProfile(user);
-    (discoverProfilesData?.items || []).forEach(addProfile);
-    (myFollowingProfiles || []).forEach(addProfile);
-    (myFollowerProfiles || []).forEach(addProfile);
-    return map;
-  }, [discoverProfilesData?.items, myFollowerProfiles, myFollowingProfiles, user]);
-  const simulatedProfiles = useMemo(() => {
-    return simulatedBaseProfiles
-      .map((profile) => {
-        const leaderboardProfile = competitionEntryByUserId[profile.id] || {};
-        const xpTotal = Math.max(0, Number(leaderboardProfile.xp_total || 0));
-        const engagementPoints = Math.max(0, Number(leaderboardProfile.engagement_points || 0));
-        const followers = Math.max(0, Number(profile.followers || leaderboardProfile.totalFollowers || 0));
-        const engagementScore = followers + xpTotal + engagementPoints;
-        return {
-          ...profile,
-          points: engagementPoints,
-          xpTotal,
-          engagementPoints,
-          engagementScore,
-          tickets: Math.max(0, profile.followers + profile.likes),
-          totalApproved: Number(leaderboardProfile.totalApproved || 0),
-          totalWins: Number(leaderboardProfile.totalWins || 0),
-          participations: Number(leaderboardProfile.totalParticipations || 0),
-          liveParticipations: Number(leaderboardProfile.liveParticipations || 0),
-          gameParticipations: Number(leaderboardProfile.gameParticipations || 0),
-          instantParticipations: Number(leaderboardProfile.instantParticipations || 0),
-          following: Number(profile.following || leaderboardProfile.followingCount || 0),
-          followers,
-          likes: Number(profile.likes || leaderboardProfile.totalLikes || 0),
-        };
-      })
-      .sort((a, b) => {
-        if (b.engagementScore !== a.engagementScore) return b.engagementScore - a.engagementScore;
-        if (b.followers !== a.followers) return b.followers - a.followers;
-        if (b.xpTotal !== a.xpTotal) return b.xpTotal - a.xpTotal;
-        if (b.engagementPoints !== a.engagementPoints) return b.engagementPoints - a.engagementPoints;
-        if (b.followers !== a.followers) return b.followers - a.followers;
-        return b.likes - a.likes;
-      })
-      .map((profile, index) => ({
-        ...profile,
-        position: index + 1,
-      }));
-  }, [competitionEntryByUserId, simulatedBaseProfiles]);
 
   useEffect(() => {
     if (authUser && authUser !== user) setUser(authUser);
@@ -1330,6 +1275,61 @@ export default function Profile() {
     });
     return map;
   }, [competitionBoard.entries]);
+  const realProfilesById = useMemo(() => {
+    const map = {};
+    const addProfile = (profile) => {
+      if (!profile?.id) return;
+      map[profile.id] = {
+        ...(map[profile.id] || {}),
+        ...profile,
+      };
+    };
+
+    addProfile(user);
+    (discoverProfilesData?.items || []).forEach(addProfile);
+    (myFollowingProfiles || []).forEach(addProfile);
+    (myFollowerProfiles || []).forEach(addProfile);
+    return map;
+  }, [discoverProfilesData?.items, myFollowerProfiles, myFollowingProfiles, user]);
+  const simulatedProfiles = useMemo(() => {
+    return simulatedBaseProfiles
+      .map((profile) => {
+        const leaderboardProfile = competitionEntryByUserId[profile.id] || {};
+        const xpTotal = Math.max(0, Number(leaderboardProfile.xp_total || 0));
+        const engagementPoints = Math.max(0, Number(leaderboardProfile.engagement_points || 0));
+        const followers = Math.max(0, Number(profile.followers || leaderboardProfile.totalFollowers || 0));
+        const engagementScore = followers + xpTotal + engagementPoints;
+        return {
+          ...profile,
+          points: engagementPoints,
+          xpTotal,
+          engagementPoints,
+          engagementScore,
+          tickets: Math.max(0, profile.followers + profile.likes),
+          totalApproved: Number(leaderboardProfile.totalApproved || 0),
+          totalWins: Number(leaderboardProfile.totalWins || 0),
+          participations: Number(leaderboardProfile.totalParticipations || 0),
+          liveParticipations: Number(leaderboardProfile.liveParticipations || 0),
+          gameParticipations: Number(leaderboardProfile.gameParticipations || 0),
+          instantParticipations: Number(leaderboardProfile.instantParticipations || 0),
+          following: Number(profile.following || leaderboardProfile.followingCount || 0),
+          followers,
+          likes: Number(profile.likes || leaderboardProfile.totalLikes || 0),
+        };
+      })
+      .sort((a, b) => {
+        if (b.engagementScore !== a.engagementScore) return b.engagementScore - a.engagementScore;
+        if (b.followers !== a.followers) return b.followers - a.followers;
+        if (b.xpTotal !== a.xpTotal) return b.xpTotal - a.xpTotal;
+        if (b.engagementPoints !== a.engagementPoints) return b.engagementPoints - a.engagementPoints;
+        if (b.followers !== a.followers) return b.followers - a.followers;
+        return b.likes - a.likes;
+      })
+      .map((profile, index) => ({
+        ...profile,
+        position: index + 1,
+      }));
+  }, [competitionEntryByUserId, simulatedBaseProfiles]);
   const currentCompetitionEntry = profileGamification?.currentCompetitionEntry || competitionEntryByUserId[user?.id] || {
     user_id: user?.id || "",
     points: 0,
