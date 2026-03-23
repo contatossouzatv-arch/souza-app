@@ -131,6 +131,8 @@ function mapSocialProfile(row) {
     followers: Number(row.followers || 0),
     following: Number(row.following || 0),
     likes: Number(row.likes || 0),
+    isFollowing: Boolean(row.is_following),
+    isLiked: Boolean(row.is_liked),
     created_at: row.created_at ? toIso(row.created_at) : null,
   };
 }
@@ -264,14 +266,16 @@ async function listRelationProfiles(client, type, userId) {
   return result.rows.map(mapSocialProfile);
 }
 
-async function listDiscoverProfiles(client, { limit = 12, offset = 0 } = {}) {
+async function listDiscoverProfiles(client, viewerUserId, { limit = 12, offset = 0 } = {}) {
   const queryLimit = Math.max(1, Number(limit || 12));
   const queryOffset = Math.max(0, Number(offset || 0));
   const result = await client.query(
     `SELECT u.*,
         COALESCE(followers.count, 0) AS followers,
         COALESCE(following.count, 0) AS following,
-        COALESCE(likes.count, 0) AS likes
+        COALESCE(likes.count, 0) AS likes,
+        COALESCE(viewer_follow.active, false) AS is_following,
+        COALESCE(viewer_like.active, false) AS is_liked
      FROM users u
      LEFT JOIN (
        SELECT target_user_id, COUNT(*)::int AS count
@@ -291,10 +295,16 @@ async function listDiscoverProfiles(client, { limit = 12, offset = 0 } = {}) {
        WHERE active = true
        GROUP BY target_user_id
      ) likes ON likes.target_user_id = u.id
+     LEFT JOIN user_follows viewer_follow
+       ON viewer_follow.target_user_id = u.id
+      AND viewer_follow.follower_user_id = $3
+     LEFT JOIN profile_likes viewer_like
+       ON viewer_like.target_user_id = u.id
+      AND viewer_like.actor_user_id = $3
      WHERE COALESCE(u.account_status, 'active') <> 'deactivated'
      ORDER BY u.created_at DESC
      LIMIT $1 OFFSET $2`,
-    [queryLimit + 1, queryOffset]
+    [queryLimit + 1, queryOffset, viewerUserId]
   );
 
   const rows = result.rows || [];
@@ -475,7 +485,7 @@ router.get("/social/discover", requireAuth, async (req, res) => {
   try {
     const limit = normalizeListLimit(req.query?.limit, 12, 60);
     const offset = normalizeListOffset(req.query?.offset);
-    const result = await listDiscoverProfiles(client, { limit, offset });
+    const result = await listDiscoverProfiles(client, req.auth.sub, { limit, offset });
     res.json(result);
   } finally {
     client.release();

@@ -880,6 +880,8 @@ export default function Profile() {
           followers: Number(profile.followers || 0),
           following: Number(profile.following || 0),
           likes: Number(profile.likes || 0),
+          isFollowing: Boolean(profile.isFollowing),
+          isLiked: Boolean(profile.isLiked),
           activeDays: Math.max(1, Math.min(daysSinceJoin + 1, 30)),
           activityCount: Number(profile.followers || 0) + Number(profile.likes || 0),
           depositedAmount: 0,
@@ -911,21 +913,21 @@ export default function Profile() {
 
   useEffect(() => {
     if (!simulatedProfiles.length) return;
+    const followingIds = new Set((myFollowingProfiles || []).map((profile) => String(profile?.id || "")));
     setSimState((prev) => {
       const next = { ...prev };
       simulatedProfiles.forEach((profile) => {
-        if (!next[profile.id]) {
-          next[profile.id] = {
-            isFollowing: false,
-            isLiked: false,
-            followers: profile.followers,
-            likes: profile.likes,
-          };
-        }
+        next[profile.id] = {
+          ...(next[profile.id] || {}),
+          isFollowing: Boolean(profile.isFollowing) || followingIds.has(String(profile.id || "")),
+          isLiked: Boolean(profile.isLiked),
+          followers: Number(profile.followers || 0),
+          likes: Number(profile.likes || 0),
+        };
       });
       return next;
     });
-  }, [simulatedProfiles]);
+  }, [myFollowingProfiles, simulatedProfiles]);
 
   useEffect(() => {
     if (authUser && authUser !== user) setUser(authUser);
@@ -3453,7 +3455,7 @@ export default function Profile() {
                           state.isLiked ? "bg-pink-500 hover:bg-pink-400" : "bg-pink-600/60 hover:bg-pink-500/80"
                         }`}
                       >
-                        {state.isLiked ? "Descurtir" : "Curtir"}
+                        {state.isLiked ? "Curtido" : "Curtir"}
                       </button>
                     </div>
                   </div>
@@ -3823,7 +3825,7 @@ export default function Profile() {
                       state.isLiked ? "bg-pink-500 hover:bg-pink-400" : "bg-pink-600/60 hover:bg-pink-500/80"
                     }`}
                   >
-                    {state.isLiked ? "Descurtir" : "Curtir"}
+                    {state.isLiked ? "Curtido" : "Curtir"}
                   </button>
                 </div>
               </div>

@@ -472,142 +472,241 @@ function resolveCurrentCycleWindow(config) {
 
 async function ensureActiveWeeklyCycle(config) {
   const windowData = resolveCurrentCycleWindow(config);
-  const currentCycleResult = await pool.query(
-    `SELECT * FROM weekly_cycles
-     WHERE cycle_key = $1
-     LIMIT 1`,
-    [windowData.cycleKey]
-  );
-  const currentCycle = currentCycleResult.rows[0];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const currentCycleResult = await client.query(
+      `SELECT * FROM weekly_cycles
+       WHERE cycle_key = $1
+       LIMIT 1`,
+      [windowData.cycleKey]
+    );
+    const currentCycle = currentCycleResult.rows[0];
+    const activeCycleResult = await client.query(
+      `SELECT * FROM weekly_cycles
+       WHERE status = 'active'
+       ORDER BY updated_at DESC, created_at DESC
+       LIMIT 1`
+    );
+    const activeCycle = activeCycleResult.rows[0] || null;
 
-  await pool.query(
-    `UPDATE weekly_cycles
-     SET status = 'closed',
-         closed_at = COALESCE(closed_at, NOW()),
+    if (!currentCycle && activeCycle && String(activeCycle.cycle_key || "") !== String(windowData.cycleKey || "")) {
+      await client.query(
+        `INSERT INTO user_metric_balances (user_id, metric_key, cycle_key, amount, metadata, updated_at)
+         SELECT user_id, metric_key, $2, amount, metadata, NOW()
+           FROM user_metric_balances
+          WHERE metric_key = 'weekly_points'
+            AND cycle_key = $1
+         ON CONFLICT (user_id, metric_key, cycle_key)
+         DO UPDATE SET
+           amount = GREATEST(user_metric_balances.amount, EXCLUDED.amount),
+           metadata = EXCLUDED.metadata,
+           updated_at = NOW()`,
+        [activeCycle.cycle_key, windowData.cycleKey]
+      );
+      await client.query(
+        `DELETE FROM user_metric_balances
+          WHERE metric_key = 'weekly_points'
+            AND cycle_key = $1`,
+        [activeCycle.cycle_key]
+      );
+      await client.query(
+        `INSERT INTO user_metric_ledger (
+          user_id, metric_key, cycle_key, amount, source_type, source_ref, occurred_at, metadata, updated_at
+        )
+         SELECT user_id, metric_key, $2, amount, source_type, source_ref, occurred_at, metadata, NOW()
+           FROM user_metric_ledger
+          WHERE metric_key = 'weekly_points'
+            AND cycle_key = $1
+         ON CONFLICT (user_id, metric_key, cycle_key, source_type, source_ref)
+         DO UPDATE SET
+           amount = EXCLUDED.amount,
+           occurred_at = GREATEST(user_metric_ledger.occurred_at, EXCLUDED.occurred_at),
+           metadata = EXCLUDED.metadata,
+           updated_at = NOW()`,
+        [activeCycle.cycle_key, windowData.cycleKey]
+      );
+      await client.query(
+        `DELETE FROM user_metric_ledger
+          WHERE metric_key = 'weekly_points'
+            AND cycle_key = $1`,
+        [activeCycle.cycle_key]
+      );
+      const migrated = await client.query(
+        `UPDATE weekly_cycles
+         SET cycle_key = $2,
+             status = 'active',
+             title = $3,
+             starts_at = $4,
+             ends_at = $5,
+             config_snapshot = $6::jsonb,
+             closed_at = NULL,
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING *`,
+        [
+          activeCycle.id,
+          windowData.cycleKey,
+          windowData.title,
+          windowData.startsAt.toISOString(),
+          windowData.endsAt.toISOString(),
+          JSON.stringify(normalizeWeeklyConfig(config)),
+        ]
+      );
+      await client.query("COMMIT");
+      const row = migrated.rows[0];
+      return {
+        id: row.id,
+        cycle_key: row.cycle_key,
+        title: row.title,
+        status: row.status,
+        starts_at: toIso(row.starts_at),
+        ends_at: toIso(row.ends_at),
+        closed_at: row.closed_at ? toIso(row.closed_at) : null,
+        config_snapshot: row.config_snapshot || {},
+        winners_snapshot: row.winners_snapshot || [],
+        metadata: row.metadata || {},
+      };
+    }
+
+    await client.query(
+      `UPDATE weekly_cycles
+       SET status = 'closed',
+           closed_at = COALESCE(closed_at, NOW()),
+           updated_at = NOW()
+       WHERE status = 'active'
+         AND cycle_key <> $1`,
+      [windowData.cycleKey]
+    );
+
+    if (currentCycle) {
+      if (currentCycle.status !== "active") {
+        const reopened = await client.query(
+        `UPDATE weekly_cycles
+         SET status = 'active',
+             title = $2,
+             starts_at = $3,
+             ends_at = $4,
+             config_snapshot = $5::jsonb,
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING *`,
+        [
+          currentCycle.id,
+          windowData.title,
+          windowData.startsAt.toISOString(),
+          windowData.endsAt.toISOString(),
+            JSON.stringify(normalizeWeeklyConfig(config)),
+        ]
+        );
+        await client.query("COMMIT");
+        const row = reopened.rows[0];
+        return {
+          id: row.id,
+          cycle_key: row.cycle_key,
+          title: row.title,
+          status: row.status,
+          starts_at: toIso(row.starts_at),
+          ends_at: toIso(row.ends_at),
+          closed_at: row.closed_at ? toIso(row.closed_at) : null,
+          config_snapshot: row.config_snapshot || {},
+          winners_snapshot: row.winners_snapshot || [],
+          metadata: row.metadata || {},
+        };
+      }
+
+      const currentStartsAt = safeDate(currentCycle.starts_at);
+      const currentEndsAt = safeDate(currentCycle.ends_at);
+      const currentWindowMismatch =
+        !currentStartsAt ||
+        !currentEndsAt ||
+        currentStartsAt.getTime() !== windowData.startsAt.getTime() ||
+        currentEndsAt.getTime() !== windowData.endsAt.getTime() ||
+        String(currentCycle.title || "") !== String(windowData.title || "");
+
+      if (currentWindowMismatch) {
+        const refreshed = await client.query(
+          `UPDATE weekly_cycles
+           SET status = 'active',
+               title = $2,
+               starts_at = $3,
+               ends_at = $4,
+               config_snapshot = $5::jsonb,
+               updated_at = NOW()
+           WHERE id = $1
+           RETURNING *`,
+          [
+            currentCycle.id,
+            windowData.title,
+            windowData.startsAt.toISOString(),
+            windowData.endsAt.toISOString(),
+            JSON.stringify(normalizeWeeklyConfig(config)),
+          ]
+        );
+        await client.query("COMMIT");
+        const row = refreshed.rows[0];
+        return {
+          id: row.id,
+          cycle_key: row.cycle_key,
+          title: row.title,
+          status: row.status,
+          starts_at: toIso(row.starts_at),
+          ends_at: toIso(row.ends_at),
+          closed_at: row.closed_at ? toIso(row.closed_at) : null,
+          config_snapshot: row.config_snapshot || {},
+          winners_snapshot: row.winners_snapshot || [],
+          metadata: row.metadata || {},
+        };
+      }
+
+      await client.query("COMMIT");
+      return {
+        id: currentCycle.id,
+        cycle_key: currentCycle.cycle_key,
+        title: currentCycle.title,
+        status: currentCycle.status,
+        starts_at: toIso(currentCycle.starts_at),
+        ends_at: toIso(currentCycle.ends_at),
+        closed_at: currentCycle.closed_at ? toIso(currentCycle.closed_at) : null,
+        config_snapshot: currentCycle.config_snapshot || {},
+        winners_snapshot: currentCycle.winners_snapshot || [],
+        metadata: currentCycle.metadata || {},
+      };
+    }
+
+    const inserted = await client.query(
+      `INSERT INTO weekly_cycles (cycle_key, title, status, starts_at, ends_at, config_snapshot, winners_snapshot, metadata)
+       VALUES ($1, $2, 'active', $3, $4, $5::jsonb, '[]'::jsonb, '{}'::jsonb)
+       ON CONFLICT (cycle_key)
+       DO UPDATE SET
+         title = EXCLUDED.title,
+         status = 'active',
+         starts_at = EXCLUDED.starts_at,
+         ends_at = EXCLUDED.ends_at,
+         config_snapshot = EXCLUDED.config_snapshot,
          updated_at = NOW()
-     WHERE status = 'active'
-       AND cycle_key <> $1`,
-    [windowData.cycleKey]
-  );
-
-  if (currentCycle) {
-    if (currentCycle.status !== "active") {
-      const reopened = await pool.query(
-        `UPDATE weekly_cycles
-         SET status = 'active',
-             title = $2,
-             starts_at = $3,
-             ends_at = $4,
-             config_snapshot = $5::jsonb,
-             updated_at = NOW()
-         WHERE id = $1
-         RETURNING *`,
-        [
-          currentCycle.id,
-          windowData.title,
-          windowData.startsAt.toISOString(),
-          windowData.endsAt.toISOString(),
-          JSON.stringify(normalizeWeeklyConfig(config)),
-        ]
-      );
-      const row = reopened.rows[0];
-      return {
-        id: row.id,
-        cycle_key: row.cycle_key,
-        title: row.title,
-        status: row.status,
-        starts_at: toIso(row.starts_at),
-        ends_at: toIso(row.ends_at),
-        closed_at: row.closed_at ? toIso(row.closed_at) : null,
-        config_snapshot: row.config_snapshot || {},
-        winners_snapshot: row.winners_snapshot || [],
-        metadata: row.metadata || {},
-      };
-    }
-
-    const currentStartsAt = safeDate(currentCycle.starts_at);
-    const currentEndsAt = safeDate(currentCycle.ends_at);
-    const currentWindowMismatch =
-      !currentStartsAt ||
-      !currentEndsAt ||
-      currentStartsAt.getTime() !== windowData.startsAt.getTime() ||
-      currentEndsAt.getTime() !== windowData.endsAt.getTime() ||
-      String(currentCycle.title || "") !== String(windowData.title || "");
-
-    if (currentWindowMismatch) {
-      const refreshed = await pool.query(
-        `UPDATE weekly_cycles
-         SET status = 'active',
-             title = $2,
-             starts_at = $3,
-             ends_at = $4,
-             config_snapshot = $5::jsonb,
-             updated_at = NOW()
-         WHERE id = $1
-         RETURNING *`,
-        [
-          currentCycle.id,
-          windowData.title,
-          windowData.startsAt.toISOString(),
-          windowData.endsAt.toISOString(),
-          JSON.stringify(normalizeWeeklyConfig(config)),
-        ]
-      );
-      const row = refreshed.rows[0];
-      return {
-        id: row.id,
-        cycle_key: row.cycle_key,
-        title: row.title,
-        status: row.status,
-        starts_at: toIso(row.starts_at),
-        ends_at: toIso(row.ends_at),
-        closed_at: row.closed_at ? toIso(row.closed_at) : null,
-        config_snapshot: row.config_snapshot || {},
-        winners_snapshot: row.winners_snapshot || [],
-        metadata: row.metadata || {},
-      };
-    }
-
+       RETURNING *`,
+      [windowData.cycleKey, windowData.title, windowData.startsAt.toISOString(), windowData.endsAt.toISOString(), JSON.stringify(normalizeWeeklyConfig(config))]
+    );
+    await client.query("COMMIT");
     return {
-      id: currentCycle.id,
-      cycle_key: currentCycle.cycle_key,
-      title: currentCycle.title,
-      status: currentCycle.status,
-      starts_at: toIso(currentCycle.starts_at),
-      ends_at: toIso(currentCycle.ends_at),
-      closed_at: currentCycle.closed_at ? toIso(currentCycle.closed_at) : null,
-      config_snapshot: currentCycle.config_snapshot || {},
-      winners_snapshot: currentCycle.winners_snapshot || [],
-      metadata: currentCycle.metadata || {},
+      id: inserted.rows[0].id,
+      cycle_key: inserted.rows[0].cycle_key,
+      title: inserted.rows[0].title,
+      status: inserted.rows[0].status,
+      starts_at: toIso(inserted.rows[0].starts_at),
+      ends_at: toIso(inserted.rows[0].ends_at),
+      closed_at: null,
+      config_snapshot: inserted.rows[0].config_snapshot || {},
+      winners_snapshot: [],
+      metadata: inserted.rows[0].metadata || {},
     };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
-
-  const inserted = await pool.query(
-    `INSERT INTO weekly_cycles (cycle_key, title, status, starts_at, ends_at, config_snapshot, winners_snapshot, metadata)
-     VALUES ($1, $2, 'active', $3, $4, $5::jsonb, '[]'::jsonb, '{}'::jsonb)
-     ON CONFLICT (cycle_key)
-     DO UPDATE SET
-       title = EXCLUDED.title,
-       status = 'active',
-       starts_at = EXCLUDED.starts_at,
-       ends_at = EXCLUDED.ends_at,
-       config_snapshot = EXCLUDED.config_snapshot,
-       updated_at = NOW()
-     RETURNING *`,
-    [windowData.cycleKey, windowData.title, windowData.startsAt.toISOString(), windowData.endsAt.toISOString(), JSON.stringify(normalizeWeeklyConfig(config))]
-  );
-  return {
-    id: inserted.rows[0].id,
-    cycle_key: inserted.rows[0].cycle_key,
-    title: inserted.rows[0].title,
-    status: inserted.rows[0].status,
-    starts_at: toIso(inserted.rows[0].starts_at),
-    ends_at: toIso(inserted.rows[0].ends_at),
-    closed_at: null,
-    config_snapshot: inserted.rows[0].config_snapshot || {},
-    winners_snapshot: [],
-    metadata: inserted.rows[0].metadata || {},
-  };
 }
 
 function createUserSnapshot(user) {

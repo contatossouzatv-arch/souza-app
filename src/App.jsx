@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import './App.css'
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
+import { Analytics } from "@vercel/analytics/react";
 import { queryClientInstance } from '@/lib/query-client'
 import VisualEditAgent from '@/lib/VisualEditAgent'
 import NavigationTracker from '@/lib/NavigationTracker'
@@ -261,6 +262,7 @@ function App() {
           <MetricGainNotifier />
           <AuthenticatedApp />
         </Router>
+        <Analytics />
         <Toaster />
         {enableVisualEditAgent ? <VisualEditAgent /> : null}
       </QueryClientProvider>
