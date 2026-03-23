@@ -2173,6 +2173,95 @@ router.get("/feed/wins", requireAuth, async (_req, res) => {
   });
 });
 
+router.get("/feed/likes", requireAuth, async (req, res) => {
+  const userId = String(req.auth?.sub || "").trim();
+  const [countRows, likedRows] = await Promise.all([
+    pool.query(
+      `SELECT COALESCE(data->>'post_id', '') AS post_id, COUNT(*)::int AS like_count
+         FROM entity_records
+        WHERE entity_name = 'FeedPostLike'
+        GROUP BY COALESCE(data->>'post_id', '')`
+    ),
+    pool.query(
+      `SELECT COALESCE(data->>'post_id', '') AS post_id
+         FROM entity_records
+        WHERE entity_name = 'FeedPostLike'
+          AND COALESCE(data->>'user_id', '') = $1`,
+      [userId]
+    ),
+  ]);
+
+  const counts = countRows.rows.reduce((acc, row) => {
+    const postId = String(row.post_id || "").trim();
+    if (!postId) return acc;
+    acc[postId] = Number(row.like_count || 0);
+    return acc;
+  }, {});
+
+  const likedPostIds = likedRows.rows
+    .map((row) => String(row.post_id || "").trim())
+    .filter(Boolean);
+
+  return res.json({ counts, likedPostIds });
+});
+
+router.post("/feed/likes/:postId", requireAuth, async (req, res) => {
+  const userId = String(req.auth?.sub || "").trim();
+  const postId = String(req.params.postId || "").trim();
+
+  if (!postId || (!postId.startsWith("winner-") && !postId.startsWith("notice-"))) {
+    return res.status(400).json({ error: "Post inválido." });
+  }
+
+  const existingLike = await pool.query(
+    `SELECT id
+       FROM entity_records
+      WHERE entity_name = 'FeedPostLike'
+        AND COALESCE(data->>'post_id', '') = $1
+        AND COALESCE(data->>'user_id', '') = $2
+      LIMIT 1`,
+    [postId, userId]
+  );
+
+  if (existingLike.rows[0]?.id) {
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int AS like_count
+         FROM entity_records
+        WHERE entity_name = 'FeedPostLike'
+          AND COALESCE(data->>'post_id', '') = $1`,
+      [postId]
+    );
+    return res.json({
+      ok: true,
+      liked: true,
+      alreadyLiked: true,
+      postId,
+      likes: Number(countResult.rows[0]?.like_count || 0),
+    });
+  }
+
+  await createEntity("FeedPostLike", {
+    post_id: postId,
+    user_id: userId,
+  });
+
+  const countResult = await pool.query(
+    `SELECT COUNT(*)::int AS like_count
+       FROM entity_records
+      WHERE entity_name = 'FeedPostLike'
+        AND COALESCE(data->>'post_id', '') = $1`,
+    [postId]
+  );
+
+  return res.json({
+    ok: true,
+    liked: true,
+    alreadyLiked: false,
+    postId,
+    likes: Number(countResult.rows[0]?.like_count || 0),
+  });
+});
+
 router.get("/admin/users", requireAuth, requireAdmin, async (req, res) => {
   const { items, recentAdjustments, dashboard } = await buildAdminUsersDataset();
   const query = String(req.query.q || "").trim().toLowerCase();

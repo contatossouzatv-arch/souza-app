@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
+﻿import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { AnimatePresence, motion } from "framer-motion";
@@ -253,15 +253,15 @@ function getBadgeCelebrationText(achievement) {
     normalizedLabel.includes("10 premios");
 
   if (isTickets500Badge) {
-    return "Você acumulou 500 bilhetes nos depósitos! Continue no ritmo para dominar o ranking.";
+    return "VocÃª acumulou 500 bilhetes nos depÃ³sitos! Continue no ritmo para dominar o ranking.";
   }
 
   if (isFollowers50Badge) {
-    return "Você atingiu 50 seguidores no perfil! Sua presença na comunidade está crescendo forte.";
+    return "VocÃª atingiu 50 seguidores no perfil! Sua presenÃ§a na comunidade estÃ¡ crescendo forte.";
   }
 
   if (isWinner10Badge) {
-    return "Lendário! Você já ganhou 10 prêmios com o Souza e entrou no hall dos campeões.";
+    return "LendÃ¡rio! VocÃª jÃ¡ ganhou 10 prÃªmios com o Souza e entrou no hall dos campeÃµes.";
   }
 
   return achievement.ruleText || "Continue jogando para liberar mais conquistas.";
@@ -527,29 +527,29 @@ function formatBadgeRuleText(rule) {
   const threshold = Number(rule.threshold || 0);
   const friendlyDescriptions = {
     "starter-install":
-      "Você já começou sua jornada no App do Souza. Continue participando para liberar conquistas cada vez mais especiais.",
+      "VocÃª jÃ¡ comeÃ§ou sua jornada no App do Souza. Continue participando para liberar conquistas cada vez mais especiais.",
     "first-step":
-      "Dê seus primeiros passos no app e mostre que você chegou para jogar sério. Cada participação te aproxima de novas conquistas.",
+      "DÃª seus primeiros passos no app e mostre que vocÃª chegou para jogar sÃ©rio. Cada participaÃ§Ã£o te aproxima de novas conquistas.",
     "deposit-300":
-      "Movimente sua conta e alcance R$ 300 em depósitos aprovados para liberar este selo especial.",
+      "Movimente sua conta e alcance R$ 300 em depÃ³sitos aprovados para liberar este selo especial.",
     "premium-depositor":
-      "Esse selo é para quem se destaca entre os grandes movimentadores do app. Continue evoluindo seus depósitos para conquistá-lo.",
+      "Esse selo Ã© para quem se destaca entre os grandes movimentadores do app. Continue evoluindo seus depÃ³sitos para conquistÃ¡-lo.",
     top10:
       "Entre para a elite do momento ficando entre os maiores depositantes do ciclo ativo.",
     winner:
-      "Conquiste seu primeiro prêmio no app e desbloqueie esse selo de vencedor.",
+      "Conquiste seu primeiro prÃªmio no app e desbloqueie esse selo de vencedor.",
     winner10:
-      "Ganhe 10 prêmios e prove que você já faz parte do time dos campeões do App do Souza.",
+      "Ganhe 10 prÃªmios e prove que vocÃª jÃ¡ faz parte do time dos campeÃµes do App do Souza.",
     "tickets-500":
-      "Acumule 500 bilhetes e mostre a força da sua jornada dentro do app.",
+      "Acumule 500 bilhetes e mostre a forÃ§a da sua jornada dentro do app.",
     "checkin-30":
-      "Marque presença por 30 dias e transforme sua constância em uma conquista especial.",
+      "Marque presenÃ§a por 30 dias e transforme sua constÃ¢ncia em uma conquista especial.",
     "followers-50":
-      "Chegue a 50 seguidores no seu perfil e mostre que sua presença chama atenção na comunidade.",
+      "Chegue a 50 seguidores no seu perfil e mostre que sua presenÃ§a chama atenÃ§Ã£o na comunidade.",
     "live-10":
       "Participe de 10 lives e desbloqueie esse selo feito para quem acompanha tudo de perto.",
     "super-fan-live":
-      "Esse selo é para quem vive as lives intensamente. Continue participando e mostre que você é fã de verdade.",
+      "Esse selo Ã© para quem vive as lives intensamente. Continue participando e mostre que vocÃª Ã© fÃ£ de verdade.",
   };
   if (friendlyDescriptions[badgeId]) {
     return friendlyDescriptions[badgeId];
@@ -562,10 +562,10 @@ function formatBadgeRuleText(rule) {
   }
   const metricText = BADGE_METRIC_LABEL[rule.metric] || "essa meta";
   const metricFriendlyText = {
-    totalParticipations: `Participe ${threshold} vezes para conquistar este selo e mostrar sua presença no app.`,
-    totalApproved: `Alcance ${threshold} em depósitos aprovados para desbloquear esta conquista.`,
-    totalWins: `Ganhe ${threshold} prêmio${threshold === 1 ? "" : "s"} para liberar este selo.`,
-    liveParticipations: `Marque presença em ${threshold} live${threshold === 1 ? "" : "s"} para conquistar este selo.`,
+    totalParticipations: `Participe ${threshold} vezes para conquistar este selo e mostrar sua presenÃ§a no app.`,
+    totalApproved: `Alcance ${threshold} em depÃ³sitos aprovados para desbloquear esta conquista.`,
+    totalWins: `Ganhe ${threshold} prÃªmio${threshold === 1 ? "" : "s"} para liberar este selo.`,
+    liveParticipations: `Marque presenÃ§a em ${threshold} live${threshold === 1 ? "" : "s"} para conquistar este selo.`,
     ticketCount: `Acumule ${threshold} bilhetes e avance para desbloquear esta conquista.`,
     followerCount: `Chegue a ${threshold} seguidor${threshold === 1 ? "" : "es"} para liberar este selo especial.`,
     checkInStreak: `Complete ${threshold} check-in${threshold === 1 ? "" : "s"} e conquiste este selo.`,
@@ -630,7 +630,7 @@ function normalizeMetricSourceLabel(entry) {
   if (source.includes("follow")) return "Seguir perfis";
   if (source.includes("like")) return "Curtidas em perfis";
   if (source.includes("approved_deposit")) return "Depositos aprovados";
-  if (source.includes("validated_win")) return "Prêmios confirmados";
+  if (source.includes("validated_win")) return "PrÃªmios confirmados";
   if (source.includes("live_participation") || source.includes("live_draw")) return "Participacao em live";
   if (source.includes("instant_raffle")) return "Sorteio rapido";
   if (source.includes("game_call")) return "Call do jogo";
@@ -875,7 +875,7 @@ export default function Profile() {
         const daysSinceJoin = Math.max(0, Math.floor((Date.now() - createdAt) / (1000 * 60 * 60 * 24)));
         return {
           id: profile.id,
-          nick: profile.nick || "Usuário",
+          nick: profile.nick || "UsuÃ¡rio",
           handle: profile.handle || String(profile.nick || "usuario").toLowerCase().replace(/\s+/g, "."),
           avatarSrc: getProfileAvatarSrc(profile, avatarSrcById, defaultAvatar) || defaultAvatar,
           followers: Number(profile.followers || 0),
@@ -1117,7 +1117,7 @@ export default function Profile() {
       toast({
         variant: "destructive",
         title: "Falha ao cancelar",
-        description: error?.message || "Não foi possível cancelar o envio.",
+        description: error?.message || "NÃ£o foi possÃ­vel cancelar o envio.",
       });
     },
   });
@@ -1625,7 +1625,7 @@ export default function Profile() {
     const prioritizedCandidates = simulatedProfiles.filter((profile) => {
       if (selectedId && profile.id === selectedId) return false;
       const state = simState[profile.id];
-      // Para rotacionar recomendações, removemos perfis já "concluídos" (seguindo + curtido).
+      // Para rotacionar recomendaÃ§Ãµes, removemos perfis jÃ¡ "concluÃ­dos" (seguindo + curtido).
       return !(state?.isFollowing && state?.isLiked);
     });
 
@@ -2006,16 +2006,16 @@ export default function Profile() {
     onSuccess: (response) => {
       syncGamificationViews();
       toast({
-        title: response?.alreadyCheckedIn ? "Check-in já registrado" : "Check-in diário confirmado",
+        title: response?.alreadyCheckedIn ? "Check-in jÃ¡ registrado" : "Check-in diÃ¡rio confirmado",
         description: response?.alreadyCheckedIn
-          ? "Você já fez check-in hoje. O backend manteve o estado correto."
-          : "Seu check-in foi registrado e já alimenta a gamificação authoritative.",
+          ? "VocÃª jÃ¡ fez check-in hoje. O backend manteve o estado correto."
+          : "Seu check-in foi registrado e jÃ¡ alimenta a gamificaÃ§Ã£o authoritative.",
       });
     },
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "Falha no check-in diário",
+        title: "Falha no check-in diÃ¡rio",
         description: error?.message || "Tente novamente.",
       });
       },
@@ -2035,15 +2035,15 @@ export default function Profile() {
 
   const updateFollow = () => {
     toast({
-      title: "Ação disponível em perfis públicos",
-      description: "Use seguir em um perfil público real para registrar a ação no backend.",
+      title: "AÃ§Ã£o disponÃ­vel em perfis pÃºblicos",
+      description: "Use seguir em um perfil pÃºblico real para registrar a aÃ§Ã£o no backend.",
     });
   };
 
   const likeProfile = () => {
     toast({
-      title: "Ação disponível em perfis públicos",
-      description: "Use curtir em um perfil público real para registrar a ação no backend.",
+      title: "AÃ§Ã£o disponÃ­vel em perfis pÃºblicos",
+      description: "Use curtir em um perfil pÃºblico real para registrar a aÃ§Ã£o no backend.",
     });
   };
 
@@ -2559,14 +2559,14 @@ export default function Profile() {
       setIsEditOpen(false);
       toast({
         title: "Perfil atualizado",
-        description: "As alterações foram salvas com sucesso.",
+        description: "As alteraÃ§Ãµes foram salvas com sucesso.",
       });
     } catch (error) {
       console.error("Error updating quick profile:", error);
       toast({
         variant: "destructive",
         title: "Falha ao salvar",
-        description: "Não foi possível atualizar o perfil agora.",
+        description: "NÃ£o foi possÃ­vel atualizar o perfil agora.",
       });
     }
   };
@@ -2880,7 +2880,7 @@ export default function Profile() {
             <p className="mt-1 text-[9px] font-semibold text-cyan-200">
               XP {progress.inLevelPoints}/{progress.pointsRequired}
             </p>
-            <p className="text-[9px] text-slate-300">Faltam {progress.pointsToNext} para o próximo</p>
+            <p className="text-[9px] text-slate-300">Faltam {progress.pointsToNext} para o prÃ³ximo</p>
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -2893,7 +2893,7 @@ export default function Profile() {
         type="button"
         onClick={() => setIsProfileNotificationsOpen(true)}
         className="relative inline-flex items-center justify-center rounded-full border border-fuchsia-400/45 bg-slate-950/90 p-2 text-fuchsia-100 shadow-[0_0_0_1px_rgba(232,121,249,0.18),0_8px_18px_rgba(126,34,206,0.22)] backdrop-blur-sm transition hover:border-fuchsia-300/70 hover:text-white"
-        aria-label="Abrir notificações do perfil"
+        aria-label="Abrir notificaÃ§Ãµes do perfil"
       >
         <Bell className="h-4 w-4" />
         {unreadProfileNotifications.length > 0 ? (
@@ -2971,7 +2971,7 @@ export default function Profile() {
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-300">Modo Semanal</p>
               <h3 className="text-lg font-black uppercase tracking-wide text-white">
-                {isCompetitionFinishedPreview ? competitionBoard.config.finished_title : competitionBoard.config.title || "COMPETIÇÃO SEMANAL"}
+                {isCompetitionFinishedPreview ? competitionBoard.config.finished_title : competitionBoard.config.title || "COMPETIÃ‡ÃƒO SEMANAL"}
               </h3>
               <p className="text-xs text-slate-300">
                 {isCompetitionFinishedPreview ? competitionBoard.config.finished_subtitle : competitionBoard.config.subtitle}
@@ -3016,7 +3016,7 @@ export default function Profile() {
               <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/10 p-3 text-center">
                 <p className="text-xs font-black uppercase tracking-wide text-emerald-200">Top {winnersCount} Ganhadores do ciclo</p>
                 <p className="mt-1 text-[11px] text-emerald-100">
-                  Premiação configurada no admin. Valor base atual: R${prizePerWinner.toFixed(2)}. Novo ciclo começa em breve.
+                  PremiaÃ§Ã£o configurada no admin. Valor base atual: R${prizePerWinner.toFixed(2)}. Novo ciclo comeÃ§a em breve.
                 </p>
               </div>
               <div
@@ -3164,7 +3164,7 @@ export default function Profile() {
                         </div>
                       </div>
                       <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-                        <p className="truncate text-xs font-bold text-white">Sua colocação: #{entry.position} {entry.nick || "Você"}</p>
+                        <p className="truncate text-xs font-bold text-white">Sua colocaÃ§Ã£o: #{entry.position} {entry.nick || "VocÃª"}</p>
                         <p className="shrink-0 text-[11px] font-black text-cyan-200">{safeEntryPoints.toLocaleString("pt-BR")} pts</p>
                       </div>
                     </button>
@@ -3392,17 +3392,17 @@ export default function Profile() {
                 <p className="text-xl font-black text-cyan-300">{publicMetrics?.totalTickets ?? 0}</p>
               </div>
               <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-                <p className="text-xs text-slate-400">Top Deposito</p>
+                <p className="text-xs text-slate-400">Top Semanal</p>
                 <p className="text-xl font-black text-emerald-300">#{publicMetrics?.position || "-"}</p>
               </div>
               <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-                <p className="text-xs text-slate-400">Prêmios Ganhos</p>
+                <p className="text-xs text-slate-400">PrÃªmios Ganhos</p>
                 <p className="text-xl font-black text-yellow-300">{publicMetrics?.totalWins}</p>
               </div>
             </div>
             <div className="mt-4">
               <div className="mb-1 flex items-center justify-between text-xs">
-                <span className="text-slate-400">Super Fã das Lives do SouzaTV</span>
+                <span className="text-slate-400">Super FÃ£ das Lives do SouzaTV</span>
                 <span className="text-cyan-300">{publicSuperFanProgress}%</span>
               </div>
               <div className="h-2 w-full rounded-full bg-slate-800">
@@ -3466,7 +3466,7 @@ export default function Profile() {
                   <div className="mb-1 flex items-center justify-between text-xs">
                     <p className="font-semibold text-cyan-200">{badge.title}</p>
                     <p className="text-slate-300">
-                      Nível {badge.level}
+                      NÃ­vel {badge.level}
                     </p>
                   </div>
                   <p className="mb-2 text-[11px] text-slate-400">{badge.subtitle}</p>
@@ -3477,7 +3477,7 @@ export default function Profile() {
                     />
                   </div>
                   <p className={`mt-1 text-[11px] ${badge.completed ? "text-emerald-300" : "text-slate-400"}`}>
-                    {badge.current}/{badge.target} para o Nível {badge.nextLevel} ({badge.progress}%)
+                    {badge.current}/{badge.target} para o NÃ­vel {badge.nextLevel} ({badge.progress}%)
                   </p>
                 </div>
               ))}
@@ -3487,10 +3487,10 @@ export default function Profile() {
           <Suspense fallback={null}>
             <PrizeGalleryCard
               userId={selectedPublicProfile?.id}
-              title="Galeria de Prêmios"
-              subtitle="Modo público: outras pessoas conseguem ver os prêmios já registrados neste perfil."
-              emptyTitle="Este perfil ainda não exibiu prêmios na galeria"
-              emptySubtitle="Quando esse usuário ganhar e resgatar recompensas, elas vão aparecer aqui em formato de coleção."
+              title="Galeria de PrÃªmios"
+              subtitle="Modo pÃºblico: outras pessoas conseguem ver os prÃªmios jÃ¡ registrados neste perfil."
+              emptyTitle="Este perfil ainda nÃ£o exibiu prÃªmios na galeria"
+              emptySubtitle="Quando esse usuÃ¡rio ganhar e resgatar recompensas, elas vÃ£o aparecer aqui em formato de coleÃ§Ã£o."
               countLabel="registrados"
               privateView={false}
             />
@@ -3583,7 +3583,7 @@ export default function Profile() {
                         <p className="text-xs font-bold text-cyan-200">{getLevelLabelFromXp(profile.xpTotal ?? profile.xp_total ?? 0)}</p>
                       </div>
                       <div className="rounded-lg bg-slate-900 p-1.5">
-                        <p className="text-center text-[10px] text-slate-400">Prêmios</p>
+                        <p className="text-center text-[10px] text-slate-400">PrÃªmios</p>
                         <p className="text-xs font-bold text-indigo-200">{profile.totalWins}</p>
                       </div>
                       <div className="rounded-lg bg-slate-900 p-1.5">
@@ -3624,7 +3624,7 @@ export default function Profile() {
               })}
               {!otherProfiles.length ? (
                 <div className="w-full rounded-2xl border border-dashed border-slate-700 bg-slate-950/70 p-4 text-center text-sm text-slate-300">
-                  Sem novas recomendações por agora. Volte depois para descobrir novos perfis.
+                  Sem novas recomendaÃ§Ãµes por agora. Volte depois para descobrir novos perfis.
                 </div>
               ) : null}
             </div>
@@ -3694,7 +3694,7 @@ export default function Profile() {
           </>
         ) : (
           <Card className="border-slate-800 bg-slate-900/70 p-6 text-center text-slate-200">
-            Perfil não encontrado.
+            Perfil nÃ£o encontrado.
           </Card>
         )}
       {profileSwitchLoaderOverlay}
@@ -3739,11 +3739,11 @@ export default function Profile() {
           </button>
 
           <div className="mt-3 min-w-0">
-            <h1 className="truncate text-xl font-bold text-white">{user.nick || user.full_name || "Usuário"}</h1>
-            <p className="text-sm font-medium text-cyan-300">@{profilePrefs.handle || "usuário"}</p>
+            <h1 className="truncate text-xl font-bold text-white">{user.nick || user.full_name || "UsuÃ¡rio"}</h1>
+            <p className="text-sm font-medium text-cyan-300">@{profilePrefs.handle || "usuÃ¡rio"}</p>
             {profilePrefs.alias ? <p className="text-xs text-slate-300">{profilePrefs.alias}</p> : null}
             {(user.profile_image_status === "manual_review" || user.profile_image_status === "pending") && (
-              <p className="text-[11px] text-cyan-300">Sua foto está em análise e visível apenas para você.</p>
+              <p className="text-[11px] text-cyan-300">Sua foto estÃ¡ em anÃ¡lise e visÃ­vel apenas para vocÃª.</p>
             )}
           </div>
 
@@ -3754,10 +3754,10 @@ export default function Profile() {
             type="button"
             onClick={openQuickEditModal}
             className="mt-2 inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800/80 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-cyan-400/60 hover:text-cyan-200"
-            aria-label="Editar perfil rápido"
+            aria-label="Editar perfil rÃ¡pido"
           >
             <Pencil className="h-3.5 w-3.5" />
-            Editar rápido
+            Editar rÃ¡pido
           </button>
 
           {!isViewingPublicProfile ? null : (
@@ -3954,7 +3954,7 @@ export default function Profile() {
                     <p className="text-xs font-bold text-cyan-200">{getLevelLabelFromXp(profile.xpTotal ?? profile.xp_total ?? 0)}</p>
                   </div>
                   <div className="rounded-lg bg-slate-900 p-1.5">
-                    <p className="text-center text-[10px] text-slate-400">Prêmios</p>
+                    <p className="text-center text-[10px] text-slate-400">PrÃªmios</p>
                     <p className="text-xs font-bold text-indigo-200">{profile.totalWins}</p>
                   </div>
                   <div className="rounded-lg bg-slate-900 p-1.5">
@@ -4004,18 +4004,18 @@ export default function Profile() {
             <p className="text-xl font-black text-cyan-300">{metrics.totalTickets}</p>
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-            <p className="text-xs text-slate-400">Top Deposito</p>
+            <p className="text-xs text-slate-400">Top Semanal</p>
             <p className="text-xl font-black text-emerald-300">#{metrics.position || "-"}</p>
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-            <p className="text-xs text-slate-400">Prêmios Ganhos</p>
+            <p className="text-xs text-slate-400">PrÃªmios Ganhos</p>
             <p className="text-xl font-black text-yellow-300">{metrics.totalWins}</p>
           </div>
         </div>
 
         <div className="mt-4">
           <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="text-slate-400">Super Fã das Lives do SouzaTV</span>
+            <span className="text-slate-400">Super FÃ£ das Lives do SouzaTV</span>
             <span className="text-cyan-300">{superFanProgress}%</span>
           </div>
           <div className="h-2 w-full rounded-full bg-slate-800">
@@ -4079,7 +4079,7 @@ export default function Profile() {
               <div className="mb-1 flex items-center justify-between text-xs">
                 <p className="font-semibold text-cyan-200">{badge.title}</p>
                 <p className="text-slate-300">
-                  Nível {badge.level}
+                  NÃ­vel {badge.level}
                 </p>
               </div>
               <p className="mb-2 text-[11px] text-slate-400">{badge.subtitle}</p>
@@ -4090,7 +4090,7 @@ export default function Profile() {
                 />
               </div>
               <p className={`mt-1 text-[11px] ${badge.completed ? "text-emerald-300" : "text-slate-400"}`}>
-                {badge.current}/{badge.target} para o Nível {badge.nextLevel} ({badge.progress}%)
+                {badge.current}/{badge.target} para o NÃ­vel {badge.nextLevel} ({badge.progress}%)
               </p>
             </div>
           ))}
@@ -4100,11 +4100,11 @@ export default function Profile() {
       <Suspense fallback={null}>
         <PrizeGalleryCard
           userId={user?.id}
-          title="Seus Prêmios"
-          subtitle="Esta é a sua galeria privada. Aqui você acompanha tudo o que já ganhou no app em formato de coleção."
-          emptyTitle="Você ainda não tem prêmios salvos na sua galeria"
-          emptySubtitle="Os prêmios resgatados no Baú Diário e nas próximas experiências vão aparecer aqui automaticamente."
-          countLabel="na coleção"
+          title="Seus PrÃªmios"
+          subtitle="Esta Ã© a sua galeria privada. Aqui vocÃª acompanha tudo o que jÃ¡ ganhou no app em formato de coleÃ§Ã£o."
+          emptyTitle="VocÃª ainda nÃ£o tem prÃªmios salvos na sua galeria"
+          emptySubtitle="Os prÃªmios resgatados no BaÃº DiÃ¡rio e nas prÃ³ximas experiÃªncias vÃ£o aparecer aqui automaticamente."
+          countLabel="na coleÃ§Ã£o"
           privateView={true}
         />
       </Suspense>
@@ -4113,7 +4113,7 @@ export default function Profile() {
         <DialogContent className="border-cyan-500/30 bg-slate-950 text-white shadow-[0_0_45px_rgba(34,211,238,0.15)]">
           <DialogHeader>
             <DialogTitle className="text-center text-base font-black uppercase tracking-wide text-cyan-100">
-              Histórico de Pontos
+              HistÃ³rico de Pontos
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -4138,7 +4138,7 @@ export default function Profile() {
                     : "text-slate-300 hover:bg-slate-800"
                 }`}
               >
-                Nível do perfil
+                NÃ­vel do perfil
               </button>
             </div>
 
@@ -4156,13 +4156,13 @@ export default function Profile() {
             <div className="rounded-2xl border border-slate-800 bg-slate-900/75 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">
                 {pointsHistoryTab === "weekly"
-                  ? "Tudo o que já contou para o Top Semanal"
-                  : "Tudo o que já fortaleceu o nível do seu perfil"}
+                  ? "Tudo o que jÃ¡ contou para o Top Semanal"
+                  : "Tudo o que jÃ¡ fortaleceu o nÃ­vel do seu perfil"}
               </p>
               <div className="hide-scrollbar mt-3 max-h-[48dvh] space-y-2 overflow-y-auto pr-1">
                 {activePointsHistory.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/70 px-4 py-5 text-center text-sm text-slate-400">
-                    Ainda não existem pontos registrados nessa aba.
+                    Ainda nÃ£o existem pontos registrados nessa aba.
                   </div>
                 ) : (
                   activePointsHistory.map((entry) => (
@@ -4173,11 +4173,11 @@ export default function Profile() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-bold text-white">
-                            {entry.total.toLocaleString("pt-BR")} pontos por {entry.label.toLowerCase()} até o momento
+                            {entry.total.toLocaleString("pt-BR")} pontos por {entry.label.toLowerCase()} atÃ© o momento
                           </p>
                           <p className="mt-1 text-[11px] text-slate-400">
                             {entry.entries} registro{entry.entries === 1 ? "" : "s"}
-                            {entry.latestAt ? ` • Último em ${formatHistoryTimestamp(entry.latestAt)}` : ""}
+                            {entry.latestAt ? ` â€¢ Ãšltimo em ${formatHistoryTimestamp(entry.latestAt)}` : ""}
                           </p>
                         </div>
                         <div className="rounded-xl bg-cyan-500/15 px-2 py-1 text-xs font-black text-cyan-200">
@@ -4208,45 +4208,66 @@ export default function Profile() {
 
             {profileNotifications.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-5 text-center text-sm text-slate-400">
-                Nenhuma notificação por enquanto.
+                Nenhuma notificaÃ§Ã£o por enquanto.
               </div>
             ) : (
               <div className="hide-scrollbar max-h-[60vh] space-y-3 overflow-y-auto pr-1">
                 {profileNotifications.map((notification) => {
-                  const actorAvatarSrc =
-                    getProfileAvatarSrc(notification, avatarSrcById, defaultAvatar) || defaultAvatar;
+                  const actorAvatarSrc = getProfileAvatarSrc(notification, avatarSrcById, "") || "";
+                  const actorAvatarFallback = getProfileAvatarFallback(notification, "U");
                   const actorLabel = notification.actor_nick
                     ? `@${notification.actor_nick}`
-                    : notification.actor_name || "Usuário";
+                    : notification.actor_name || "UsuÃ¡rio";
                   const isUnread = String(notification.status || "unread").toLowerCase() !== "read";
+                  const actorUserId = String(notification.actor_user_id || "");
+                  const canOpenActorProfile = Boolean(actorUserId);
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={notification.id}
+                      onClick={() => {
+                        if (!canOpenActorProfile) return;
+                        setIsProfileNotificationsOpen(false);
+                        openPublicProfilePage(actorUserId);
+                      }}
                       className={`rounded-2xl border p-3 ${
                         isUnread
                           ? "border-fuchsia-400/35 bg-fuchsia-500/10"
                           : "border-slate-800 bg-slate-900/70"
-                      }`}
+                      } ${canOpenActorProfile ? "w-full text-left transition hover:border-cyan-400/40 hover:bg-slate-900/90" : "w-full text-left"}`}
                     >
                       <div className="flex items-start gap-3">
-                        <img
-                          src={actorAvatarSrc}
-                          alt={notification.actor_name || "Usuário"}
-                          className="h-11 w-11 rounded-full border border-slate-700 object-cover"
-                          onError={(event) => {
-                            event.currentTarget.src = defaultAvatar;
-                          }}
-                        />
+                        {actorAvatarSrc ? (
+                          <img
+                            src={actorAvatarSrc}
+                            alt={notification.actor_name || "UsuÃ¡rio"}
+                            className="h-11 w-11 rounded-full border border-slate-700 object-cover"
+                            onError={(event) => {
+                              event.currentTarget.style.display = "none";
+                              const fallbackNode = event.currentTarget.nextElementSibling;
+                              if (fallbackNode instanceof HTMLElement) {
+                                fallbackNode.style.display = "flex";
+                              }
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className="h-11 w-11 items-center justify-center rounded-full border border-slate-700 bg-slate-800 text-base font-black text-white"
+                          style={{ display: actorAvatarSrc ? "none" : "flex" }}
+                          aria-hidden={actorAvatarSrc ? "true" : "false"}
+                        >
+                          <span>{actorAvatarFallback}</span>
+                        </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <p className="truncate text-sm font-bold text-white">{notification.title || "Notificação"}</p>
+                            <p className="truncate text-sm font-bold text-white">{notification.title || "NotificaÃ§Ã£o"}</p>
                             {isUnread ? (
                               <span className="inline-flex rounded-full bg-fuchsia-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
                                 Novo
                               </span>
                             ) : null}
                           </div>
-                          <p className="mt-1 text-sm text-slate-200">{notification.message || "Você recebeu uma nova interação no perfil."}</p>
+                          <p className="mt-1 text-sm text-slate-200">{notification.message || "VocÃª recebeu uma nova interaÃ§Ã£o no perfil."}</p>
                           <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-400">
                             <span className="truncate">{actorLabel}</span>
                             <span>
@@ -4255,7 +4276,7 @@ export default function Profile() {
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -4268,7 +4289,7 @@ export default function Profile() {
         <DialogContent className="w-[calc(100vw-1rem)] max-w-lg overflow-hidden border-emerald-500/30 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),rgba(2,6,23,0.96)_45%)] px-3 py-5 text-white shadow-[0_0_45px_rgba(16,185,129,0.18)] sm:px-5">
           <DialogHeader>
             <DialogTitle className="text-center text-base font-black uppercase tracking-[0.2em] text-emerald-100">
-              Check-in diário
+              Check-in diÃ¡rio
             </DialogTitle>
           </DialogHeader>
           <div className="min-w-0 space-y-4">
@@ -4277,17 +4298,17 @@ export default function Profile() {
                 Boas-vindas do dia
               </p>
               <p className="mt-2 text-base font-black text-white sm:text-lg">
-                {dailyCheckInState?.checkedIn ? "Coleta diária concluída" : "Colete seu ponto do dia"}
+                {dailyCheckInState?.checkedIn ? "Coleta diÃ¡ria concluÃ­da" : "Colete seu ponto do dia"}
               </p>
               <p className="mt-2 text-xs text-slate-300 sm:text-sm">
-                Cada coleta válida fortalece sua disputa no Top Semanal conforme a regra configurada no admin.
+                Cada coleta vÃ¡lida fortalece sua disputa no Top Semanal conforme a regra configurada no admin.
               </p>
             </div>
 
             <div className="space-y-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-200/80">
-                  Progressão de 7 dias
+                  ProgressÃ£o de 7 dias
                 </p>
                 <div
                   ref={checkInCarouselRef}
@@ -4377,10 +4398,10 @@ export default function Profile() {
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-200">Estado de hoje</p>
                 <p className="mt-1 text-sm font-black text-white">
                   {dailyCheckInState?.checkedIn
-                    ? "Já coletado"
+                    ? "JÃ¡ coletado"
                     : dailyCheckInMutation.isPending
                     ? "Coletando..."
-                    : "Disponível para coleta"}
+                    : "DisponÃ­vel para coleta"}
                 </p>
                 {todayCheckInEntry?.checkedAt ? (
                   <p className="mt-1 text-[11px] text-emerald-100/80">
@@ -4392,7 +4413,7 @@ export default function Profile() {
 
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-slate-400">
-                Toque no quadrado de hoje para coletar e confirmar sua presença.
+                Toque no quadrado de hoje para coletar e confirmar sua presenÃ§a.
               </p>
               <Button
                 type="button"
@@ -4446,7 +4467,7 @@ export default function Profile() {
           <div className="mx-auto flex w-[min(92vw,420px)] flex-col items-center justify-center px-3 py-2 text-center">
             <DialogHeader>
               <DialogTitle className="text-center text-base font-black uppercase tracking-wide text-amber-100 drop-shadow-[0_0_14px_rgba(251,191,36,0.55)] sm:text-lg">
-                PARABÉNS! VOCÊ CONQUISTOU
+                PARABÃ‰NS! VOCÃŠ CONQUISTOU
               </DialogTitle>
             </DialogHeader>
             <p className="mt-1 text-center text-sm font-black uppercase tracking-wide text-cyan-100 sm:text-base">
@@ -4570,15 +4591,15 @@ export default function Profile() {
         <DialogContent className="border-slate-700 bg-slate-950 text-white">
           <DialogHeader>
             <DialogTitle className="text-center text-base font-bold text-white">
-              {socialListType === "following" ? "Pessoas que você segue" : "Seguidores"}
+              {socialListType === "following" ? "Pessoas que vocÃª segue" : "Seguidores"}
             </DialogTitle>
           </DialogHeader>
           <div className="hide-scrollbar max-h-[62vh] space-y-2 overflow-y-auto pr-1">
             {socialListProfiles.length === 0 ? (
               <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-center text-sm text-slate-300">
                 {socialListType === "following"
-                  ? "Você ainda não segue ninguém."
-                  : "Ainda não há seguidores para mostrar."}
+                  ? "VocÃª ainda nÃ£o segue ninguÃ©m."
+                  : "Ainda nÃ£o hÃ¡ seguidores para mostrar."}
               </div>
             ) : (
               socialListProfiles.map((profile) => (
@@ -4618,7 +4639,7 @@ export default function Profile() {
                       {profile.isFollowing ? "Seguindo" : "Seguir"}
                     </Button>
                   ) : (
-                    <span className="rounded-full border border-slate-700 px-3 py-1 text-[11px] text-slate-400">Você</span>
+                    <span className="rounded-full border border-slate-700 px-3 py-1 text-[11px] text-slate-400">VocÃª</span>
                   )}
                 </div>
               ))
@@ -4630,7 +4651,7 @@ export default function Profile() {
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="flex max-h-[88dvh] w-[calc(100vw-1.5rem)] max-w-lg flex-col overflow-hidden border-slate-700 bg-slate-950 text-white">
           <DialogHeader>
-            <DialogTitle className="text-center text-base font-bold text-white">Editar perfil rápido</DialogTitle>
+            <DialogTitle className="text-center text-base font-bold text-white">Editar perfil rÃ¡pido</DialogTitle>
           </DialogHeader>
           <div className="hide-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
             <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
@@ -4745,7 +4766,7 @@ export default function Profile() {
                         if (!isSupportedType) {
                           toast({
                             variant: "destructive",
-                            title: "Formato não suportado",
+                            title: "Formato nÃ£o suportado",
                             description: "Use uma imagem JPG, PNG, WEBP ou GIF.",
                           });
                           event.target.value = "";
@@ -4769,12 +4790,12 @@ export default function Profile() {
                       <div className="relative h-24 w-24 overflow-hidden rounded-full border-2 border-cyan-400/60 bg-slate-800">
                         <img
                           src={selectedEditPhotoPreview}
-                          alt="Prévia da nova foto"
+                          alt="PrÃ©via da nova foto"
                           className="h-full w-full object-cover"
                           style={getProfileCropPreviewStyle(selectedEditPhotoZoom, selectedEditPhotoOffsetY)}
                         />
                       </div>
-                      <p className="text-[11px] text-cyan-200">Prévia final do perfil</p>
+                      <p className="text-[11px] text-cyan-200">PrÃ©via final do perfil</p>
                     </div>
                   ) : null}
 
@@ -4793,7 +4814,7 @@ export default function Profile() {
                         />
                       </div>
                       <div>
-                        <Label className="mb-1 block text-[11px] text-slate-300">Posição vertical</Label>
+                        <Label className="mb-1 block text-[11px] text-slate-300">PosiÃ§Ã£o vertical</Label>
                         <input
                           type="range"
                           min="-140"
@@ -4822,7 +4843,7 @@ export default function Profile() {
                       } catch (error) {
                         toast({
                           variant: "destructive",
-                          title: "Falha na preparação",
+                          title: "Falha na preparaÃ§Ã£o",
                           description: error?.message || "Falha ao preparar a foto.",
                         });
                       } finally {
@@ -4902,17 +4923,17 @@ export default function Profile() {
             </div>
 
             <div>
-              <Label className="mb-1 block text-slate-300">Nick público</Label>
+              <Label className="mb-1 block text-slate-300">Nick pÃºblico</Label>
               <Input
                 value={editData.nick}
                 onChange={(e) => setEditData((prev) => ({ ...prev, nick: e.target.value }))}
-                placeholder="Seu nome público"
+                placeholder="Seu nome pÃºblico"
                 className="border-slate-700 bg-slate-900 text-white"
               />
             </div>
 
             <div>
-              <Label className="mb-1 block text-slate-300">@ usuário</Label>
+              <Label className="mb-1 block text-slate-300">@ usuÃ¡rio</Label>
               <Input
                 value={editData.handle}
                 onChange={(e) => setEditData((prev) => ({ ...prev, handle: e.target.value }))}
@@ -4933,6 +4954,7 @@ export default function Profile() {
     </motion.div>
   );
 }
+
 
 
 

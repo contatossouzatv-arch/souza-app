@@ -1112,6 +1112,18 @@ export const base44 = {
       return request("/api/feed/wins");
     },
 
+    async feedLikes() {
+      return request("/api/feed/likes");
+    },
+
+    async likeFeedPost(postId) {
+      return request(`/api/feed/likes/${encodeURIComponent(postId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+    },
+
     async weeklyLeaderboard() {
       return request("/api/leaderboards/weekly");
     },

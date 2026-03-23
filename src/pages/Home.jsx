@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,21 +23,11 @@ const avatarById = Object.entries(avatarModules).reduce((acc, [path, src]) => {
   return acc;
 }, {});
 
-const STORAGE_KEY = "souza_inicio_likes";
 const FEED_PAGE_SIZE = 8;
-
-function getStoredLikes() {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
 
 export default function Home() {
   const navigate = useNavigate();
-  const [likes, setLikes] = useState({});
+  const queryClient = useQueryClient();
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
   const loadMoreRef = useRef(null);
   const postRefs = useRef({});
@@ -58,6 +48,12 @@ export default function Home() {
     staleTime: 30000,
   });
 
+  const { data: feedLikes = { counts: {}, likedPostIds: [] } } = useQuery({
+    queryKey: ["inicio-feed-likes"],
+    queryFn: () => base44.gamification.feedLikes(),
+    staleTime: 15000,
+  });
+
   const { data: users = [] } = useQuery({
     queryKey: ["inicio-users"],
     queryFn: () => base44.entities.User.list(),
@@ -71,10 +67,6 @@ export default function Home() {
   });
 
   const formattedMembersCount = users.length || 0;
-
-  useEffect(() => {
-    setLikes(getStoredLikes());
-  }, []);
 
   const publishedPosts = useMemo(() => {
     return posts.slice(0, 30);
@@ -209,12 +201,38 @@ export default function Home() {
     return () => clearTimeout(timeout);
   }, [searchParams, setSearchParams, feedItems]);
 
+  const likePostMutation = useMutation({
+    mutationFn: (postId) => base44.gamification.likeFeedPost(postId),
+    onMutate: async (postId) => {
+      await queryClient.cancelQueries({ queryKey: ["inicio-feed-likes"] });
+      const previous = queryClient.getQueryData(["inicio-feed-likes"]);
+      queryClient.setQueryData(["inicio-feed-likes"], (current = { counts: {}, likedPostIds: [] }) => {
+        const likedPostIds = Array.isArray(current.likedPostIds) ? current.likedPostIds : [];
+        if (likedPostIds.includes(postId)) return current;
+        return {
+          counts: {
+            ...(current.counts || {}),
+            [postId]: Number(current.counts?.[postId] || 0) + 1,
+          },
+          likedPostIds: [...likedPostIds, postId],
+        };
+      });
+      return { previous };
+    },
+    onError: (_error, _postId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["inicio-feed-likes"], context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["inicio-feed-likes"] });
+    },
+  });
+
   const handleLike = (postId) => {
-    setLikes((prev) => {
-      const next = { ...prev, [postId]: (prev[postId] || 0) + 1 };
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
+    const likedPostIds = Array.isArray(feedLikes?.likedPostIds) ? feedLikes.likedPostIds : [];
+    if (!postId || likedPostIds.includes(postId) || likePostMutation.isPending) return;
+    likePostMutation.mutate(postId);
   };
 
   const openProfilePage = () => {
@@ -379,7 +397,8 @@ export default function Home() {
       ) : (
         <>
           {feedItems.slice(0, visibleCount).map((item) => {
-            const likesCount = likes[item.id] || 0;
+            const likesCount = Number(feedLikes?.counts?.[item.id] || 0);
+            const isLiked = Array.isArray(feedLikes?.likedPostIds) && feedLikes.likedPostIds.includes(item.id);
 
             if (item.type === "winner") {
               return (
@@ -444,10 +463,11 @@ export default function Home() {
                     <Button
                       onClick={() => handleLike(item.id)}
                       variant="outline"
-                      className="h-8 border-slate-700 bg-slate-800/60 px-3 text-xs text-slate-200 hover:bg-slate-700"
+                      disabled={isLiked}
+                      className="h-8 border-slate-700 bg-slate-800/60 px-3 text-xs text-slate-200 hover:bg-slate-700 disabled:cursor-default disabled:opacity-100"
                     >
                       <Heart className="mr-1 h-3.5 w-3.5" />
-                      Curtir ({likesCount})
+                      {isLiked ? `Curtido (${likesCount})` : `Curtir (${likesCount})`}
                     </Button>
                   </div>
                 </Card>
@@ -481,10 +501,11 @@ export default function Home() {
                   <Button
                     onClick={() => handleLike(item.id)}
                     variant="outline"
-                    className="h-8 border-slate-700 bg-slate-800/60 px-3 text-xs text-slate-200 hover:bg-slate-700"
+                    disabled={isLiked}
+                    className="h-8 border-slate-700 bg-slate-800/60 px-3 text-xs text-slate-200 hover:bg-slate-700 disabled:cursor-default disabled:opacity-100"
                   >
                     <Heart className="mr-1 h-3.5 w-3.5" />
-                    Curtir ({likesCount})
+                    {isLiked ? `Curtido (${likesCount})` : `Curtir (${likesCount})`}
                   </Button>
                 </div>
               </Card>
