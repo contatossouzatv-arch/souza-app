@@ -32,6 +32,8 @@ router.post("/admin/live-draws", requireAuth, requireAdmin, async (req, res) => 
     title: req.body?.title,
     maxWinners: req.body?.maxWinners,
     prizeAmount: req.body?.prizeAmount,
+    adminName: req.body?.adminName,
+    adminPhone: req.body?.adminPhone,
     requestId: req.body?.requestId,
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
@@ -39,6 +41,20 @@ router.post("/admin/live-draws", requireAuth, requireAdmin, async (req, res) => 
   emitEntityChanged(req, "LiveDrawRaffle", "created", result.raffle);
   await logSecurity(req, "ADMIN_LIVE_DRAW_CREATED", { raffle_id: result.raffle?.id || "", idempotent: result.idempotent });
   res.status(result.idempotent ? 200 : 201).json(result);
+});
+
+router.patch("/admin/live-draws/:id", requireAuth, requireAdmin, async (req, res) => {
+  const result = await liveDrawAdmin.update({
+    raffleId: req.params.id,
+    adminName: req.body?.adminName,
+    adminPhone: req.body?.adminPhone,
+    requestId: req.body?.requestId,
+    adminUserId: req.auth.sub,
+    adminEmail: req.auth.email,
+  });
+  emitEntityChanged(req, "LiveDrawRaffle", "updated", result?.raffle || null);
+  await logSecurity(req, "ADMIN_LIVE_DRAW_UPDATED", { raffle_id: req.params.id, idempotent: result?.idempotent });
+  res.json(result);
 });
 
 router.post("/admin/live-draws/:id/draw", requireAuth, requireAdmin, async (req, res) => {
@@ -86,14 +102,14 @@ router.delete("/admin/live-draws/participants/:id", requireAuth, requireAdmin, a
 });
 
 router.post("/admin/game-calls", requireAuth, requireAdmin, async (req, res) => {
-  const result = await gameCallAdmin.create({ title: req.body?.title, prizeAmount: req.body?.prizeAmount, maxAttempts: req.body?.maxAttempts, maxWinners: req.body?.maxWinners, requestId: req.body?.requestId, adminUserId: req.auth.sub, adminEmail: req.auth.email });
+  const result = await gameCallAdmin.create({ title: req.body?.title, prizeAmount: req.body?.prizeAmount, maxAttempts: req.body?.maxAttempts, maxWinners: req.body?.maxWinners, adminName: req.body?.adminName, adminPhone: req.body?.adminPhone, requestId: req.body?.requestId, adminUserId: req.auth.sub, adminEmail: req.auth.email });
   emitEntityChanged(req, "GameCallRaffle", "created", result?.raffle || null);
   await logSecurity(req, "ADMIN_GAME_CALL_CREATED", { raffle_id: result?.raffle?.id || "", idempotent: result?.idempotent });
   res.status(result?.idempotent ? 200 : 201).json(result);
 });
 
 router.patch("/admin/game-calls/:id", requireAuth, requireAdmin, async (req, res) => {
-  const result = await gameCallAdmin.update({ raffleId: req.params.id, maxAttempts: req.body?.maxAttempts, maxWinners: req.body?.maxWinners, requestId: req.body?.requestId, adminUserId: req.auth.sub, adminEmail: req.auth.email });
+  const result = await gameCallAdmin.update({ raffleId: req.params.id, maxAttempts: req.body?.maxAttempts, maxWinners: req.body?.maxWinners, adminName: req.body?.adminName, adminPhone: req.body?.adminPhone, requestId: req.body?.requestId, adminUserId: req.auth.sub, adminEmail: req.auth.email });
   emitEntityChanged(req, "GameCallRaffle", "updated", result?.raffle || null);
   await logSecurity(req, "ADMIN_GAME_CALL_UPDATED", { raffle_id: req.params.id, idempotent: result?.idempotent });
   res.json(result);

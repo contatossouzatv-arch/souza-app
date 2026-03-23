@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,7 @@ import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Gamepad2, ExternalLink, AlertTriangle, Check, Edit, PartyPopper } from "lucide-react";
 import { format } from "date-fns";
+import { buildWhatsAppLink } from "@/lib/whatsapp";
 
 export default function GameCallBox({ user }) {
   const queryClient = useQueryClient();
@@ -79,6 +80,11 @@ export default function GameCallBox({ user }) {
       return;
     }
 
+    if (hasReachedLimit) {
+      alert("Você já usou todas as tentativas disponíveis nesta call.");
+      return;
+    }
+
     if (loading || submitCallMutation.isPending) {
       return; // Previne cliques multiplos
     }
@@ -95,10 +101,12 @@ export default function GameCallBox({ user }) {
 
   const maxAttempts = activeRaffle.max_attempts || 3;
   const attempts = myParticipation?.attempts || 0;
-  // Limite desabilitado conforme solicitacao para nao bloquear usuarios
-  const hasReachedLimit = false; 
+  const hasReachedLimit = !!myParticipation && attempts >= maxAttempts;
   const isValidated = myParticipation?.validated && myParticipation?.won;
   const wasInvalidated = myParticipation?.validation_status === 'invalidated';
+  const raffleAdminName = String(activeRaffle.admin_name || "").trim();
+  const raffleAdminPhone = String(activeRaffle.admin_phone || "").trim();
+  const raffleAdminWhatsAppLink = buildWhatsAppLink(raffleAdminPhone) || whatsappRedeemLink;
 
   if (isValidated) {
     return (
@@ -145,10 +153,10 @@ export default function GameCallBox({ user }) {
 
           <div className="mb-6 p-3 md:p-4 bg-purple-900/50 border border-purple-600/50 rounded-lg">
             <p className="text-xs md:text-sm text-purple-200 mb-2">
-              Para resgatar seu prêmio, entre em contato via WhatsApp:
+              Para resgatar seu prêmio, entre em contato {raffleAdminName ? `com ${raffleAdminName}` : "com o admin"} via WhatsApp:
             </p>
             <a
-              href={whatsappRedeemLink}
+              href={raffleAdminWhatsAppLink}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition-all text-sm md:text-base"
@@ -178,7 +186,7 @@ export default function GameCallBox({ user }) {
         <div className="flex items-center justify-center gap-2 mb-4">
           <Gamepad2 className="w-6 h-6 text-cyan-400" />
           <h3 className="text-xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-300">
-            Call de Jogo em Live Disponivel!
+            Call de Jogo em Live Disponível!
           </h3>
         </div>
 
@@ -198,6 +206,14 @@ export default function GameCallBox({ user }) {
             </p>
             <p className="text-xs text-red-300 text-center mt-1">
               Tentativa {attempts + 1} de {maxAttempts}
+            </p>
+          </div>
+        )}
+
+        {hasReachedLimit && (
+          <div className="mb-4 rounded-lg border border-red-500/60 bg-red-950/40 p-3">
+            <p className="text-center text-sm text-red-200">
+              Suas tentativas acabaram nesta rodada. Aguarde o admin reativar sua participação ou abrir uma nova call.
             </p>
           </div>
         )}
@@ -233,7 +249,7 @@ export default function GameCallBox({ user }) {
 
               <div className="bg-blue-900/30 border border-blue-600/50 rounded-lg p-3 mb-4">
                 <p className="text-sm text-blue-200">
-                  Tentativas restantes: <span className="font-bold text-yellow-300">{maxAttempts - attempts}/{maxAttempts}</span>
+                  Tentativas restantes: <span className="font-bold text-yellow-300">{Math.max(0, maxAttempts - attempts)}/{maxAttempts}</span>
                 </p>
               </div>
 
@@ -242,13 +258,15 @@ export default function GameCallBox({ user }) {
               </p>
             </div>
 
-            <Button
-              onClick={() => setIsEditing(true)}
-              className="w-full whitespace-normal bg-gradient-to-r from-orange-600 to-amber-600 py-5 text-base font-bold leading-tight hover:from-orange-700 hover:to-amber-700 md:text-lg"
-            >
-              <Edit className="w-5 h-5 mr-2" />
-              EDITAR CALL ENVIADA
-            </Button>
+            {!hasReachedLimit ? (
+              <Button
+                onClick={() => setIsEditing(true)}
+                className="w-full whitespace-normal bg-gradient-to-r from-orange-600 to-amber-600 py-5 text-base font-bold leading-tight hover:from-orange-700 hover:to-amber-700 md:text-lg"
+              >
+                <Edit className="w-5 h-5 mr-2" />
+                EDITAR CALL ENVIADA
+              </Button>
+            ) : null}
           </div>
         ) : (
           <>
@@ -266,7 +284,7 @@ export default function GameCallBox({ user }) {
                 disabled={loading || submitCallMutation.isPending}
               />
               <p className="text-xs text-blue-300 text-center mt-2">
-                {myParticipation ? `Você tem ${maxAttempts - attempts} tentativa(s) restante(s)` : `Você tem ${maxAttempts} tentativas`}
+                {myParticipation ? `Você tem ${Math.max(0, maxAttempts - attempts)} tentativa(s) restante(s)` : `Você tem ${maxAttempts} tentativas`}
               </p>
             </div>
 
@@ -285,7 +303,7 @@ export default function GameCallBox({ user }) {
               )}
               <Button
                 onClick={handleSubmit}
-                disabled={loading || submitCallMutation.isPending || !gameCall.trim()}
+                disabled={loading || submitCallMutation.isPending || !gameCall.trim() || hasReachedLimit}
                 className={`${isEditing ? 'w-full sm:flex-1' : 'w-full'} min-w-0 whitespace-normal break-words bg-gradient-to-r from-cyan-600 to-blue-600 py-4 text-sm font-bold leading-tight hover:from-cyan-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed sm:text-base md:text-lg`}
               >
                 <Gamepad2 className="w-5 h-5 mr-2" />

@@ -105,6 +105,8 @@ export default function LiveDrawTab() {
   const [maxWinners, setMaxWinners] = useState(1);
   const [winnersPerDraw, setWinnersPerDraw] = useState(1);
   const [prizeAmount, setPrizeAmount] = useState("");
+  const [adminName, setAdminName] = useState("");
+  const [adminPhone, setAdminPhone] = useState("");
   const [isDrawing, setIsDrawing] = useState(false);
   const [animatingWinners, setAnimatingWinners] = useState([]);
   const [finalWinners, setFinalWinners] = useState([]);
@@ -197,6 +199,16 @@ export default function LiveDrawTab() {
   };
 
   useEffect(() => {
+    if (activeRaffle) {
+      setAdminName(activeRaffle.admin_name || "");
+      setAdminPhone(activeRaffle.admin_phone || "");
+      return;
+    }
+    setAdminName("");
+    setAdminPhone("");
+  }, [activeRaffle]);
+
+  useEffect(() => {
     const newParticles = Array.from({ length: 80 }, (_, i) => ({
       id: i,
       x: Math.random() * 100,
@@ -225,6 +237,8 @@ export default function LiveDrawTab() {
       title: newRaffleTitle,
       maxWinners,
       prizeAmount: parseFloat(prizeAmount),
+      adminName,
+      adminPhone,
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['active-raffle'] });
@@ -233,6 +247,20 @@ export default function LiveDrawTab() {
       setNewRaffleTitle("");
       setMaxWinners(1);
       setPrizeAmount("");
+      setAdminName("");
+      setAdminPhone("");
+    },
+  });
+
+  const updateRaffleMutation = useMutation({
+    mutationFn: ({ adminName: nextAdminName, adminPhone: nextAdminPhone }) =>
+      base44.adminEvents.liveDraws.update(activeRaffle.id, { adminName: nextAdminName, adminPhone: nextAdminPhone }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['active-raffle'] });
+      queryClient.invalidateQueries({ queryKey: ['active-live-raffle-box'] });
+      queryClient.invalidateQueries({ queryKey: ['active-live-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['winner-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['user-prize-gallery'] });
     },
   });
 
@@ -465,7 +493,7 @@ export default function LiveDrawTab() {
                 onClick={() => setShowSimulation(!showSimulation)}
                 className="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700"
               >
-                {showSimulation ? 'OOcultar Simulação' : 'Ver Simulação'}
+                {showSimulation ? 'Ocultar Simulação' : 'Ver Simulação'}
               </Button>
             </div>
 
@@ -661,7 +689,7 @@ export default function LiveDrawTab() {
                               />
                               <div className="text-left">
                                 <div className="font-bold text-white text-sm">{winner.user_name}</div>
-                                <div className="text-xs text-purple-300">{maskPhone(winner.user_phone)} ⬢ ID: {maskPlatformId(winner.user_platform_id)}</div>
+                                <div className="text-xs text-purple-300">{maskPhone(winner.user_phone)} - ID: {maskPlatformId(winner.user_platform_id)}</div>
                               </div>
                             </div>
                             <div className="flex gap-2">
@@ -832,6 +860,28 @@ export default function LiveDrawTab() {
                     />
                   </div>
                 </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <Label htmlFor="liveAdminName" className="text-purple-200">Nome do ADM</Label>
+                    <Input
+                      id="liveAdminName"
+                      value={adminName}
+                      onChange={(e) => setAdminName(e.target.value)}
+                      placeholder="Ex: Souza Cass"
+                      className="bg-purple-900/50 border-purple-700 text-white"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="liveAdminPhone" className="text-purple-200">Telefone / WhatsApp do ADM</Label>
+                    <Input
+                      id="liveAdminPhone"
+                      value={adminPhone}
+                      onChange={(e) => setAdminPhone(e.target.value)}
+                      placeholder="Ex: 11999999999"
+                      className="bg-purple-900/50 border-purple-700 text-white"
+                    />
+                  </div>
+                </div>
                 <Button
                   onClick={() => createRaffleMutation.mutate()}
                   disabled={!newRaffleTitle || !prizeAmount}
@@ -849,7 +899,7 @@ export default function LiveDrawTab() {
                   <div>
                     <h2 className="text-2xl font-bold text-green-300">{activeRaffle.title}</h2>
                     <p className="text-green-200">
-                      {activeParticipants.length} participantes elegíveis ⬢ {activeRaffle.max_winners} ganhador(es) ⬢ R$ {activeRaffle.prize_amount?.toFixed(2)}
+                      {activeParticipants.length} participantes elegíveis - {activeRaffle.max_winners} ganhador(es) - R$ {activeRaffle.prize_amount?.toFixed(2)}
                     </p>
                   </div>
                   <Button
@@ -861,6 +911,26 @@ export default function LiveDrawTab() {
                 </div>
 
                 <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                      <Label htmlFor="activeLiveAdminName" className="text-green-200">Nome do ADM</Label>
+                      <Input
+                        id="activeLiveAdminName"
+                        value={adminName}
+                        onChange={(e) => setAdminName(e.target.value)}
+                        className="bg-green-900/50 border-green-700 text-white"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="activeLiveAdminPhone" className="text-green-200">Telefone / WhatsApp do ADM</Label>
+                      <Input
+                        id="activeLiveAdminPhone"
+                        value={adminPhone}
+                        onChange={(e) => setAdminPhone(e.target.value)}
+                        className="bg-green-900/50 border-green-700 text-white"
+                      />
+                    </div>
+                  </div>
                   <div>
                     <Label htmlFor="winnersPerDraw" className="text-green-200">Quantidade por Sorteio</Label>
                     <Input
@@ -878,6 +948,14 @@ export default function LiveDrawTab() {
                   </div>
 
                   <div className="flex gap-4">
+                    <Button
+                      onClick={() => updateRaffleMutation.mutate({ adminName, adminPhone })}
+                      disabled={updateRaffleMutation.isPending}
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      <Check className="w-4 h-4 mr-2" />
+                      {updateRaffleMutation.isPending ? "SALVANDO..." : "Salvar Contato do ADM"}
+                    </Button>
                     <Button
                       onClick={() => clearParticipantsMutation.mutate()}
                       variant="outline"
@@ -905,7 +983,7 @@ export default function LiveDrawTab() {
                           />
                           <div>
                             <div className="font-bold text-yellow-200">{winner.user_name}</div>
-                            <div className="text-sm text-yellow-300">@{winner.user_nick} ⬢ {maskPhone(winner.user_phone)}</div>
+                            <div className="text-sm text-yellow-300">@{winner.user_nick} - {maskPhone(winner.user_phone)}</div>
                             <div className="text-xs text-yellow-400">ID: {maskPlatformId(winner.user_platform_id)}</div>
                           </div>
                         </div>
@@ -949,7 +1027,7 @@ export default function LiveDrawTab() {
                           />
                           <div>
                             <div className="font-bold text-green-200">{winner.user_name}</div>
-                            <div className="text-sm text-green-300">@{winner.user_nick} ⬢ {maskPhone(winner.user_phone)}</div>
+                            <div className="text-sm text-green-300">@{winner.user_nick} - {maskPhone(winner.user_phone)}</div>
                             <div className="text-xs text-green-400">ID: {maskPlatformId(winner.user_platform_id)}</div>
                           </div>
                         </div>
@@ -998,7 +1076,7 @@ export default function LiveDrawTab() {
                         <div>
                           <div className="font-medium text-purple-100">{p.user_name}</div>
                           <div className="text-xs text-purple-400">
-                            {maskPhone(p.user_phone)} ⬢ {format(new Date(p.created_date), 'HH:mm:ss')}
+                            {maskPhone(p.user_phone)} - {format(new Date(p.created_date), 'HH:mm:ss')}
                           </div>
                           <div className="text-xs text-purple-500">ID: {maskPlatformId(p.user_platform_id)}</div>
                         </div>
@@ -1223,7 +1301,7 @@ export default function LiveDrawTab() {
                           />
                           <div className="text-left">
                             <div className="font-bold text-white text-sm">{winner.user_name}</div>
-                            <div className="text-xs text-purple-300">{maskPhone(winner.user_phone)} ⬢ ID: {maskPlatformId(winner.user_platform_id)}</div>
+                            <div className="text-xs text-purple-300">{maskPhone(winner.user_phone)} - ID: {maskPlatformId(winner.user_platform_id)}</div>
                           </div>
                         </div>
                         <div className="flex gap-2">

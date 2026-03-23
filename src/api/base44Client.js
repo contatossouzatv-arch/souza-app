@@ -743,11 +743,18 @@ export const base44 = {
 
   adminEvents: {
     liveDraws: {
-      create({ title, maxWinners, prizeAmount, requestId } = {}) {
+      create({ title, maxWinners, prizeAmount, adminName, adminPhone, requestId } = {}) {
         return request("/api/admin/live-draws", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, maxWinners, prizeAmount, requestId: requestId || createRequestId("admin-live-create") }),
+          body: JSON.stringify({ title, maxWinners, prizeAmount, adminName, adminPhone, requestId: requestId || createRequestId("admin-live-create") }),
+        });
+      },
+      update(id, { adminName, adminPhone, requestId } = {}) {
+        return request(`/api/admin/live-draws/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ adminName, adminPhone, requestId: requestId || createRequestId("admin-live-update") }),
         });
       },
       draw(id, { winnerCount, requestId } = {}) {
@@ -783,18 +790,18 @@ export const base44 = {
       },
     },
     gameCalls: {
-      create({ title, prizeAmount, maxAttempts, maxWinners, requestId } = {}) {
+      create({ title, prizeAmount, maxAttempts, maxWinners, adminName, adminPhone, requestId } = {}) {
         return request("/api/admin/game-calls", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, prizeAmount, maxAttempts, maxWinners, requestId: requestId || createRequestId("admin-game-create") }),
+          body: JSON.stringify({ title, prizeAmount, maxAttempts, maxWinners, adminName, adminPhone, requestId: requestId || createRequestId("admin-game-create") }),
         });
       },
-      update(id, { maxAttempts, maxWinners, requestId } = {}) {
+      update(id, { maxAttempts, maxWinners, adminName, adminPhone, requestId } = {}) {
         return request(`/api/admin/game-calls/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ maxAttempts, maxWinners, requestId: requestId || createRequestId("admin-game-update") }),
+          body: JSON.stringify({ maxAttempts, maxWinners, adminName, adminPhone, requestId: requestId || createRequestId("admin-game-update") }),
         });
       },
       draw(id, { winnerCount, requestId } = {}) {

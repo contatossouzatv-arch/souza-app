@@ -126,6 +126,7 @@ export default function RealtimeSync() {
           addKeys(prefixes, [
             "admin-active-gamecall",
             "active-gamecall-raffle",
+            "active-gamecall-raffles",
             "admin-gamecall-participants",
             "validated-gamecall-winners",
             "my-gamecall-participation",

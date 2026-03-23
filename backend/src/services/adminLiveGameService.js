@@ -19,6 +19,14 @@ function httpError(message, status = 400) {
   return error;
 }
 
+function normalizeAdminName(value) {
+  return String(value || "").trim().slice(0, 120);
+}
+
+function normalizeAdminPhone(value) {
+  return String(value || "").trim().slice(0, 40);
+}
+
 function shuffle(items = []) {
   const cloned = [...items];
   for (let index = cloned.length - 1; index > 0; index -= 1) {
@@ -93,6 +101,13 @@ async function syncRafflePrizeGalleryItem(client, { participant, raffle, sourceT
       audit_id: audit?.id || "",
       participant_id: participant?.id || "",
       source_type: sourceType,
+      admin_name: raffle?.admin_name || "",
+      admin_phone: raffle?.admin_phone || "",
+      reward_snapshot: {
+        adminContactName: raffle?.admin_name || "",
+        adminContactPhone: raffle?.admin_phone || "",
+        rewardType: "cash_prize",
+      },
     },
   });
 }
@@ -175,8 +190,18 @@ async function drawCandidates({ domain, raffleEntity, participantEntity, raffleI
     const pendingIds = Array.isArray(raffle.pending_draw_candidates) ? raffle.pending_draw_candidates : [];
     if (pendingIds.length > 0) {
       const winners = await listRowsByIds(client, participantEntity, pendingIds);
-      await client.query("COMMIT");
-      return { raffle, winners, processing_event: null, idempotent: true };
+      if (winners.length === pendingIds.length && winners.length > 0) {
+        await client.query("COMMIT");
+        return { raffle, winners, processing_event: null, idempotent: true };
+      }
+
+      await updateEntityRecordData(client, raffleEntity, raffleId, {
+        ...raffle,
+        pending_draw_candidates: [],
+        pending_draw_count: 0,
+        pending_draw_created_at: null,
+        updated_date: new Date().toISOString(),
+      });
     }
     const candidates = (await listEntityRecordsForUpdate(client, participantEntity, { raffle_id: raffleId })).filter((item) => eligibility(item, raffle));
     if (candidates.length === 0) throw httpError("Não há participantes elegíveis para sortear.", 409);
@@ -237,6 +262,7 @@ async function deleteParticipant({ domain, entityName, participantId, requestId,
       sourceType,
       sourceRefId: participant.id,
     });
+    await removePendingCandidate(client, entityName === "GameCallParticipant" ? "GameCallRaffle" : "LiveDrawRaffle", participant.raffle_id, participant.id);
     await client.query("DELETE FROM entity_records WHERE entity_name = $1 AND id = $2", [entityName, participantId]);
     const processingEvent = await createEvent(client, { domain, action: "delete_participant", requestId, entityName, entityId: participantId, userId: participant.user_id, metadata: { raffle_id: participant.raffle_id }, adminUserId, adminEmail });
     await client.query("COMMIT");
@@ -255,6 +281,7 @@ async function clearParticipants({ domain, entityName, raffleId, requestId, admi
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const raffleEntityName = entityName === "GameCallParticipant" ? "GameCallRaffle" : "LiveDrawRaffle";
     const participants = await listEntityRecordsForUpdate(client, entityName, { raffle_id: raffleId });
     for (const participant of participants) {
       const sourceType = entityName === "GameCallParticipant" ? "game_call" : "live_draw";
@@ -264,6 +291,17 @@ async function clearParticipants({ domain, entityName, raffleId, requestId, admi
         sourceRefId: participant.id,
       });
       await client.query("DELETE FROM entity_records WHERE entity_name = $1 AND id = $2", [entityName, participant.id]);
+    }
+    const raffleLocked = await findEntityRecordByNameAndIdForUpdate(client, raffleEntityName, raffleId);
+    if (raffleLocked) {
+      const raffle = getEntityRecordData(raffleLocked);
+      await updateEntityRecordData(client, raffleEntityName, raffleId, {
+        ...raffle,
+        pending_draw_candidates: [],
+        pending_draw_count: 0,
+        pending_draw_created_at: null,
+        updated_date: new Date().toISOString(),
+      });
     }
     const processingEvent = await createEvent(client, { domain, action: "clear_participants", requestId, entityName, entityId: raffleId, metadata: { cleared_count: participants.length }, adminUserId, adminEmail });
     await client.query("COMMIT");
@@ -277,19 +315,46 @@ async function clearParticipants({ domain, entityName, raffleId, requestId, admi
 }
 
 export const liveDrawAdmin = {
-  create: (input) => createRaffle({ domain: "admin_live_draw_create", entityName: "LiveDrawRaffle", ...input, payload: { title: String(input.title || "").trim(), active: true, max_winners: Math.max(1, Number(input.maxWinners || 1)), prize_amount: Math.max(0, Number(input.prizeAmount || 0)), ended: false, pending_draw_candidates: [], pending_draw_count: 0 } }),
+  create: (input) => createRaffle({ domain: "admin_live_draw_create", entityName: "LiveDrawRaffle", ...input, payload: { title: String(input.title || "").trim(), active: true, max_winners: Math.max(1, Number(input.maxWinners || 1)), prize_amount: Math.max(0, Number(input.prizeAmount || 0)), admin_name: normalizeAdminName(input.adminName), admin_phone: normalizeAdminPhone(input.adminPhone), ended: false, pending_draw_candidates: [], pending_draw_count: 0 } }),
+  update: ({ raffleId, adminName, adminPhone, ...input }) => {
+    return (async () => {
+      const existing = await findEvent("admin_live_draw_update", input.requestId);
+      if (existing?.entity_id) return { raffle: await getEntityById("LiveDrawRaffle", existing.entity_id), processing_event: existing, idempotent: true };
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const locked = await findEntityRecordByNameAndIdForUpdate(client, "LiveDrawRaffle", raffleId);
+        if (!locked) return await client.query("ROLLBACK").then(() => null);
+        const current = getEntityRecordData(locked);
+        const updated = await updateEntityRecordData(client, "LiveDrawRaffle", raffleId, {
+          ...current,
+          admin_name: normalizeAdminName(adminName ?? current.admin_name ?? ""),
+          admin_phone: normalizeAdminPhone(adminPhone ?? current.admin_phone ?? ""),
+          updated_date: new Date().toISOString(),
+        });
+        const processingEvent = await createEvent(client, { domain: "admin_live_draw_update", action: "update_raffle", requestId: input.requestId, entityName: "LiveDrawRaffle", entityId: raffleId, metadata: { before: current, after: updated }, adminUserId: input.adminUserId, adminEmail: input.adminEmail });
+        await client.query("COMMIT");
+        return { raffle: updated, processing_event: processingEvent, idempotent: false };
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    })();
+  },
   end: (input) => endRaffle({ domain: "admin_live_draw_end", entityName: "LiveDrawRaffle", ...input }),
   draw: (input) => drawCandidates({ domain: "admin_live_draw_draw", raffleEntity: "LiveDrawRaffle", participantEntity: "LiveDrawParticipant", ...input, eligibility: (participant) => String(participant.validation_status || "pending") === "pending" && !participant.validated }),
-  validate: ({ participantId, ...input }) => resolveCandidate({ domain: "admin_live_draw_validate", raffleEntity: "LiveDrawRaffle", participantEntity: "LiveDrawParticipant", participantId, ...input, transform: (participant) => ({ ...participant, validated: true, validation_status: "validated", won: true, updated_date: new Date().toISOString() }), buildAudit: (participant, raffle) => ({ raffle_id: participant.raffle_id, raffle_title: raffle?.title || "Sorteio ao Vivo", user_id: participant.user_id, user_name: participant.user_name, user_nick: participant.user_nick, user_email: participant.user_email || "", user_phone: participant.user_phone || "", user_avatar: participant.user_avatar || "", prize_amount: Number(raffle?.prize_amount || 0), drawn_at: new Date().toISOString(), status: "validated", validated_at: new Date().toISOString() }), syncPrizeGallery: ({ client, participant, raffle, audit }) => syncRafflePrizeGalleryItem(client, { participant, raffle, audit, sourceType: "live_draw", active: true }) }),
-  invalidate: ({ participantId, ...input }) => resolveCandidate({ domain: "admin_live_draw_invalidate", raffleEntity: "LiveDrawRaffle", participantEntity: "LiveDrawParticipant", participantId, ...input, transform: (participant) => ({ ...participant, validated: false, validation_status: "pending", won: false, updated_date: new Date().toISOString() }), buildAudit: (participant, raffle) => ({ raffle_id: participant.raffle_id, raffle_title: raffle?.title || "Sorteio ao Vivo", user_id: participant.user_id, user_name: participant.user_name, user_nick: participant.user_nick, user_email: participant.user_email || "", user_phone: participant.user_phone || "", user_avatar: participant.user_avatar || "", prize_amount: Number(raffle?.prize_amount || 0), drawn_at: new Date().toISOString(), status: "invalidated", validated_at: new Date().toISOString() }), syncPrizeGallery: ({ client, participant, raffle, audit }) => syncRafflePrizeGalleryItem(client, { participant, raffle, audit, sourceType: "live_draw", active: false }) }),
+  validate: ({ participantId, ...input }) => resolveCandidate({ domain: "admin_live_draw_validate", raffleEntity: "LiveDrawRaffle", participantEntity: "LiveDrawParticipant", participantId, ...input, transform: (participant) => ({ ...participant, validated: true, validation_status: "validated", won: true, updated_date: new Date().toISOString() }), buildAudit: (participant, raffle) => ({ raffle_id: participant.raffle_id, raffle_title: raffle?.title || "Sorteio ao Vivo", user_id: participant.user_id, user_name: participant.user_name, user_nick: participant.user_nick, user_email: participant.user_email || "", user_phone: participant.user_phone || "", user_avatar: participant.user_avatar || "", prize_amount: Number(raffle?.prize_amount || 0), admin_name: raffle?.admin_name || "", admin_phone: raffle?.admin_phone || "", drawn_at: new Date().toISOString(), status: "validated", validated_at: new Date().toISOString() }), syncPrizeGallery: ({ client, participant, raffle, audit }) => syncRafflePrizeGalleryItem(client, { participant, raffle, audit, sourceType: "live_draw", active: true }) }),
+  invalidate: ({ participantId, ...input }) => resolveCandidate({ domain: "admin_live_draw_invalidate", raffleEntity: "LiveDrawRaffle", participantEntity: "LiveDrawParticipant", participantId, ...input, transform: (participant) => ({ ...participant, validated: false, validation_status: "pending", won: false, updated_date: new Date().toISOString() }), buildAudit: (participant, raffle) => ({ raffle_id: participant.raffle_id, raffle_title: raffle?.title || "Sorteio ao Vivo", user_id: participant.user_id, user_name: participant.user_name, user_nick: participant.user_nick, user_email: participant.user_email || "", user_phone: participant.user_phone || "", user_avatar: participant.user_avatar || "", prize_amount: Number(raffle?.prize_amount || 0), admin_name: raffle?.admin_name || "", admin_phone: raffle?.admin_phone || "", drawn_at: new Date().toISOString(), status: "invalidated", validated_at: new Date().toISOString() }), syncPrizeGallery: ({ client, participant, raffle, audit }) => syncRafflePrizeGalleryItem(client, { participant, raffle, audit, sourceType: "live_draw", active: false }) }),
   reactivate: ({ participantId, ...input }) => resolveCandidate({ domain: "admin_live_draw_reactivate", raffleEntity: "LiveDrawRaffle", participantEntity: "LiveDrawParticipant", participantId, ...input, transform: (participant) => ({ ...participant, validated: false, validation_status: "pending", won: false, claimed_at: null, dismissed_at: null, updated_date: new Date().toISOString() }), buildAudit: null }),
   removeParticipant: (input) => deleteParticipant({ domain: "admin_live_draw_remove_participant", entityName: "LiveDrawParticipant", ...input }),
   clearParticipants: (input) => clearParticipants({ domain: "admin_live_draw_clear_participants", entityName: "LiveDrawParticipant", ...input }),
 };
 
 export const gameCallAdmin = {
-  create: (input) => createRaffle({ domain: "admin_game_call_create", entityName: "GameCallRaffle", ...input, payload: { title: String(input.title || "").trim(), active: true, prize_amount: Math.max(0, Number(input.prizeAmount || 0)), max_attempts: Math.max(1, Number(input.maxAttempts || 3)), max_winners: Math.max(1, Number(input.maxWinners || 1)), ended: false, pending_draw_candidates: [], pending_draw_count: 0 } }),
-  update: ({ raffleId, maxAttempts, maxWinners, ...input }) => {
+  create: (input) => createRaffle({ domain: "admin_game_call_create", entityName: "GameCallRaffle", ...input, payload: { title: String(input.title || "").trim(), active: true, prize_amount: Math.max(0, Number(input.prizeAmount || 0)), max_attempts: Math.max(1, Number(input.maxAttempts || 3)), max_winners: Math.max(1, Number(input.maxWinners || 1)), admin_name: normalizeAdminName(input.adminName), admin_phone: normalizeAdminPhone(input.adminPhone), ended: false, pending_draw_candidates: [], pending_draw_count: 0 } }),
+  update: ({ raffleId, maxAttempts, maxWinners, adminName, adminPhone, ...input }) => {
     return (async () => {
       const existing = await findEvent("admin_game_call_update", input.requestId);
       if (existing?.entity_id) return { raffle: await getEntityById("GameCallRaffle", existing.entity_id), processing_event: existing, idempotent: true };
@@ -299,7 +364,7 @@ export const gameCallAdmin = {
         const locked = await findEntityRecordByNameAndIdForUpdate(client, "GameCallRaffle", raffleId);
         if (!locked) return await client.query("ROLLBACK").then(() => null);
         const current = getEntityRecordData(locked);
-        const updated = await updateEntityRecordData(client, "GameCallRaffle", raffleId, { ...current, max_attempts: Math.max(1, Number(maxAttempts || current.max_attempts || 3)), max_winners: Math.max(1, Number(maxWinners || current.max_winners || 1)), updated_date: new Date().toISOString() });
+        const updated = await updateEntityRecordData(client, "GameCallRaffle", raffleId, { ...current, max_attempts: Math.max(1, Number(maxAttempts || current.max_attempts || 3)), max_winners: Math.max(1, Number(maxWinners || current.max_winners || 1)), admin_name: normalizeAdminName(adminName ?? current.admin_name ?? ""), admin_phone: normalizeAdminPhone(adminPhone ?? current.admin_phone ?? ""), updated_date: new Date().toISOString() });
         const processingEvent = await createEvent(client, { domain: "admin_game_call_update", action: "update_raffle", requestId: input.requestId, entityName: "GameCallRaffle", entityId: raffleId, metadata: { before: current, after: updated }, adminUserId: input.adminUserId, adminEmail: input.adminEmail });
         await client.query("COMMIT");
         return { raffle: updated, processing_event: processingEvent, idempotent: false };
@@ -313,8 +378,8 @@ export const gameCallAdmin = {
   },
   end: (input) => endRaffle({ domain: "admin_game_call_end", entityName: "GameCallRaffle", ...input }),
   draw: (input) => drawCandidates({ domain: "admin_game_call_draw", raffleEntity: "GameCallRaffle", participantEntity: "GameCallParticipant", ...input, eligibility: (participant, raffle) => String(participant.validation_status || "pending") === "pending" && !participant.validated && Number(participant.attempts || 0) < Number(raffle.max_attempts || 3) }),
-  validate: ({ participantId, ...input }) => resolveCandidate({ domain: "admin_game_call_validate", raffleEntity: "GameCallRaffle", participantEntity: "GameCallParticipant", participantId, ...input, transform: (participant, raffle) => ({ ...participant, validated: true, validation_status: "validated", won: true, prize_amount: Number(raffle?.prize_amount || 0), updated_date: new Date().toISOString() }), buildAudit: (participant, raffle) => ({ raffle_id: participant.raffle_id, raffle_title: raffle?.title || "Call de Jogo", user_id: participant.user_id, user_name: participant.user_name, user_nick: participant.user_nick, user_email: participant.user_email || "", user_phone: participant.user_phone || "", user_avatar: participant.user_avatar || "", user_platform_id: participant.user_platform_id || "", game_call: participant.game_call || "", prize_amount: Number(raffle?.prize_amount || 0), drawn_at: new Date().toISOString(), status: "validated", validated_at: new Date().toISOString() }), syncPrizeGallery: ({ client, participant, raffle, audit }) => syncRafflePrizeGalleryItem(client, { participant, raffle, audit, sourceType: "game_call", active: true }) }),
-  invalidate: ({ participantId, ...input }) => resolveCandidate({ domain: "admin_game_call_invalidate", raffleEntity: "GameCallRaffle", participantEntity: "GameCallParticipant", participantId, ...input, transform: (participant) => ({ ...participant, validated: false, validation_status: "pending", won: false, attempts: Number(participant.attempts || 0) + 1, updated_date: new Date().toISOString() }), buildAudit: (participant, raffle) => ({ raffle_id: participant.raffle_id, raffle_title: raffle?.title || "Call de Jogo", user_id: participant.user_id, user_name: participant.user_name, user_nick: participant.user_nick, user_email: participant.user_email || "", user_phone: participant.user_phone || "", user_avatar: participant.user_avatar || "", user_platform_id: participant.user_platform_id || "", game_call: participant.game_call || "", prize_amount: Number(raffle?.prize_amount || 0), drawn_at: new Date().toISOString(), status: "invalidated", validated_at: new Date().toISOString() }), syncPrizeGallery: ({ client, participant, raffle, audit }) => syncRafflePrizeGalleryItem(client, { participant, raffle, audit, sourceType: "game_call", active: false }) }),
+  validate: ({ participantId, ...input }) => resolveCandidate({ domain: "admin_game_call_validate", raffleEntity: "GameCallRaffle", participantEntity: "GameCallParticipant", participantId, ...input, transform: (participant, raffle) => ({ ...participant, validated: true, validation_status: "validated", won: true, prize_amount: Number(raffle?.prize_amount || 0), updated_date: new Date().toISOString() }), buildAudit: (participant, raffle) => ({ raffle_id: participant.raffle_id, raffle_title: raffle?.title || "Call de Jogo", user_id: participant.user_id, user_name: participant.user_name, user_nick: participant.user_nick, user_email: participant.user_email || "", user_phone: participant.user_phone || "", user_avatar: participant.user_avatar || "", user_platform_id: participant.user_platform_id || "", game_call: participant.game_call || "", prize_amount: Number(raffle?.prize_amount || 0), admin_name: raffle?.admin_name || "", admin_phone: raffle?.admin_phone || "", drawn_at: new Date().toISOString(), status: "validated", validated_at: new Date().toISOString() }), syncPrizeGallery: ({ client, participant, raffle, audit }) => syncRafflePrizeGalleryItem(client, { participant, raffle, audit, sourceType: "game_call", active: true }) }),
+  invalidate: ({ participantId, ...input }) => resolveCandidate({ domain: "admin_game_call_invalidate", raffleEntity: "GameCallRaffle", participantEntity: "GameCallParticipant", participantId, ...input, transform: (participant) => ({ ...participant, validated: false, validation_status: "pending", won: false, attempts: Number(participant.attempts || 0) + 1, updated_date: new Date().toISOString() }), buildAudit: (participant, raffle) => ({ raffle_id: participant.raffle_id, raffle_title: raffle?.title || "Call de Jogo", user_id: participant.user_id, user_name: participant.user_name, user_nick: participant.user_nick, user_email: participant.user_email || "", user_phone: participant.user_phone || "", user_avatar: participant.user_avatar || "", user_platform_id: participant.user_platform_id || "", game_call: participant.game_call || "", prize_amount: Number(raffle?.prize_amount || 0), admin_name: raffle?.admin_name || "", admin_phone: raffle?.admin_phone || "", drawn_at: new Date().toISOString(), status: "invalidated", validated_at: new Date().toISOString() }), syncPrizeGallery: ({ client, participant, raffle, audit }) => syncRafflePrizeGalleryItem(client, { participant, raffle, audit, sourceType: "game_call", active: false }) }),
   reactivate: ({ participantId, ...input }) => resolveCandidate({ domain: "admin_game_call_reactivate", raffleEntity: "GameCallRaffle", participantEntity: "GameCallParticipant", participantId, ...input, transform: (participant) => ({ ...participant, validated: false, validation_status: "pending", won: false, attempts: 0, claimed_at: null, dismissed_at: null, updated_date: new Date().toISOString() }), buildAudit: null }),
   removeParticipant: (input) => deleteParticipant({ domain: "admin_game_call_remove_participant", entityName: "GameCallParticipant", ...input }),
   clearParticipants: (input) => clearParticipants({ domain: "admin_game_call_clear_participants", entityName: "GameCallParticipant", ...input }),

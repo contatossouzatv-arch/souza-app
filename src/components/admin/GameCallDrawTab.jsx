@@ -106,6 +106,8 @@ export default function GameCallDrawTab() {
   const [prizeAmount, setPrizeAmount] = useState("");
   const [maxAttempts, setMaxAttempts] = useState(3);
   const [maxWinners, setMaxWinners] = useState(1);
+  const [adminName, setAdminName] = useState("");
+  const [adminPhone, setAdminPhone] = useState("");
   const [winnersPerDraw, setWinnersPerDraw] = useState(1);
   const [isDrawing, setIsDrawing] = useState(false);
   const [animatingWinners, setAnimatingWinners] = useState([]);
@@ -169,6 +171,18 @@ export default function GameCallDrawTab() {
   };
 
   useEffect(() => {
+    if (activeRaffle) {
+      setAdminName(activeRaffle.admin_name || "");
+      setAdminPhone(activeRaffle.admin_phone || "");
+      setMaxAttempts(activeRaffle.max_attempts || 3);
+      setMaxWinners(activeRaffle.max_winners || 1);
+      return;
+    }
+    setAdminName("");
+    setAdminPhone("");
+  }, [activeRaffle]);
+
+  useEffect(() => {
     const newParticles = Array.from({ length: 80 }, (_, i) => ({
       id: i,
       x: Math.random() * 100,
@@ -198,22 +212,31 @@ export default function GameCallDrawTab() {
       prizeAmount: parseFloat(prizeAmount),
       maxAttempts,
       maxWinners,
+      adminName,
+      adminPhone,
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
       queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffle'] });
+      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
       setNewRaffleTitle("");
       setPrizeAmount("");
       setMaxAttempts(3);
       setMaxWinners(1);
+      setAdminName("");
+      setAdminPhone("");
     },
   });
 
   const updateRaffleSettingsMutation = useMutation({
-    mutationFn: ({ maxAttempts, maxWinners }) => base44.adminEvents.gameCalls.update(activeRaffle.id, { maxAttempts, maxWinners }),
+    mutationFn: ({ maxAttempts, maxWinners, adminName: nextAdminName, adminPhone: nextAdminPhone }) =>
+      base44.adminEvents.gameCalls.update(activeRaffle.id, { maxAttempts, maxWinners, adminName: nextAdminName, adminPhone: nextAdminPhone }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
       queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffle'] });
+      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['winner-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['user-prize-gallery'] });
     },
   });
 
@@ -222,6 +245,7 @@ export default function GameCallDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
       queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffle'] });
+      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
       setFinalWinners([]);
       setShowAnimation(false);
     },
@@ -289,12 +313,6 @@ export default function GameCallDrawTab() {
   });
 
   const handleDraw = async () => {
-    const eligibleParticipants = participants.filter(p => 
-      p.validation_status === 'pending' && 
-      !p.validated && 
-      (p.attempts || 0) < (activeRaffle.max_attempts || 3)
-    );
-
     if (eligibleParticipants.length === 0) {
       alert("Não há participantes elegíveis para sortear!");
       return;
@@ -384,7 +402,9 @@ export default function GameCallDrawTab() {
 
   const activeParticipants = participants.filter(p => 
     p.validation_status === 'pending' && 
-    !p.validated &&
+    !p.validated
+  );
+  const eligibleParticipants = activeParticipants.filter((p) =>
     (p.attempts || 0) < (activeRaffle?.max_attempts || 3)
   );
 
@@ -682,7 +702,7 @@ export default function GameCallDrawTab() {
                               />
                               <div className="text-left">
                                 <div className="font-bold text-white text-sm">{winner.user_name}</div>
-                                <div className="text-xs text-cyan-300">ID: {maskPlatformId(winner.user_platform_id)} ⬢ "{winner.game_call}"</div>
+                                <div className="text-xs text-cyan-300">ID: {maskPlatformId(winner.user_platform_id)} - "{winner.game_call}"</div>
                               </div>
                             </div>
                             <div className="flex gap-2">
@@ -868,6 +888,28 @@ export default function GameCallDrawTab() {
                     />
                   </div>
                 </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <Label htmlFor="gameCallAdminName" className="text-blue-200">Nome do ADM</Label>
+                    <Input
+                      id="gameCallAdminName"
+                      value={adminName}
+                      onChange={(e) => setAdminName(e.target.value)}
+                      placeholder="Ex: Souza Cass"
+                      className="bg-blue-900/50 border-blue-700 text-white"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="gameCallAdminPhone" className="text-blue-200">Telefone / WhatsApp do ADM</Label>
+                    <Input
+                      id="gameCallAdminPhone"
+                      value={adminPhone}
+                      onChange={(e) => setAdminPhone(e.target.value)}
+                      placeholder="Ex: 11999999999"
+                      className="bg-blue-900/50 border-blue-700 text-white"
+                    />
+                  </div>
+                </div>
                 <Button
                   onClick={() => createRaffleMutation.mutate()}
                   disabled={!newRaffleTitle || !prizeAmount}
@@ -885,7 +927,7 @@ export default function GameCallDrawTab() {
                   <div>
                     <h2 className="text-2xl font-bold text-cyan-300">{activeRaffle.title}</h2>
                     <p className="text-cyan-200">
-                      {activeParticipants.length} participantes elegíveis ⬢ {activeRaffle.max_winners} ganhador(es) ⬢ R$ {activeRaffle.prize_amount?.toFixed(2)}
+                      {activeParticipants.length} participantes na lista - {eligibleParticipants.length} elegíveis - {activeRaffle.max_winners} ganhador(es) - R$ {activeRaffle.prize_amount?.toFixed(2)}
                     </p>
                   </div>
                   <Button
@@ -897,17 +939,34 @@ export default function GameCallDrawTab() {
                 </div>
 
                 <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                      <Label htmlFor="activeGameCallAdminName" className="text-cyan-200">Nome do ADM</Label>
+                      <Input
+                        id="activeGameCallAdminName"
+                        value={adminName}
+                        onChange={(e) => setAdminName(e.target.value)}
+                        className="bg-blue-900/50 border-blue-700 text-white"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="activeGameCallAdminPhone" className="text-cyan-200">Telefone / WhatsApp do ADM</Label>
+                      <Input
+                        id="activeGameCallAdminPhone"
+                        value={adminPhone}
+                        onChange={(e) => setAdminPhone(e.target.value)}
+                        className="bg-blue-900/50 border-blue-700 text-white"
+                      />
+                    </div>
+                  </div>
                   <div className="grid grid-cols-3 gap-4">
                     <div>
                       <Label htmlFor="maxAttempts" className="text-cyan-200">Máximo de Tentativas</Label>
                       <Input
                         id="maxAttempts"
                         type="number"
-                        value={activeRaffle.max_attempts || 3}
-                        onChange={(e) => updateRaffleSettingsMutation.mutate({
-                          maxAttempts: parseInt(e.target.value),
-                          maxWinners: activeRaffle.max_winners || 1
-                        })}
+                        value={maxAttempts}
+                        onChange={(e) => setMaxAttempts(parseInt(e.target.value))}
                         min="1"
                         className="bg-blue-900/50 border-blue-700 text-white"
                       />
@@ -917,11 +976,8 @@ export default function GameCallDrawTab() {
                       <Input
                         id="maxWinners"
                         type="number"
-                        value={activeRaffle.max_winners || 1}
-                        onChange={(e) => updateRaffleSettingsMutation.mutate({
-                          maxAttempts: activeRaffle.max_attempts || 3,
-                          maxWinners: parseInt(e.target.value)
-                        })}
+                        value={maxWinners}
+                        onChange={(e) => setMaxWinners(parseInt(e.target.value))}
                         min="1"
                         className="bg-blue-900/50 border-blue-700 text-white"
                       />
@@ -941,6 +997,14 @@ export default function GameCallDrawTab() {
                   </div>
 
                   <div className="flex gap-4">
+                    <Button
+                      onClick={() => updateRaffleSettingsMutation.mutate({ maxAttempts, maxWinners, adminName, adminPhone })}
+                      disabled={updateRaffleSettingsMutation.isPending}
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      <Check className="w-4 h-4 mr-2" />
+                      {updateRaffleSettingsMutation.isPending ? "SALVANDO..." : "Salvar Configurações"}
+                    </Button>
                     <Button
                       onClick={() => clearParticipantsMutation.mutate()}
                       variant="outline"
@@ -968,8 +1032,8 @@ export default function GameCallDrawTab() {
                           />
                           <div>
                             <div className="font-bold text-yellow-200">{winner.user_name}</div>
-                            <div className="text-sm text-yellow-300">@{winner.user_nick} ⬢ ID: {maskPlatformId(winner.user_platform_id)}</div>
-                            <div className="text-xs text-yellow-400 italic">Call: "{winner.game_call}" ⬢ {winner.attempts || 0}/{activeRaffle.max_attempts} tentativas</div>
+                            <div className="text-sm text-yellow-300">@{winner.user_nick} - ID: {maskPlatformId(winner.user_platform_id)}</div>
+                            <div className="text-xs text-yellow-400 italic">Call: "{winner.game_call}" - {winner.attempts || 0}/{activeRaffle.max_attempts} tentativas</div>
                           </div>
                         </div>
                         <div className="flex gap-2">
@@ -1012,7 +1076,7 @@ export default function GameCallDrawTab() {
                           />
                           <div className="flex-1 min-w-0">
                             <div className="font-bold text-green-200">{winner.user_name}</div>
-                            <div className="text-sm text-green-300">@{winner.user_nick} ⬢ ID: {maskPlatformId(winner.user_platform_id)}</div>
+                            <div className="text-sm text-green-300">@{winner.user_nick} - ID: {maskPlatformId(winner.user_platform_id)}</div>
                             <div className="text-xs text-green-400 italic truncate">Call: "{winner.game_call}"</div>
                           </div>
                         </div>
@@ -1047,7 +1111,7 @@ export default function GameCallDrawTab() {
 
               <Card className="bg-gradient-to-br from-blue-900/50 to-cyan-900/50 border-blue-700/50 p-6">
                 <h3 className="text-xl font-bold text-cyan-300 mb-4">
-                  Participantes Ativos ({activeParticipants.length})
+                  Participantes na Lista ({activeParticipants.length})
                 </h3>
                 <div className="max-h-96 overflow-y-auto space-y-2">
                   {activeParticipants.map((p) => (
@@ -1063,7 +1127,7 @@ export default function GameCallDrawTab() {
                           <div className="text-xs text-cyan-300">ID: {maskPlatformId(p.user_platform_id)}</div>
                           <div className="text-xs text-cyan-400 italic truncate max-w-xs">"{p.game_call}"</div>
                           <div className="text-xs text-cyan-500">
-                            {format(new Date(p.created_date), 'HH:mm:ss')} ⬢ {p.attempts || 0}/{activeRaffle.max_attempts} tentativas
+                            {format(new Date(p.created_date), 'HH:mm:ss')} - {p.attempts || 0}/{activeRaffle.max_attempts} tentativas
                           </div>
                         </div>
                       </div>
@@ -1231,7 +1295,7 @@ export default function GameCallDrawTab() {
                   
                   <Button
                     onClick={handleDraw}
-                    disabled={isDrawing || activeParticipants.length === 0}
+                    disabled={isDrawing || eligibleParticipants.length === 0}
                     className="px-10 py-6 text-xl font-bold bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 hover:from-cyan-600 hover:via-blue-600 hover:to-purple-600 text-white shadow-2xl transform hover:scale-105 transition-all"
                   >
                     <Sparkles className="w-6 h-6 mr-2" />
@@ -1240,7 +1304,7 @@ export default function GameCallDrawTab() {
 
                   <div className="mt-8 p-3 bg-cyan-900/50 rounded-lg border border-cyan-600/50">
                     <p className="text-cyan-200 text-center">
-                      a {activeParticipants.length} participantes elegíveis
+                      a {eligibleParticipants.length} participantes elegíveis
                     </p>
                   </div>
                 </div>
@@ -1291,7 +1355,7 @@ export default function GameCallDrawTab() {
                           />
                           <div className="text-left">
                             <div className="font-bold text-white text-sm">{winner.user_name}</div>
-                            <div className="text-xs text-cyan-300">ID: {maskPlatformId(winner.user_platform_id)} ⬢ "{winner.game_call}"</div>
+                            <div className="text-xs text-cyan-300">ID: {maskPlatformId(winner.user_platform_id)} - "{winner.game_call}"</div>
                           </div>
                         </div>
                         <div className="flex gap-2">

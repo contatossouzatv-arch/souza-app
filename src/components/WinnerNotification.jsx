@@ -59,9 +59,6 @@ export default function WinnerNotification({ userId }) {
 
   if (!activeWinning && !activeDepositantWinning) return null;
 
-  const whatsappRedeemLink = buildWhatsAppLink(
-    settings.find((s) => s.key === "cashback_redeem_link")?.value
-  );
   const currentWinning = activeDepositantWinning || activeWinning;
   const isDepositantWinning = Boolean(activeDepositantWinning);
 
@@ -78,6 +75,14 @@ export default function WinnerNotification({ userId }) {
   const raffleTitle = isDepositantWinning
     ? "Sorteio dos Depositantes"
     : raffle?.title || "Sorteio ao Vivo";
+  const adminName = isDepositantWinning
+    ? "Admin responsavel"
+    : String(raffle?.admin_name || "").trim();
+  const whatsappRedeemLink = buildWhatsAppLink(
+    isDepositantWinning
+      ? settings.find((s) => s.key === "cashback_redeem_link")?.value
+      : raffle?.admin_phone
+  );
 
   const winDateRaw =
     currentWinning?.draw_date ||
@@ -141,7 +146,7 @@ export default function WinnerNotification({ userId }) {
 
             <div className="mb-6 p-3 md:p-4 bg-purple-900/50 border border-purple-600/50 rounded-lg">
               <p className="text-xs md:text-sm text-purple-200 mb-2">
-                Para resgatar seu prêmio, entre em contato via WhatsApp:
+                Para resgatar seu prêmio, entre em contato {adminName ? `com ${adminName}` : "com o admin"} via WhatsApp:
               </p>
               {whatsappRedeemLink ? (
                 <a
@@ -156,7 +161,7 @@ export default function WinnerNotification({ userId }) {
               ) : (
                 <span className="inline-flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg font-bold text-sm md:text-base">
                   <ExternalLink className="w-4 h-4" />
-                  WhatsApp indisponivel
+                  WhatsApp indisponível
                 </span>
               )}
             </div>
