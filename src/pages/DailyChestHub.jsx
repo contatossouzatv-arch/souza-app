@@ -69,6 +69,9 @@ export default function DailyChestHub() {
     audio.volume = volume;
     audio.play().catch(() => {});
   }, []);
+  const handleSceneReady = React.useCallback(() => {
+    setSceneReady(true);
+  }, []);
 
   React.useEffect(() => {
     const menuAudio = new Audio(menuClickSound);
@@ -248,7 +251,7 @@ export default function DailyChestHub() {
         <div className="h-full w-full lg:h-[min(100dvh-3rem,100vw-3rem)] lg:w-[min(100dvh-3rem,100vw-3rem)] lg:overflow-hidden lg:rounded-[2rem] lg:border lg:border-white/10 lg:bg-slate-950/40 lg:shadow-[0_24px_80px_rgba(2,6,23,0.45)]">
           <Suspense fallback={<SceneLoader />}>
             <DailyChestScene
-              onSceneReady={() => setSceneReady(true)}
+              onSceneReady={handleSceneReady}
               stageState={sceneState}
               viewMode={viewMode}
               tapProgress={tapCount}
