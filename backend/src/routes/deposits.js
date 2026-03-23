@@ -93,11 +93,12 @@ router.get("/deposits/my", requireAuth, async (req, res) => {
 });
 
 router.get("/deposits/leaderboard", requireAuth, async (req, res) => {
-  const items = await listDepositCycleLeaderboard({
+  const result = await listDepositCycleLeaderboard({
     cycleId: String(req.query.cycleId || "").trim(),
     limit: req.query.limit,
+    currentUserId: req.auth.sub,
   });
-  return res.json({ items });
+  return res.json(result);
 });
 
 router.get("/admin/deposits", requireAuth, requireAdmin, async (req, res) => {

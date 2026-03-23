@@ -1988,7 +1988,7 @@ export async function listAdminDeposits({ status = "", cycleId = "", limit } = {
   return applyLimit(rows, limit);
 }
 
-export async function listDepositCycleLeaderboard({ cycleId = "", limit = 10 } = {}) {
+export async function listDepositCycleLeaderboard({ cycleId = "", limit = 10, currentUserId = "" } = {}) {
   const values = [];
   const where = [
     "entity_name = 'Deposit'",
@@ -2001,30 +2001,50 @@ export async function listDepositCycleLeaderboard({ cycleId = "", limit = 10 } =
     where.push(`data->>'cycle_id' = $${values.length}`);
   }
 
-  values.push(Number(limit) > 0 ? Number(limit) : 10);
+  const limitValue = Number(limit) > 0 ? Number(limit) : 10;
 
   const result = await pool.query(
-    `SELECT
-       data->>'user_id' AS user_id,
-       MAX(NULLIF(data->>'user_name', '')) AS user_name,
-       COALESCE(SUM((data->>'amount')::numeric), 0) AS total_amount,
-       COUNT(*)::int AS deposits_count,
-       COALESCE(SUM(COALESCE((data->>'tickets_count')::numeric, 0)), 0)::int AS tickets_count
-     FROM entity_records
-     WHERE ${where.join(" AND ")}
-     GROUP BY data->>'user_id'
-     ORDER BY total_amount DESC, deposits_count DESC, user_id ASC
-     LIMIT $${values.length}`,
+    `WITH ranked AS (
+       SELECT
+         data->>'user_id' AS user_id,
+         MAX(NULLIF(data->>'user_name', '')) AS user_name,
+         COALESCE(SUM((data->>'amount')::numeric), 0) AS total_amount,
+         COUNT(*)::int AS deposits_count,
+         COALESCE(SUM(COALESCE((data->>'tickets_count')::numeric, 0)), 0)::int AS tickets_count
+       FROM entity_records
+       WHERE ${where.join(" AND ")}
+       GROUP BY data->>'user_id'
+     )
+     SELECT
+       user_id,
+       user_name,
+       total_amount,
+       deposits_count,
+       tickets_count,
+       ROW_NUMBER() OVER (ORDER BY total_amount DESC, deposits_count DESC, user_id ASC) AS position
+     FROM ranked
+     ORDER BY position ASC`,
     values
   );
 
-  return result.rows.map((row) => ({
+  const rows = result.rows.map((row) => ({
     user_id: String(row.user_id || ""),
     user_name: String(row.user_name || ""),
     total: Number(row.total_amount || 0),
     deposits_count: Number(row.deposits_count || 0),
     tickets_count: Number(row.tickets_count || 0),
+    position: Number(row.position || 0),
   }));
+
+  const normalizedCurrentUserId = String(currentUserId || "").trim();
+  const currentUser = normalizedCurrentUserId
+    ? rows.find((row) => row.user_id === normalizedCurrentUserId) || null
+    : null;
+
+  return {
+    items: rows.slice(0, limitValue),
+    currentUser,
+  };
 }
 
 export async function getDepositAdminHistory(depositId) {

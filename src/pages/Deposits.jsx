@@ -17,6 +17,7 @@ import { createPageUrl } from "@/utils";
 import bannerSorteio from "../../assets-para-app/banner sorteio.png";
 import LegalLinksBar from "@/components/LegalLinksBar";
 import { useAuth } from "@/lib/AuthContext";
+import { getProfileAvatarFallback, getProfileAvatarSrc } from "@/lib/profileMedia";
 
 const avatarModules = import.meta.glob("../../assets-para-app/avatar/*.png", {
   eager: true,
@@ -40,6 +41,13 @@ export default function Deposits() {
   const { user, isLoadingAuth } = useAuth();
   const [historyPopup, setHistoryPopup] = useState(null);
   const [expandedHistoryCycle, setExpandedHistoryCycle] = useState(null);
+  const avatarSrcById = React.useMemo(() => {
+    const map = {};
+    avatarOptions.forEach((item) => {
+      map[item.id] = item.src;
+    });
+    return map;
+  }, []);
 
   const { data: deposits = [], refetch: refetchDeposits, isLoading: depositsLoading } = useQuery({
     queryKey: ["deposits", user?.id],
@@ -67,7 +75,7 @@ export default function Deposits() {
 
   const { data: allUsers = [], isLoading: usersLoading } = useQuery({
     queryKey: ["all-users-top3"],
-    queryFn: () => base44.entities.User.list(),
+    queryFn: () => base44.entities.User.list(undefined, 1000),
     enabled: !!user,
     staleTime: 60000,
   });
@@ -94,12 +102,9 @@ export default function Deposits() {
   });
   const activeCycle = cycles.find((c) => c.active);
 
-  const { data: leaderboard = [], isLoading: leaderboardLoading } = useQuery({
+  const { data: leaderboardData, isLoading: leaderboardLoading } = useQuery({
     queryKey: ["deposit-cycle-leaderboard", activeCycle?.id],
-    queryFn: async () => {
-      const response = await base44.deposits.leaderboard({ cycleId: activeCycle?.id, limit: 20 });
-      return response.items || [];
-    },
+    queryFn: () => base44.deposits.leaderboard({ cycleId: activeCycle?.id, limit: 20 }),
     enabled: !!user && !!activeCycle?.id,
     staleTime: 30000,
   });
@@ -120,9 +125,9 @@ export default function Deposits() {
     0
   );
 
-  const rankings = leaderboard;
+  const rankings = leaderboardData?.items || [];
   const top3 = rankings.slice(0, 3);
-  const userPosition = rankings.findIndex((u) => u.user_id === user?.id) + 1;
+  const userPosition = Number(leaderboardData?.currentUser?.position || 0);
 
   const getSettingValue = (key, defaultValue = "") => {
     const setting = settings.find((s) => s.key === key);
@@ -160,13 +165,8 @@ export default function Deposits() {
     const displayName = profile?.full_name || winner.user_name || "Participante";
     const nickValue = profile?.nick || "";
     const handle = nickValue ? `@${nickValue}` : "";
-    const avatarSrc =
-      profile?.profile_image_mode === "photo" &&
-      profile?.profile_image_status === "approved" &&
-      profile?.profile_image_url
-        ? resolveAssetUrl(profile.profile_image_url)
-        : defaultAvatar?.src || "";
-    const avatarFallback = profile?.avatar_emoji || displayName.charAt(0).toUpperCase();
+    const avatarSrc = getProfileAvatarSrc(profile, avatarSrcById, "");
+    const avatarFallback = getProfileAvatarFallback(profile, displayName.charAt(0).toUpperCase());
 
     return {
       userId: profile?.id || winner.user_id || "",
@@ -263,13 +263,8 @@ export default function Deposits() {
     const displayName = profile?.full_name || entry?.user_name || "Participante";
     const nickValue = profile?.nick || entry?.user_nick || "";
     const handle = nickValue ? `@${nickValue}` : "";
-    const avatarSrc =
-      profile?.profile_image_mode === "photo" &&
-      profile?.profile_image_status === "approved" &&
-      profile?.profile_image_url
-        ? resolveAssetUrl(profile.profile_image_url)
-        : defaultAvatar?.src || "";
-    const avatarFallback = profile?.avatar_emoji || entry?.user_avatar || displayName.charAt(0).toUpperCase();
+    const avatarSrc = getProfileAvatarSrc(profile, avatarSrcById, "");
+    const avatarFallback = getProfileAvatarFallback(profile, entry?.user_avatar || displayName.charAt(0).toUpperCase());
 
     return { displayName, handle, avatarSrc, avatarFallback, defaultAvatarSrc: defaultAvatar?.src || "" };
   };
