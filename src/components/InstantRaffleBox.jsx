@@ -43,8 +43,8 @@ export default function InstantRaffleBox({ user }) {
   const myParticipation = React.useMemo(() => {
     if (!myParticipationRaw || myParticipationRaw.length === 0) return null;
     
-    // Procurar entrada que ganhou
-    const winnerEntry = myParticipationRaw.find(p => p.won);
+    // Procurar entrada que ganhou e segue válida
+    const winnerEntry = myParticipationRaw.find((p) => p.won && p.validated !== false);
     if (winnerEntry) return [winnerEntry];
     
     // Senão, retornar a primeira
@@ -72,7 +72,7 @@ export default function InstantRaffleBox({ user }) {
   const winners = React.useMemo(() => {
     const uniqueWinners = new Map();
     allParticipantsRaw.forEach(p => {
-      if (p.won && !uniqueWinners.has(p.user_id)) {
+      if (p.won && p.validated !== false && !uniqueWinners.has(p.user_id)) {
         uniqueWinners.set(p.user_id, p);
       }
     });
@@ -203,7 +203,7 @@ export default function InstantRaffleBox({ user }) {
 
   const myEntry = myParticipation?.[0];
   const hasParticipated = !!myEntry;
-  const isWinner = myEntry?.won;
+  const isWinner = Boolean(myEntry?.won && myEntry?.validated !== false);
   const hasEnded = activeRaffle.winners_drawn;
 
   // Se confirmou (ganhou e recebeu ou perdeu e fechou), some o box

@@ -2315,10 +2315,43 @@ router.delete("/admin/audits/winners/:id", requireAuth, requireAdmin, async (req
 
   const prizeItems = await listEntity("UserPrizeGalleryItem", "-claimed_at", 500);
   const matchedPrizeItems = prizeItems.filter((item) => isPrizeGalleryMatchForAudit(item, audit));
+  const normalizedRaffleId = String(audit.raffle_id || "").trim();
+  const isInstantRaffleAudit = normalizedRaffleId.startsWith("instant_");
+  const instantParticipants = isInstantRaffleAudit
+    ? (await listEntity("InstantRaffleParticipant", "-created_date", 1000)).filter((item) => {
+        return (
+          String(item.raffle_id || "").trim() === normalizedRaffleId &&
+          String(item.user_id || "").trim() === String(audit.user_id || "").trim()
+        );
+      })
+    : [];
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    for (const participant of instantParticipants) {
+      await client.query(
+        `UPDATE entity_records
+            SET data = $3::jsonb,
+                updated_at = NOW()
+          WHERE entity_name = 'InstantRaffleParticipant'
+            AND id = $1
+            AND user_id = $2`,
+        [
+          participant.id,
+          participant.user_id,
+          JSON.stringify({
+            ...participant,
+            won: false,
+            validated: false,
+            prize_claimed: false,
+            dismissed: false,
+            updated_date: new Date().toISOString(),
+          }),
+        ]
+      );
+    }
+
     for (const item of matchedPrizeItems) {
       await client.query("DELETE FROM entity_records WHERE entity_name = 'UserPrizeGalleryItem' AND id = $1", [item.id]);
     }
@@ -2336,6 +2369,12 @@ router.delete("/admin/audits/winners/:id", requireAuth, requireAdmin, async (req
   matchedPrizeItems.forEach((item) => {
     emitEntityChanged(req, "UserPrizeGalleryItem", item.id, "deleted");
   });
+  instantParticipants.forEach((participant) => {
+    emitEntityChanged(req, "InstantRaffleParticipant", participant.id, "updated");
+  });
+  if (normalizedRaffleId) {
+    emitEntityChanged(req, "InstantRaffle", normalizedRaffleId, "updated");
+  }
   if (audit.user_id) {
     emitEntityChanged(req, "user", audit.user_id, "updated");
   }

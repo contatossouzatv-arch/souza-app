@@ -202,6 +202,11 @@ export default function InstantRaffleTab() {
     mutationFn: async ({ participantId, validated }) => base44.adminEvents.instantRaffles.validateParticipant(participantId, validated),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-instant-participants'] });
+      queryClient.invalidateQueries({ queryKey: ['active-instant-raffle'] });
+      queryClient.invalidateQueries({ queryKey: ['instant-raffle-participants'] });
+      queryClient.invalidateQueries({ queryKey: ['winner-audits'] });
+      queryClient.invalidateQueries({ queryKey: ['user-prize-gallery'] });
+      queryClient.invalidateQueries({ queryKey: ['my-instant-participation'] });
       alert("Status atualizado com sucesso!");
     },
     onError: (error) => {
@@ -255,7 +260,7 @@ export default function InstantRaffleTab() {
   const winners = React.useMemo(() => {
     const uniqueWinners = new Map();
     participantsRaw.forEach(p => {
-      if (p.won && !uniqueWinners.has(p.user_id)) {
+      if (p.won && p.validated !== false && !uniqueWinners.has(p.user_id)) {
         uniqueWinners.set(p.user_id, p);
       }
     });
@@ -265,7 +270,7 @@ export default function InstantRaffleTab() {
   const losers = React.useMemo(() => {
     const uniqueLosers = new Map();
     participantsRaw.forEach(p => {
-      if (!p.won && !uniqueLosers.has(p.user_id)) {
+      if ((!p.won || p.validated === false) && !uniqueLosers.has(p.user_id)) {
         uniqueLosers.set(p.user_id, p);
       }
     });

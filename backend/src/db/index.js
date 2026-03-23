@@ -542,6 +542,36 @@ export async function findUserRowByEmail(email) {
   return result.rows[0] || null;
 }
 
+export async function findUserRowByNickInsensitive(nick, excludeUserId = "") {
+  const normalizedNick = String(nick || "").trim().replace(/^@+/, "").toLowerCase();
+  if (!normalizedNick) return null;
+
+  const values = [normalizedNick];
+  let where = "LOWER(TRIM(LEADING '@' FROM COALESCE(nick, ''))) = $1";
+  if (excludeUserId) {
+    values.push(String(excludeUserId || "").trim());
+    where += ` AND id <> $${values.length}`;
+  }
+
+  const result = await pool.query(`SELECT * FROM users WHERE ${where} LIMIT 1`, values);
+  return result.rows[0] || null;
+}
+
+export async function findUserRowByPhoneNormalized(phone, excludeUserId = "") {
+  const normalizedPhone = String(phone || "").replace(/\D/g, "");
+  if (!normalizedPhone) return null;
+
+  const values = [normalizedPhone];
+  let where = "regexp_replace(COALESCE(phone, ''), '\\D', '', 'g') = $1";
+  if (excludeUserId) {
+    values.push(String(excludeUserId || "").trim());
+    where += ` AND id <> $${values.length}`;
+  }
+
+  const result = await pool.query(`SELECT * FROM users WHERE ${where} LIMIT 1`, values);
+  return result.rows[0] || null;
+}
+
 export async function findUserRowById(id) {
   const result = await pool.query("SELECT * FROM users WHERE id = $1 LIMIT 1", [id]);
   return result.rows[0] || null;

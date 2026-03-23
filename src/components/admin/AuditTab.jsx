@@ -136,6 +136,10 @@ export default function AuditTab() {
       queryClient.invalidateQueries({ queryKey: ["winner-audits"] });
       queryClient.invalidateQueries({ queryKey: ["inicio-winner-posts"] });
       queryClient.invalidateQueries({ queryKey: ["user-prize-gallery"] });
+      queryClient.invalidateQueries({ queryKey: ["active-instant-raffle"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-instant-participants"] });
+      queryClient.invalidateQueries({ queryKey: ["instant-raffle-participants"] });
+      queryClient.invalidateQueries({ queryKey: ["my-instant-participation"] });
     },
   });
 

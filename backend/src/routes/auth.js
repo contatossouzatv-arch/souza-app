@@ -21,6 +21,8 @@ import {
   findUserById,
   findUserPrivateById,
   findUserRowByEmail,
+  findUserRowByNickInsensitive,
+  findUserRowByPhoneNormalized,
   getUserProfileImageVersion,
   listUsersByProfileImageStatus,
   listUserProfileImageVersions,
@@ -83,6 +85,53 @@ const profileImageUpload = multer({
 
 function sanitizeEmail(email) {
   return String(email || "").trim().toLowerCase();
+}
+
+function sanitizeNick(nick) {
+  return String(nick || "").trim().replace(/^@+/, "").toLowerCase();
+}
+
+function sanitizePhone(phone) {
+  return String(phone || "").replace(/\D/g, "");
+}
+
+async function ensureUniqueIdentityFields({ email = "", nick = "", phone = "", excludeUserId = "" }) {
+  const normalizedEmail = sanitizeEmail(email);
+  const normalizedNick = sanitizeNick(nick);
+  const normalizedPhone = sanitizePhone(phone);
+
+  if (normalizedEmail) {
+    const emailOwner = await findUserRowByEmail(normalizedEmail);
+    if (emailOwner && String(emailOwner.id || "") !== String(excludeUserId || "")) {
+      const error = new Error("Email já cadastrado");
+      error.status = 409;
+      throw error;
+    }
+  }
+
+  if (normalizedNick) {
+    const nickOwner = await findUserRowByNickInsensitive(normalizedNick, excludeUserId);
+    if (nickOwner) {
+      const error = new Error("Esse @ já está em uso");
+      error.status = 409;
+      throw error;
+    }
+  }
+
+  if (normalizedPhone) {
+    const phoneOwner = await findUserRowByPhoneNormalized(normalizedPhone, excludeUserId);
+    if (phoneOwner) {
+      const error = new Error("Esse telefone já está em uso");
+      error.status = 409;
+      throw error;
+    }
+  }
+
+  return {
+    normalizedEmail,
+    normalizedNick,
+    normalizedPhone,
+  };
 }
 
 function emitEntityChanged(req, entityName, entityId, action = "updated") {
@@ -314,25 +363,30 @@ async function issueSession(req, user, familyId = null) {
 
 router.post("/register", loginRateLimiter, async (req, res) => {
   const { email, password, full_name, nick, phone } = req.body || {};
-  const normalizedEmail = sanitizeEmail(email);
   const normalizedName = String(full_name || "").trim();
-  const normalizedPhone = String(phone || "").trim();
+  const requestedNick = String(nick || "").trim() || String(email || "").split("@")[0] || "";
 
-  if (!normalizedEmail || !password || !normalizedName || !normalizedPhone) {
+  if (!email || !password || !normalizedName || !phone) {
     return res.status(400).json({ error: "email, nome e telefone são obrigatórios" });
   }
 
-  const existing = await findUserRowByEmail(normalizedEmail);
-  if (existing) {
-    return res.status(409).json({ error: "Email já cadastrado" });
+  let normalizedIdentity;
+  try {
+    normalizedIdentity = await ensureUniqueIdentityFields({
+      email,
+      nick: requestedNick,
+      phone,
+    });
+  } catch (error) {
+    return res.status(error.status || 409).json({ error: error.message || "Dados já cadastrados" });
   }
 
   const password_hash = await bcrypt.hash(String(password), 10);
-  const user = await findOrCreateUserByEmail(normalizedEmail, {
+  const user = await findOrCreateUserByEmail(normalizedIdentity.normalizedEmail, {
     password_hash,
     full_name: normalizedName,
-    nick: nick || normalizedEmail.split("@")[0],
-    phone: normalizedPhone,
+    nick: normalizedIdentity.normalizedNick || requestedNick,
+    phone: normalizedIdentity.normalizedPhone,
     terms_accepted: false,
     privacy_accepted: false,
     onboarding_completed: false,
@@ -444,10 +498,16 @@ router.post("/google", loginRateLimiter, async (req, res) => {
       if (existingByEmail) {
         user = await updateUserGoogleLink(existingByEmail.id, googleId);
       } else {
+        const requestedNick = payload?.given_name || email.split("@")[0];
+        await ensureUniqueIdentityFields({
+          email,
+          nick: requestedNick,
+          phone: "",
+        });
         user = await findOrCreateUserByEmail(email, {
           google_id: googleId,
           full_name: payload?.name || "",
-          nick: payload?.given_name || email.split("@")[0],
+          nick: sanitizeNick(requestedNick) || requestedNick,
           terms_accepted: false,
           privacy_accepted: false,
           onboarding_completed: false,
@@ -1178,6 +1238,24 @@ router.patch("/me", requireAuth, async (req, res) => {
     if (key in payload) {
       update[key] = payload[key];
     }
+  }
+
+  try {
+    if ("nick" in update) {
+      update.nick = sanitizeNick(update.nick);
+    }
+
+    if ("phone" in update) {
+      update.phone = sanitizePhone(update.phone);
+    }
+
+    await ensureUniqueIdentityFields({
+      nick: "nick" in update ? update.nick : "",
+      phone: "phone" in update ? update.phone : "",
+      excludeUserId: req.auth.sub,
+    });
+  } catch (error) {
+    return res.status(error.status || 409).json({ error: error.message || "Dados já cadastrados" });
   }
 
   if ("profile_image_mode" in update) {
