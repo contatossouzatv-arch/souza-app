@@ -5,6 +5,7 @@ import multer from "multer";
 import { env } from "../config/env.js";
 import { requireAuth } from "../middleware/auth.js";
 import { genericUploadsDir, uploadsDir } from "../lib/paths.js";
+import { deleteFromCloudinaryByUrl, getCloudinaryConfig, uploadToCloudinary } from "../lib/cloudinary.js";
 
 const MAX_UPLOAD_SIZE_BYTES = 40 * 1024 * 1024;
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"]);
@@ -30,6 +31,7 @@ const ALLOWED_MIME_TYPES = new Set([
 ]);
 
 const uploadRoots = Array.from(new Set([path.resolve(genericUploadsDir), path.resolve(uploadsDir)]));
+const cloudinaryConfig = getCloudinaryConfig();
 
 function sanitizeSegment(value) {
   return String(value || "")
@@ -54,6 +56,13 @@ function sanitizeFileName(value, originalName) {
   const base = path.basename(String(value || "").trim(), path.extname(String(value || "").trim() || ""));
   const safeBase = sanitizeSegment(base || path.basename(original, ext));
   return `${safeBase || "arquivo"}${ext}`;
+}
+
+function sanitizePublicId(value, originalName) {
+  const fileName = sanitizeFileName(value, originalName);
+  const ext = path.extname(fileName);
+  const base = ext ? fileName.slice(0, -ext.length) : fileName;
+  return sanitizeSegment(base || "arquivo");
 }
 
 function buildUploadUrl(relativePath) {
@@ -173,7 +182,7 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({
-  storage,
+  storage: cloudinaryConfig.enabled ? multer.memoryStorage() : storage,
   limits: {
     fileSize: MAX_UPLOAD_SIZE_BYTES,
     files: 1,
@@ -213,30 +222,66 @@ router.get(/^\/(.+)/, async (req, res) => {
   }
 });
 
-router.post("/", requireAuth, upload.single("file"), (req, res) => {
+router.post("/", requireAuth, upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "File is required" });
   }
 
-  const absoluteSavedPath = path.resolve(req.file.path);
-  const relativeToUploadDir = path.relative(genericUploadsDir, absoluteSavedPath).replace(/\\/g, "/");
-  const safeRelative = String(relativeToUploadDir || req.file.filename).replace(/^\/+/, "");
-  const relativeFilePath = `uploads/${safeRelative}`;
-  const fileUrl = buildUploadUrl(relativeFilePath);
+  try {
+    if (cloudinaryConfig.enabled) {
+      const scopedFolder = resolveScopedFolder(req);
+      const uploadFolder = [cloudinaryConfig.folder, scopedFolder].filter(Boolean).join("/");
+      const uploadResult = await uploadToCloudinary({
+        buffer: req.file.buffer,
+        originalName: req.file.originalname,
+        mimetype: req.file.mimetype,
+        folder: uploadFolder,
+        publicId: `${Date.now()}-${sanitizePublicId(req.body?.filename, req.file.originalname)}`,
+      });
 
-  return res.status(201).json({
-    file_url: fileUrl,
-    filename: req.file.filename,
-    mimetype: req.file.mimetype,
-    size: req.file.size,
-  });
+      return res.status(201).json({
+        file_url: uploadResult.url,
+        filename: req.file.originalname || req.file.filename || uploadResult.originalFilename || "arquivo",
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+      });
+    }
+
+    const absoluteSavedPath = path.resolve(req.file.path);
+    const relativeToUploadDir = path.relative(genericUploadsDir, absoluteSavedPath).replace(/\\/g, "/");
+    const safeRelative = String(relativeToUploadDir || req.file.filename).replace(/^\/+/, "");
+    const relativeFilePath = `uploads/${safeRelative}`;
+    const fileUrl = buildUploadUrl(relativeFilePath);
+
+    return res.status(201).json({
+      file_url: fileUrl,
+      filename: req.file.filename,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+    });
+  } catch (error) {
+    return res.status(Number(error?.status || 500)).json({ error: error?.message || "Upload failed" });
+  }
 });
 
 router.delete("/", requireAuth, async (req, res) => {
   const fromBody = req.body?.file_url || req.body?.fileUrl || req.body?.path || "";
   const fromQuery = req.query?.file_url || req.query?.fileUrl || req.query?.path || "";
+  const fileUrl = String(fromBody || fromQuery || "").trim();
   const relativePath = getRelativeUploadPathFromInput(fromBody || fromQuery);
-  if (!relativePath) {
+  if (!relativePath && !fileUrl) {
+    return res.status(400).json({ error: "Valid upload path is required" });
+  }
+
+  if (!relativePath && fileUrl) {
+    try {
+      const remoteDeleted = await deleteFromCloudinaryByUrl(fileUrl);
+      if (!remoteDeleted.skipped) {
+        return res.status(200).json({ ok: true });
+      }
+    } catch (error) {
+      return res.status(Number(error?.status || 500)).json({ error: error?.message || "Failed to delete file" });
+    }
     return res.status(400).json({ error: "Valid upload path is required" });
   }
 
