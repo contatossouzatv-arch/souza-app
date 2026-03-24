@@ -79,6 +79,7 @@ function getRelativeUploadPathFromInput(input) {
       const parsed = new URL(raw);
       const pathName = String(parsed.pathname || "");
       if (pathName.startsWith("/uploads/")) return pathName.slice("/uploads/".length);
+      if (pathName.startsWith("/api/uploads/")) return pathName.slice("/api/uploads/".length);
       return "";
     }
   } catch {
@@ -155,9 +156,30 @@ const upload = multer({
 
 const router = Router();
 
-router.use(requireAuth);
+router.get(/^\/(.+)/, async (req, res) => {
+  const relativePath = getRelativeUploadPathFromInput(req.path);
+  if (!relativePath) {
+    return res.status(400).json({ error: "Valid upload path is required" });
+  }
 
-router.post("/", upload.single("file"), (req, res) => {
+  const absolutePath = path.resolve(uploadsDir, relativePath);
+  const normalizedRoot = path.resolve(uploadsDir);
+  if (!absolutePath.startsWith(normalizedRoot)) {
+    return res.status(400).json({ error: "Invalid upload path" });
+  }
+
+  try {
+    await fs.promises.access(absolutePath, fs.constants.R_OK);
+    return res.sendFile(absolutePath);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return res.status(404).json({ error: "File not found" });
+    }
+    return res.status(500).json({ error: "Failed to read file" });
+  }
+});
+
+router.post("/", requireAuth, upload.single("file"), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "File is required" });
   }
@@ -176,7 +198,7 @@ router.post("/", upload.single("file"), (req, res) => {
   });
 });
 
-router.delete("/", async (req, res) => {
+router.delete("/", requireAuth, async (req, res) => {
   const fromBody = req.body?.file_url || req.body?.fileUrl || req.body?.path || "";
   const fromQuery = req.query?.file_url || req.query?.fileUrl || req.query?.path || "";
   const relativePath = getRelativeUploadPathFromInput(fromBody || fromQuery);
