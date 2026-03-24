@@ -32,6 +32,13 @@ import {
   XCircle,
 } from "lucide-react";
 
+function isAutomaticDailyChestDeposit(deposit) {
+  return (
+    String(deposit?.source_type || "").trim().toLowerCase() === "daily_chest_ticket_reward" ||
+    String(deposit?.processed_by_email || "").trim().toLowerCase() === "system:daily_chest"
+  );
+}
+
 function formatMoney(value) {
   const amount = Number(value || 0);
   return `R$ ${amount.toFixed(2)}`;
@@ -69,6 +76,7 @@ const EMPTY_INVALIDATE_FORM = {
 export default function DepositsTab() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeView, setActiveView] = useState("manual");
   const [selectedProofByDeposit, setSelectedProofByDeposit] = useState({});
   const [editingDeposit, setEditingDeposit] = useState(null);
   const [editForm, setEditForm] = useState(EMPTY_EDIT_FORM);
@@ -147,14 +155,34 @@ export default function DepositsTab() {
   };
 
   const filteredDeposits = useMemo(() => {
-    if (!searchTerm) return deposits;
+    const baseItems =
+      activeView === "automatic"
+        ? deposits.filter((deposit) => isAutomaticDailyChestDeposit(deposit))
+        : deposits.filter((deposit) => !isAutomaticDailyChestDeposit(deposit));
+
+    if (!searchTerm) return baseItems;
     const search = searchTerm.toLowerCase();
-    return deposits.filter((deposit) =>
+    return baseItems.filter((deposit) =>
       [deposit.user_name, deposit.user_email, deposit.user_platform_id]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(search))
     );
-  }, [deposits, searchTerm]);
+  }, [activeView, deposits, searchTerm]);
+
+  const depositBuckets = useMemo(() => {
+    const manual = [];
+    const automatic = [];
+
+    deposits.forEach((deposit) => {
+      if (isAutomaticDailyChestDeposit(deposit)) {
+        automatic.push(deposit);
+      } else {
+        manual.push(deposit);
+      }
+    });
+
+    return { manual, automatic };
+  }, [deposits]);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["admin-deposits-authoritative"] });
@@ -304,6 +332,30 @@ export default function DepositsTab() {
               Operação admin segura, auditável e sem reabrir `/api/entities`.
             </p>
           </div>
+          <div className="mt-4 inline-flex rounded-xl border border-purple-700/60 bg-slate-950/50 p-1">
+            <button
+              type="button"
+              onClick={() => setActiveView("manual")}
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                activeView === "manual"
+                  ? "bg-purple-600 text-white"
+                  : "text-purple-300 hover:bg-purple-900/40"
+              }`}
+            >
+              Manuais ({depositBuckets.manual.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveView("automatic")}
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                activeView === "automatic"
+                  ? "bg-cyan-600 text-white"
+                  : "text-cyan-300 hover:bg-cyan-950/40"
+              }`}
+            >
+              Automáticos do baú ({depositBuckets.automatic.length})
+            </button>
+          </div>
           <div className="w-full max-w-md">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-purple-400" />
@@ -315,6 +367,18 @@ export default function DepositsTab() {
               />
             </div>
           </div>
+        </div>
+
+        <div className="mb-4 rounded-xl border border-purple-700/40 bg-slate-950/40 px-4 py-3 text-sm">
+          {activeView === "manual" ? (
+            <p className="text-purple-200">
+              Esta visão mostra apenas os depósitos enviados manualmente pelos usuários para conferência e aprovação normal.
+            </p>
+          ) : (
+            <p className="text-cyan-200">
+              Esta visão mostra apenas os depósitos automáticos gerados pelo sistema para prêmios de bilhetes do Baú Diário.
+            </p>
+          )}
         </div>
 
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -352,6 +416,15 @@ export default function DepositsTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {false && !isLoading && filteredDeposits.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="py-8 text-center text-purple-200">
+                    {activeView === "automatic"
+                      ? "Nenhum depósito automático do baú encontrado."
+                      : "Nenhum depósito manual encontrado."}
+                  </TableCell>
+                </TableRow>
+              ) : null}
               {!isLoading && filteredDeposits.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="py-8 text-center text-purple-200">
@@ -366,6 +439,11 @@ export default function DepositsTab() {
                     <div className="truncate font-medium">{deposit.user_name || "Usuário"}</div>
                     <div className="truncate text-xs text-purple-400">{deposit.user_email || ""}</div>
                     <div className="truncate text-xs text-purple-500">{deposit.user_platform_id || "-"}</div>
+                    {isAutomaticDailyChestDeposit(deposit) ? (
+                      <div className="mt-1">
+                        <Badge className="bg-cyan-700 text-cyan-100">Baú Diário</Badge>
+                      </div>
+                    ) : null}
                   </TableCell>
                   <TableCell className="text-purple-300">{deposit.platform_name || "-"}</TableCell>
                   <TableCell className="font-bold text-green-400">{formatMoney(deposit.amount)}</TableCell>
