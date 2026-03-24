@@ -887,6 +887,8 @@ async function applyChestGrant({ userId, chestDayKey, rewardSnapshot, openingId 
 
 async function createPrizeGalleryItem({ userId, chestDayKey, opening, grantResult }) {
   const snapshot = opening?.reward_snapshot || {};
+  const adminName = String(snapshot?.adminContactName || snapshot?.admin_contact_name || "").trim();
+  const adminPhone = String(snapshot?.adminContactPhone || snapshot?.admin_contact_phone || "").trim();
   return createEntity("UserPrizeGalleryItem", {
     user_id: userId,
     source_type: "daily_chest",
@@ -908,6 +910,8 @@ async function createPrizeGalleryItem({ userId, chestDayKey, opening, grantResul
     metadata: {
       audit_id: grantResult?.auditId || "",
       validation_code: grantResult?.validationCode || opening?.id || "",
+      admin_name: adminName,
+      admin_phone: adminPhone,
       reward_snapshot: snapshot,
       grant_result: grantResult || {},
     },
@@ -954,6 +958,8 @@ async function createDailyChestAuditRecord({ userId, opening, grantResult, chest
     user_platform_id: user?.platform_id || "",
     prize_amount: Number(snapshot?.rewardAmount || 0),
     reward_type: resolveAuditPrizeKind(rewardType),
+    admin_name: String(snapshot?.adminContactName || snapshot?.admin_contact_name || "").trim(),
+    admin_phone: String(snapshot?.adminContactPhone || snapshot?.admin_contact_phone || "").trim(),
     validation_code: String(opening?.id || ""),
     opening_id: String(opening?.id || ""),
     chest_day_key: String(chestDayKey || ""),

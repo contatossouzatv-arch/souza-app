@@ -97,6 +97,8 @@ function getAdminContact(item, raffle = null) {
   const snapshot = item?.metadata?.reward_snapshot || {};
   const fallbackPhone = String(
     item?.metadata?.admin_phone ||
+      snapshot?.adminContactPhone ||
+      snapshot?.admin_contact_phone ||
       item?.metadata?.telegram_link ||
       raffle?.telegram_link ||
       ""
