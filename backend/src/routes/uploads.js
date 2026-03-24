@@ -91,6 +91,15 @@ function getRelativeUploadPathFromInput(input) {
   return "";
 }
 
+function getRelativeUploadPathFromRequestPath(input) {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+  const normalized = raw.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (normalized.startsWith("api/uploads/")) return normalized.slice("api/uploads/".length);
+  if (normalized.startsWith("uploads/")) return normalized.slice("uploads/".length);
+  return normalized;
+}
+
 function isAdminRequest(req) {
   return String(req.auth?.role || "user") === "admin";
 }
@@ -157,7 +166,7 @@ const upload = multer({
 const router = Router();
 
 router.get(/^\/(.+)/, async (req, res) => {
-  const relativePath = getRelativeUploadPathFromInput(req.path);
+  const relativePath = getRelativeUploadPathFromRequestPath(req.originalUrl || req.path);
   if (!relativePath) {
     return res.status(400).json({ error: "Valid upload path is required" });
   }
