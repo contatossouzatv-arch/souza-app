@@ -24,6 +24,7 @@ import {
   History,
   Image as ImageIcon,
   Pencil,
+  Plus,
   Search,
   Ticket,
   Trash2,
@@ -44,6 +45,28 @@ function formatMoney(value) {
   return `R$ ${amount.toFixed(2)}`;
 }
 
+function normalizeProofUrlList(values = []) {
+  return (Array.isArray(values) ? values : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+}
+
+function getProofFileLabel(value, index = 0) {
+  const raw = String(value || "").trim();
+  if (!raw) return `Comprovante ${index + 1}`;
+  try {
+    const parsed = new URL(raw, window.location.origin);
+    const parts = String(parsed.pathname || "")
+      .split("/")
+      .filter(Boolean);
+    return decodeURIComponent(parts[parts.length - 1] || `Comprovante ${index + 1}`);
+  } catch {
+    const normalized = raw.replace(/\\/g, "/");
+    const parts = normalized.split("/").filter(Boolean);
+    return parts[parts.length - 1] || `Comprovante ${index + 1}`;
+  }
+}
+
 function getStatusBadge(status) {
   const map = {
     pending: { label: "Em análise", className: "bg-orange-600" },
@@ -60,7 +83,8 @@ const EMPTY_EDIT_FORM = {
   platformName: "",
   userPlatformId: "",
   proofImageUrl: "",
-  proofImageUrls: "",
+  proofImageUrls: [],
+  newProofImageUrl: "",
   reason: "",
 };
 
@@ -259,7 +283,8 @@ export default function DepositsTab() {
       platformName: String(deposit.platform_name || ""),
       userPlatformId: String(deposit.user_platform_id || ""),
       proofImageUrl: String(deposit.proof_image_url || ""),
-      proofImageUrls: Array.isArray(deposit.proof_image_urls) ? deposit.proof_image_urls.join("\n") : "",
+      proofImageUrls: normalizeProofUrlList(deposit.proof_image_urls),
+      newProofImageUrl: "",
       reason: "",
     });
   };
@@ -270,16 +295,35 @@ export default function DepositsTab() {
       platformName: editForm.platformName,
       userPlatformId: editForm.userPlatformId,
       proofImageUrl: editForm.proofImageUrl,
-      proofImageUrls: editForm.proofImageUrls
-        .split("\n")
-        .map((item) => item.trim())
-        .filter(Boolean),
+      proofImageUrls: normalizeProofUrlList(editForm.proofImageUrls),
       reason: editForm.reason,
     };
     if (editingDeposit.status !== "approved") {
       payload.amount = Number(editForm.amount);
     }
     editMutation.mutate({ depositId: editingDeposit.id, payload });
+  };
+
+  const removeAdditionalProofAt = (indexToRemove) => {
+    setEditForm((prev) => ({
+      ...prev,
+      proofImageUrls: prev.proofImageUrls.filter((_, index) => index !== indexToRemove),
+    }));
+  };
+
+  const addAdditionalProof = () => {
+    const nextValue = String(editForm.newProofImageUrl || "").trim();
+    if (!nextValue) return;
+    setEditForm((prev) => {
+      if (prev.proofImageUrls.includes(nextValue)) {
+        return { ...prev, newProofImageUrl: "" };
+      }
+      return {
+        ...prev,
+        proofImageUrls: [...prev.proofImageUrls, nextValue],
+        newProofImageUrl: "",
+      };
+    });
   };
 
   const submitAdjust = () => {
@@ -493,7 +537,7 @@ export default function DepositsTab() {
                           <SelectContent>
                             {getDepositProofLinks(deposit).map((link, index) => (
                               <SelectItem key={`${deposit.id}-proof-${index}`} value={link}>
-                                {`Comprovante ${index + 1}`}
+                                {getProofFileLabel(link, index)}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -643,12 +687,48 @@ export default function DepositsTab() {
               </div>
               <div>
                 <Label>Comprovantes adicionais</Label>
-                <Input
-                  value={editForm.proofImageUrls}
-                  onChange={(event) => setEditForm((prev) => ({ ...prev, proofImageUrls: event.target.value }))}
-                  className="bg-purple-900/40"
-                  placeholder="Uma URL por linha"
-                />
+                <div className="space-y-3">
+                  {editForm.proofImageUrls.length > 0 ? (
+                    <div className="space-y-2 rounded-lg border border-purple-800/50 bg-slate-950/40 p-3">
+                      {editForm.proofImageUrls.map((url, index) => (
+                        <div
+                          key={`${url}-${index}`}
+                          className="flex items-center justify-between gap-3 rounded-lg border border-purple-900/40 bg-purple-950/30 px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-sm text-purple-100">{getProofFileLabel(url, index)}</div>
+                            <div className="truncate text-xs text-purple-400">{url}</div>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-rose-600 text-rose-300"
+                            onClick={() => removeAdditionalProofAt(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-purple-800/50 bg-slate-950/30 px-3 py-3 text-sm text-purple-400">
+                      Nenhum comprovante adicional.
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Input
+                      value={editForm.newProofImageUrl}
+                      onChange={(event) => setEditForm((prev) => ({ ...prev, newProofImageUrl: event.target.value }))}
+                      className="bg-purple-900/40"
+                      placeholder="Cole a URL de um comprovante adicional"
+                    />
+                    <Button type="button" onClick={addAdditionalProof} className="bg-cyan-600 hover:bg-cyan-700">
+                      <Plus className="mr-1 h-4 w-4" />
+                      Adicionar
+                    </Button>
+                  </div>
+                </div>
               </div>
               <div>
                 <Label>Motivo obrigatório</Label>
