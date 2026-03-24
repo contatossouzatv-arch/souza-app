@@ -8,7 +8,6 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -521,27 +520,33 @@ export default function DepositsTab() {
                   </TableCell>
                   <TableCell>
                     {getDepositProofLinks(deposit).length > 0 ? (
-                      <div className="min-w-[220px] space-y-2">
-                        <Select
-                          value={selectedProofByDeposit[deposit.id] || getDepositProofLinks(deposit)[0]}
-                          onValueChange={(value) =>
-                            setSelectedProofByDeposit((prev) => ({
-                              ...prev,
-                              [deposit.id]: value,
-                            }))
-                          }
-                        >
-                          <SelectTrigger className="h-9 border-blue-500/40 bg-slate-950/60 text-xs text-blue-100">
-                            <SelectValue placeholder="Selecione um comprovante" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {getDepositProofLinks(deposit).map((link, index) => (
-                              <SelectItem key={`${deposit.id}-proof-${index}`} value={link}>
-                                {getProofFileLabel(link, index)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                      <div className="min-w-[260px] space-y-2">
+                        <div className="space-y-2">
+                          {getDepositProofLinks(deposit).map((link, index) => {
+                            const isSelected =
+                              (selectedProofByDeposit[deposit.id] || getDepositProofLinks(deposit)[0]) === link;
+                            return (
+                              <button
+                                key={`${deposit.id}-proof-${index}`}
+                                type="button"
+                                onClick={() =>
+                                  setSelectedProofByDeposit((prev) => ({
+                                    ...prev,
+                                    [deposit.id]: link,
+                                  }))
+                                }
+                                className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-xs transition ${
+                                  isSelected
+                                    ? "border-cyan-400 bg-cyan-950/40 text-cyan-100"
+                                    : "border-blue-500/30 bg-slate-950/50 text-blue-100 hover:border-blue-400/60 hover:bg-blue-950/20"
+                                }`}
+                              >
+                                <span className="truncate">{getProofFileLabel(link, index)}</span>
+                                {isSelected ? <Badge className="bg-cyan-700 text-cyan-100">Selecionado</Badge> : null}
+                              </button>
+                            );
+                          })}
+                        </div>
                         <a
                           href={selectedProofByDeposit[deposit.id] || getDepositProofLinks(deposit)[0]}
                           target="_blank"
