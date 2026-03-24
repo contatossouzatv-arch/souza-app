@@ -51,19 +51,7 @@ function normalizeProofUrlList(values = []) {
 }
 
 function getProofFileLabel(value, index = 0) {
-  const raw = String(value || "").trim();
-  if (!raw) return `Comprovante ${index + 1}`;
-  try {
-    const parsed = new URL(raw, window.location.origin);
-    const parts = String(parsed.pathname || "")
-      .split("/")
-      .filter(Boolean);
-    return decodeURIComponent(parts[parts.length - 1] || `Comprovante ${index + 1}`);
-  } catch {
-    const normalized = raw.replace(/\\/g, "/");
-    const parts = normalized.split("/").filter(Boolean);
-    return parts[parts.length - 1] || `Comprovante ${index + 1}`;
-  }
+  return `Comprovante ${index + 1}`;
 }
 
 function getStatusBadge(status) {
