@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { motion } from "framer-motion";
 import { Instagram, MessageCircle, Youtube, Facebook, Twitter, Send } from "lucide-react";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 const SOCIAL_ICONS = {
   instagram: { Icon: Instagram, defaultGradient: ['#e4405f', '#f77737'] },
@@ -23,10 +24,7 @@ export default function SocialMediaBar() {
     },
   });
 
-  const { data: settings = [] } = useQuery({
-    queryKey: ['social-settings'],
-    queryFn: () => base44.entities.AppSettings.list(),
-  });
+  const { data: settings = [] } = useAppSettings();
 
   const getSettingValue = (key, defaultValue = "") => {
     const setting = settings.find(s => s.key === key);

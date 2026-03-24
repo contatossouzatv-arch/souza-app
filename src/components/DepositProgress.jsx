@@ -10,6 +10,7 @@ import CountdownTimer from "./CountdownTimer";
 import { toast } from "@/components/ui/use-toast";
 import { isInteractionSoundEnabled } from "@/lib/soundPrefs";
 import depositSuccessSound from "../../assets-para-app/moeda effect song deposit.mp3";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 export default function DepositProgress({ totalApproved, pendingAmount, user, onDepositSubmit, promoEndDate, activeCycle }) {
   const queryClient = useQueryClient();
@@ -34,10 +35,7 @@ export default function DepositProgress({ totalApproved, pendingAmount, user, on
     };
   }, []);
 
-  const { data: settings = [] } = useQuery({
-    queryKey: ["settings"],
-    queryFn: () => base44.entities.AppSettings.list(),
-  });
+  const { data: settings = [] } = useAppSettings();
 
   const { data: activePlatforms = [] } = useQuery({
     queryKey: ["active-platforms"],

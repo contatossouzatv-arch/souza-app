@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ArrowLeft, Award, Bell, CalendarDays, CheckCircle2, Eye, Heart, HelpCircle, ImageUp, Loader2, Lock, Pencil, Sparkles, Star, Trophy, UserPlus, Wallet, XCircle } from "lucide-react";
 import TechLoader from "@/components/TechLoader";
 import { useToast } from "@/components/ui/use-toast";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { useAuth } from "@/lib/AuthContext";
 import { createPageUrl } from "@/utils";
 import {
@@ -848,11 +849,7 @@ export default function Profile() {
     badgeCelebrationQueueRef.current.push(achievement);
     setBadgeCelebrationQueueSignal((prev) => prev + 1);
   };
-  const { data: achievementRulesSettings = [] } = useQuery({
-    queryKey: ["achievement-rules-profile-settings"],
-    queryFn: () => base44.entities.AppSettings.list(),
-    staleTime: 30000,
-  });
+  const { data: achievementRulesSettings = [] } = useAppSettings();
   const engagementGuideConfig = useMemo(() => {
     const rawValue = achievementRulesSettings.find((item) => item.key === PROFILE_ENGAGEMENT_GUIDE_KEY)?.value || "";
     return normalizeEngagementGuideConfig(parseJsonSetting(rawValue, DEFAULT_PROFILE_ENGAGEMENT_GUIDE_CONFIG));

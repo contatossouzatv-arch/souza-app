@@ -183,6 +183,35 @@ export default function GameCallDrawTab() {
   }, [activeRaffle]);
 
   useEffect(() => {
+    if (!activeRaffle) {
+      setFinalWinners([]);
+      setShowAnimation(false);
+      return;
+    }
+
+    const pendingIds = Array.isArray(activeRaffle.pending_draw_candidates)
+      ? activeRaffle.pending_draw_candidates.map((id) => String(id))
+      : [];
+
+    if (pendingIds.length === 0) {
+      if (!isDrawing) {
+        setFinalWinners([]);
+        setShowAnimation(false);
+      }
+      return;
+    }
+
+    const pendingWinners = pendingIds
+      .map((id) => participants.find((participant) => String(participant.id) === id))
+      .filter(Boolean);
+
+    if (pendingWinners.length > 0 && !isDrawing) {
+      setFinalWinners(pendingWinners);
+      setShowAnimation(false);
+    }
+  }, [activeRaffle, participants, isDrawing]);
+
+  useEffect(() => {
     const newParticles = Array.from({ length: 80 }, (_, i) => ({
       id: i,
       x: Math.random() * 100,
@@ -256,6 +285,8 @@ export default function GameCallDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-gamecall-participants'] });
       queryClient.invalidateQueries({ queryKey: ['validated-gamecall-winners'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
+      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
       queryClient.invalidateQueries({ queryKey: ['my-gamecall-participation'] });
       queryClient.invalidateQueries({ queryKey: ['winner-audits'] });
     },
@@ -266,6 +297,8 @@ export default function GameCallDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-gamecall-participants'] });
       queryClient.invalidateQueries({ queryKey: ['validated-gamecall-winners'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
+      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
       queryClient.invalidateQueries({ queryKey: ['my-gamecall-participation'] });
       queryClient.invalidateQueries({ queryKey: ['winner-audits'] });
     },
@@ -276,18 +309,26 @@ export default function GameCallDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-gamecall-participants'] });
       queryClient.invalidateQueries({ queryKey: ['validated-gamecall-winners'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
+      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
     },
   });
 
   const clearParticipantsMutation = useMutation({
     mutationFn: async () => base44.adminEvents.gameCalls.clearParticipants(activeRaffle.id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-gamecall-participants'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-gamecall-participants'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
+      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
+    },
   });
 
   const removeParticipantMutation = useMutation({
     mutationFn: (participantId) => base44.adminEvents.gameCalls.removeParticipant(participantId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-gamecall-participants'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
+      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
       queryClient.invalidateQueries({ queryKey: ['my-gamecall-participation'] });
     },
   });
@@ -296,6 +337,8 @@ export default function GameCallDrawTab() {
     mutationFn: (participantId) => base44.adminEvents.gameCalls.updateParticipant(participantId, "reactivate"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-gamecall-participants'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
+      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
       queryClient.invalidateQueries({ queryKey: ['my-gamecall-participation'] });
     },
   });
@@ -310,6 +353,10 @@ export default function GameCallDrawTab() {
 
   const drawMutation = useMutation({
     mutationFn: ({ raffleId, winnerCount }) => base44.adminEvents.gameCalls.draw(raffleId, { winnerCount }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
+      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
+    },
   });
 
   const handleDraw = async () => {

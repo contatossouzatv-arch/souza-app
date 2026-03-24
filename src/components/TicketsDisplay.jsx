@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Ticket, Trophy, ChevronDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 export default function TicketsDisplay({
   deposits,
@@ -14,10 +15,7 @@ export default function TicketsDisplay({
 }) {
   const [expanded, setExpanded] = useState(false);
 
-  const { data: settings = [] } = useQuery({
-    queryKey: ["tickets-settings"],
-    queryFn: () => base44.entities.AppSettings.list(),
-  });
+  const { data: settings = [] } = useAppSettings();
 
   const { data: cycles = [] } = useQuery({
     queryKey: ["deposit-cycles-user"],

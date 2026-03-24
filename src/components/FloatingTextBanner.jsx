@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
 import { motion, AnimatePresence } from "framer-motion";
 import { Coins, Trophy, Crown, Dices, Gem } from "lucide-react";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 const CASINOO_ICOONS = [
   { Icon: Coins, color: "text-yellow-400" },
@@ -17,10 +16,7 @@ export default function FloatingTextBanner() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [floatingIcons, setFloatingIcons] = useState([]);
 
-  const { data: settings = [] } = useQuery({
-    queryKey: ['floating-banner-settings'],
-    queryFn: () => base44.entities.AppSettings.list(),
-  });
+  const { data: settings = [] } = useAppSettings();
 
   const getSettingValue = (key, defaultValue) => {
     const setting = settings.find(s => s.key === key);

@@ -1,14 +1,10 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { ExternalLink, Sparkles, Trophy, Zap } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 export default function CallToActionBox() {
-  const { data: settings = [] } = useQuery({
-    queryKey: ['cta-settings'],
-    queryFn: () => base44.entities.AppSettings.list(),
-  });
+  const { data: settings = [] } = useAppSettings();
 
   const getSettingValue = (key, defaultValue = "") => {
     const setting = settings.find(s => s.key === key);

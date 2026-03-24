@@ -320,6 +320,12 @@ export async function ensureDb() {
   await pool.query(
     "CREATE INDEX IF NOT EXISTS idx_entity_records_entity_name ON entity_records(entity_name)"
   );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_entity_records_entity_created_at ON entity_records(entity_name, created_at DESC)"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_entity_records_data_gin ON entity_records USING GIN (data)"
+  );
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS deposit_ticket_counters (
@@ -1405,6 +1411,280 @@ function applyLimit(rows, limit) {
   const parsed = Number(limit);
   if (!Number.isFinite(parsed) || parsed <= 0) return rows;
   return rows.slice(0, parsed);
+}
+
+function parseSortSpec(sort, defaultField = "created_date", defaultDirection = "desc") {
+  if (!sort || typeof sort !== "string") {
+    return {
+      field: defaultField,
+      direction: defaultDirection,
+    };
+  }
+
+  const descending = sort.startsWith("-");
+  const field = (descending ? sort.slice(1) : sort).trim() || defaultField;
+  return {
+    field,
+    direction: descending ? "desc" : "asc",
+  };
+}
+
+function getNullsPlacement(direction = "asc") {
+  return direction === "asc" ? "NULLS FIRST" : "NULLS LAST";
+}
+
+function pushSqlValue(values, value) {
+  values.push(value);
+  return `$${values.length}`;
+}
+
+function buildEntityRecordScalarPredicate({ values, key, value, negate = false }) {
+  const keyParam = pushSqlValue(values, String(key));
+  const extractorText = `jsonb_extract_path_text(data, ${keyParam})`;
+  const extractorJson = `jsonb_extract_path(data, ${keyParam})`;
+
+  if (value === null) {
+    if (negate) {
+      return `(${extractorJson} IS NULL OR ${extractorJson} <> 'null'::jsonb)`;
+    }
+    return `${extractorJson} = 'null'::jsonb`;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const valueParam = pushSqlValue(values, value);
+    if (negate) {
+      return `(${extractorText} IS NULL OR (CASE WHEN ${extractorText} ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (${extractorText})::numeric END) <> ${valueParam})`;
+    }
+    return `(CASE WHEN ${extractorText} ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (${extractorText})::numeric END) = ${valueParam}`;
+  }
+
+  if (typeof value === "boolean") {
+    const valueParam = pushSqlValue(values, value);
+    if (negate) {
+      return `(${extractorText} IS NULL OR (CASE WHEN LOWER(${extractorText}) IN ('true', 'false') THEN LOWER(${extractorText})::boolean END) <> ${valueParam})`;
+    }
+    return `(CASE WHEN LOWER(${extractorText}) IN ('true', 'false') THEN LOWER(${extractorText})::boolean END) = ${valueParam}`;
+  }
+
+  const valueParam = pushSqlValue(values, String(value));
+  if (negate) {
+    return `(${extractorText} IS NULL OR ${extractorText} <> ${valueParam})`;
+  }
+  return `${extractorText} = ${valueParam}`;
+}
+
+function buildEntityRecordFiltersSql(filters = {}, startingValues = []) {
+  const values = [...startingValues];
+  const clauses = [];
+
+  Object.entries(filters || {}).forEach(([key, rawValue]) => {
+    if (rawValue === undefined) return;
+
+    if (Array.isArray(rawValue)) {
+      if (rawValue.length === 0) {
+        clauses.push("1 = 0");
+        return;
+      }
+
+      const keyParam = pushSqlValue(values, String(key));
+      const valuesParam = pushSqlValue(values, rawValue.map((item) => String(item)));
+      clauses.push(`jsonb_extract_path_text(data, ${keyParam}) = ANY(${valuesParam}::text[])`);
+      return;
+    }
+
+    if (rawValue !== null && typeof rawValue === "object") {
+      if ("$in" in rawValue && Array.isArray(rawValue.$in)) {
+        if (rawValue.$in.length === 0) {
+          clauses.push("1 = 0");
+        } else {
+          const keyParam = pushSqlValue(values, String(key));
+          const valuesParam = pushSqlValue(values, rawValue.$in.map((item) => String(item)));
+          clauses.push(`jsonb_extract_path_text(data, ${keyParam}) = ANY(${valuesParam}::text[])`);
+        }
+      }
+
+      if ("$ne" in rawValue) {
+        clauses.push(buildEntityRecordScalarPredicate({
+          values,
+          key,
+          value: rawValue.$ne,
+          negate: true,
+        }));
+      }
+      return;
+    }
+
+    clauses.push(buildEntityRecordScalarPredicate({
+      values,
+      key,
+      value: rawValue,
+      negate: false,
+    }));
+  });
+
+  return { clauses, values };
+}
+
+function buildEntityRecordOrderBySql(sort, values) {
+  const { field, direction } = parseSortSpec(sort);
+  const nulls = getNullsPlacement(direction);
+
+  if (field === "created_date" || field === "created_at") {
+    return {
+      clause: `ORDER BY created_at ${direction.toUpperCase()} ${nulls}, id ASC`,
+      values,
+    };
+  }
+
+  if (field === "updated_date" || field === "updated_at") {
+    return {
+      clause: `ORDER BY updated_at ${direction.toUpperCase()} ${nulls}, id ASC`,
+      values,
+    };
+  }
+
+  if (field === "id") {
+    return {
+      clause: `ORDER BY id ${direction.toUpperCase()} ${nulls}`,
+      values,
+    };
+  }
+
+  const keyParam = pushSqlValue(values, field);
+  const extractedText = `jsonb_extract_path_text(data, ${keyParam})`;
+  return {
+    clause: `ORDER BY
+      CASE
+        WHEN ${extractedText} ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (${extractedText})::numeric
+        ELSE NULL
+      END ${direction.toUpperCase()} ${nulls},
+      LOWER(COALESCE(${extractedText}, '')) ${direction.toUpperCase()} ${nulls},
+      created_at DESC,
+      id ASC`,
+    values,
+  };
+}
+
+const USER_SORT_COLUMN_MAP = {
+  id: "id",
+  email: "email",
+  full_name: "full_name",
+  nick: "nick",
+  phone: "phone",
+  platform_id: "platform_id",
+  role: "role",
+  account_status: "account_status",
+  profile_image_status: "profile_image_status",
+  created_at: "created_at",
+  created_date: "created_at",
+  updated_at: "updated_at",
+  updated_date: "updated_at",
+};
+
+const USER_FILTER_COLUMN_MAP = {
+  id: "id",
+  email: "email",
+  full_name: "full_name",
+  nick: "nick",
+  phone: "phone",
+  platform_id: "platform_id",
+  avatar_emoji: "avatar_emoji",
+  profile_avatar_id: "profile_avatar_id",
+  profile_image_mode: "profile_image_mode",
+  profile_image_status: "profile_image_status",
+  account_status: "account_status",
+  role: "role",
+  created_at: "created_at",
+  updated_at: "updated_at",
+};
+
+function buildUserScalarPredicate({ values, column, value, negate = false }) {
+  const operator = negate ? "<>" : "=";
+
+  if (value === null) {
+    return negate ? `${column} IS NOT NULL` : `${column} IS NULL`;
+  }
+
+  const valueParam = pushSqlValue(values, value);
+  if (typeof value === "boolean") {
+    return `${column} ${operator} ${valueParam}`;
+  }
+
+  return `${column} ${operator} ${valueParam}`;
+}
+
+function buildUserFiltersSql(filters = {}, startingValues = []) {
+  const values = [...startingValues];
+  const clauses = [];
+
+  Object.entries(filters || {}).forEach(([key, rawValue]) => {
+    const column = USER_FILTER_COLUMN_MAP[key];
+    if (rawValue === undefined) return;
+    if (!column) {
+      clauses.push("1 = 0");
+      return;
+    }
+
+    if (Array.isArray(rawValue)) {
+      if (rawValue.length === 0) {
+        clauses.push("1 = 0");
+        return;
+      }
+      const parts = rawValue.map((item) =>
+        buildUserScalarPredicate({
+          values,
+          column,
+          value: item,
+          negate: false,
+        })
+      );
+      clauses.push(`(${parts.join(" OR ")})`);
+      return;
+    }
+
+    if (rawValue !== null && typeof rawValue === "object") {
+      if ("$in" in rawValue && Array.isArray(rawValue.$in)) {
+        if (rawValue.$in.length === 0) {
+          clauses.push("1 = 0");
+        } else {
+          const parts = rawValue.$in.map((item) =>
+            buildUserScalarPredicate({
+              values,
+              column,
+              value: item,
+              negate: false,
+            })
+          );
+          clauses.push(`(${parts.join(" OR ")})`);
+        }
+      }
+      if ("$ne" in rawValue) {
+        clauses.push(buildUserScalarPredicate({
+          values,
+          column,
+          value: rawValue.$ne,
+          negate: true,
+        }));
+      }
+      return;
+    }
+
+    clauses.push(buildUserScalarPredicate({
+      values,
+      column,
+      value: rawValue,
+      negate: false,
+    }));
+  });
+
+  return { clauses, values };
+}
+
+function buildUserOrderBySql(sort) {
+  const { field, direction } = parseSortSpec(sort, "created_date", "desc");
+  const column = USER_SORT_COLUMN_MAP[field] || "created_at";
+  const nulls = getNullsPlacement(direction);
+  return `ORDER BY ${column} ${direction.toUpperCase()} ${nulls}, id ASC`;
 }
 
 export function getEntityRecordData(row) {
@@ -3359,24 +3639,73 @@ function matchesFilters(row, filters = {}) {
 
 export async function listEntity(entityName, sort, limit) {
   if (entityName === "User") {
-    const users = await pool.query("SELECT * FROM users ORDER BY created_at DESC");
-    const mapped = users.rows.map(normalizeUser);
-    return applyLimit(applySort(mapped, sort), limit);
+    const values = [];
+    let query = `SELECT * FROM users ${buildUserOrderBySql(sort)}`;
+    const parsedLimit = Number(limit);
+    if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
+      query += ` LIMIT ${pushSqlValue(values, parsedLimit)}`;
+    }
+
+    const users = await pool.query(query, values);
+    return users.rows.map(normalizeUser);
   }
 
+  const baseValues = [entityName];
+  const { clause: orderByClause, values: orderByValues } = buildEntityRecordOrderBySql(sort, [...baseValues]);
+  const parsedLimit = Number(limit);
+  const limitClause =
+    Number.isFinite(parsedLimit) && parsedLimit > 0 ? ` LIMIT ${pushSqlValue(orderByValues, parsedLimit)}` : "";
   const result = await pool.query(
-    "SELECT * FROM entity_records WHERE entity_name = $1 ORDER BY created_at DESC",
-    [entityName]
+    `SELECT *
+     FROM entity_records
+     WHERE entity_name = $1
+     ${orderByClause}
+     ${limitClause}`,
+    orderByValues
   );
 
-  const rows = result.rows.map(normalizeRecord);
-  return applyLimit(applySort(rows, sort), limit);
+  return result.rows.map(normalizeRecord);
 }
 
 export async function filterEntity(entityName, filters, sort, limit) {
-  const rows = await listEntity(entityName, null, null);
-  const filtered = rows.filter((row) => matchesFilters(row, filters));
-  return applyLimit(applySort(filtered, sort), limit);
+  if (entityName === "User") {
+    const { clauses, values } = buildUserFiltersSql(filters);
+    const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+    const orderByClause = buildUserOrderBySql(sort);
+    const parsedLimit = Number(limit);
+    const limitClause =
+      Number.isFinite(parsedLimit) && parsedLimit > 0 ? ` LIMIT ${pushSqlValue(values, parsedLimit)}` : "";
+
+    const result = await pool.query(
+      `SELECT *
+       FROM users
+       ${whereClause}
+       ${orderByClause}
+       ${limitClause}`,
+      values
+    );
+
+    return result.rows.map(normalizeUser);
+  }
+
+  const { clauses, values } = buildEntityRecordFiltersSql(filters, [entityName]);
+  const whereClause = clauses.length > 0 ? ` AND ${clauses.join(" AND ")}` : "";
+  const { clause: orderByClause, values: orderByValues } = buildEntityRecordOrderBySql(sort, values);
+  const parsedLimit = Number(limit);
+  const limitClause =
+    Number.isFinite(parsedLimit) && parsedLimit > 0 ? ` LIMIT ${pushSqlValue(orderByValues, parsedLimit)}` : "";
+
+  const result = await pool.query(
+    `SELECT *
+     FROM entity_records
+     WHERE entity_name = $1
+     ${whereClause}
+     ${orderByClause}
+     ${limitClause}`,
+    orderByValues
+  );
+
+  return result.rows.map(normalizeRecord);
 }
 
 export async function getEntityById(entityName, id) {

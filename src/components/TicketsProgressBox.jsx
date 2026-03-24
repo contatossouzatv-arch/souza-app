@@ -11,6 +11,7 @@ import CountdownTimer from "./CountdownTimer";
 import { toast } from "@/components/ui/use-toast";
 import { isInteractionSoundEnabled } from "@/lib/soundPrefs";
 import depositSuccessSound from "../../assets-para-app/moeda effect song deposit.mp3";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 const SUPPORTED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp|gif)$/i;
 const SUPPORTED_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
@@ -73,10 +74,7 @@ export default function TicketsProgressBox({
     };
   }, []);
 
-  const { data: settings = [] } = useQuery({
-    queryKey: ["settings"],
-    queryFn: () => base44.entities.AppSettings.list(),
-  });
+  const { data: settings = [] } = useAppSettings();
 
   const { data: activePlatforms = [] } = useQuery({
     queryKey: ["active-platforms"],

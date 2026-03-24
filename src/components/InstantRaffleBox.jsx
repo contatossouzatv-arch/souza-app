@@ -6,6 +6,7 @@ import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { buildWhatsAppLink } from "@/lib/whatsapp";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 export default function InstantRaffleBox({ user }) {
   const queryClient = useQueryClient();
@@ -13,23 +14,13 @@ export default function InstantRaffleBox({ user }) {
   const [isShaking, setIsShaking] = useState(false);
 
   const { data: activeRaffle } = useQuery({
-    queryKey: ['active-instant-raffle'],
-    queryFn: async () => {
-      const raffles = await base44.entities.InstantRaffle.filter({ active: true, ended: false });
-      return raffles[0] || null;
-    },
+    queryKey: ['active-instant-raffles'],
+    queryFn: () => base44.entities.InstantRaffle.filter({ active: true, ended: false }),
+    select: (raffles) => raffles[0] || null,
+    staleTime: 15_000,
   });
 
-  const { data: settings = [] } = useQuery({
-    queryKey: ['settings'],
-    queryFn: () => base44.entities.AppSettings.list(),
-  });
-
-  const { data: raffleUsers = [] } = useQuery({
-    queryKey: ['instant-raffle-users'],
-    queryFn: () => base44.entities.User.list(),
-    enabled: !!activeRaffle,
-  });
+  const { data: settings = [] } = useAppSettings();
 
   const { data: myParticipationRaw } = useQuery({
     queryKey: ['my-instant-participation', activeRaffle?.id, user?.id],
@@ -82,25 +73,15 @@ export default function InstantRaffleBox({ user }) {
 
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const usersById = React.useMemo(() => {
-    const map = new Map();
-    raffleUsers.forEach((raffleUser) => map.set(raffleUser.id, raffleUser));
-    return map;
-  }, [raffleUsers]);
-
   const getParticipantVisual = React.useCallback((participant) => {
-    const linkedUser = usersById.get(participant.user_id);
-    const hasApprovedPhoto =
-      linkedUser?.profile_image_mode === "photo" &&
-      linkedUser?.profile_image_status === "approved" &&
-      linkedUser?.profile_image_url;
+    const profileImageUrl = String(participant?.user_profile_image_url || "").trim();
 
     return {
-      imageUrl: hasApprovedPhoto ? resolveAssetUrl(linkedUser.profile_image_url) : null,
-      avatarFallback: linkedUser?.avatar_emoji || participant.user_avatar || "U",
+      imageUrl: profileImageUrl ? resolveAssetUrl(profileImageUrl) : null,
+      avatarFallback: participant.user_avatar || "U",
       displayName: participant.user_nick || participant.user_name || "Participante",
     };
-  }, [usersById]);
+  }, []);
 
   const participateMutation = useMutation({
     mutationFn: async () => base44.instantRaffles.join(activeRaffle.id),

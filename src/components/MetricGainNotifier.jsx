@@ -254,20 +254,20 @@ const { data: profileMetrics } = useQuery({
   queryKey: ["profile-gamification-authoritative", user?.id],
   queryFn: () => base44.gamification.profileMetrics(),
   enabled: Boolean(isAuthenticated && user?.id),
-  staleTime: 0,
-  refetchInterval: 5000,
-  refetchIntervalInBackground: true,
-  refetchOnWindowFocus: true,
+  staleTime: 60_000,
+  gcTime: 15 * 60 * 1000,
+  refetchOnMount: false,
+  refetchOnWindowFocus: false,
 });
 
 const { data: profileHistory } = useQuery({
   queryKey: ["profile-history-authoritative", user?.id],
   queryFn: () => base44.gamification.profileHistory(),
   enabled: Boolean(isAuthenticated && user?.id),
-  staleTime: 0,
-  refetchInterval: 5000,
-  refetchIntervalInBackground: true,
-  refetchOnWindowFocus: true,
+  staleTime: 60_000,
+  gcTime: 15 * 60 * 1000,
+  refetchOnMount: false,
+  refetchOnWindowFocus: false,
 });
 
   React.useEffect(() => {

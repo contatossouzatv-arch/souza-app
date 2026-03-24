@@ -18,6 +18,7 @@ import bannerSorteio from "../../assets-para-app/banner sorteio.png";
 import LegalLinksBar from "@/components/LegalLinksBar";
 import { useAuth } from "@/lib/AuthContext";
 import { getProfileAvatarFallback, getProfileAvatarSrc } from "@/lib/profileMedia";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 const avatarModules = import.meta.glob("../../assets-para-app/avatar/*.png", {
   eager: true,
@@ -80,11 +81,8 @@ export default function Deposits() {
     staleTime: 60000,
   });
 
-  const { data: settings = [], isLoading: settingsLoading } = useQuery({
-    queryKey: ["settings"],
-    queryFn: () => base44.entities.AppSettings.list(),
+  const { data: settings = [], isLoading: settingsLoading } = useAppSettings({
     enabled: !!user,
-    staleTime: 300000,
   });
 
   const { data: cycles = [] } = useQuery({

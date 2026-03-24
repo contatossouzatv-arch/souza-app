@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { Check, CircleHelp, ExternalLink, ShieldCheck, Sparkles } from "lucide-react";
 import caricaturaSouza from "../../assets-para-app/13a71c5e4_caricatura-001.png";
 import profileCoverTile from "../../assets-para-app/profile-cover-tile.png";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 const stepTitles = {
   1: "Regras e segurança",
@@ -40,10 +41,7 @@ export default function Onboarding() {
   const [acceptPrivacy, setAcceptPrivacy] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const { data: settings = [] } = useQuery({
-    queryKey: ["onboarding-settings"],
-    queryFn: () => base44.entities.AppSettings.list(),
-  });
+  const { data: settings = [] } = useAppSettings();
 
   const { data: platforms = [] } = useQuery({
     queryKey: ["current-platform-onboarding"],

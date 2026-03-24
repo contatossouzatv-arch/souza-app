@@ -7,6 +7,7 @@ import { Trophy, ExternalLink, Check, Calendar } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { buildWhatsAppLink } from "@/lib/whatsapp";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 export default function WinnerNotification({ userId }) {
   const queryClient = useQueryClient();
@@ -30,10 +31,7 @@ export default function WinnerNotification({ userId }) {
       }),
   });
 
-  const { data: settings = [] } = useQuery({
-    queryKey: ["winner-settings"],
-    queryFn: () => base44.entities.AppSettings.list(),
-  });
+  const { data: settings = [] } = useAppSettings();
 
   const { data: raffles = [] } = useQuery({
     queryKey: ["winner-raffles"],
@@ -69,7 +67,7 @@ export default function WinnerNotification({ userId }) {
   const prizeAmount = Number(
     isDepositantWinning
       ? currentWinning?.prize_amount
-      : raffle?.prize_amount || 0
+      : currentWinning?.prize_amount || raffle?.prize_amount || 0
   );
 
   const raffleTitle = isDepositantWinning

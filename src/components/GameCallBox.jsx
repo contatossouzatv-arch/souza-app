@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Gamepad2, ExternalLink, AlertTriangle, Check, Edit, PartyPopper } from "lucide-react";
 import { format } from "date-fns";
 import { buildWhatsAppLink } from "@/lib/whatsapp";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 export default function GameCallBox({ user }) {
   const queryClient = useQueryClient();
@@ -15,11 +16,10 @@ export default function GameCallBox({ user }) {
   const [isEditing, setIsEditing] = useState(false);
 
   const { data: activeRaffle } = useQuery({
-    queryKey: ['active-gamecall-raffle'],
-    queryFn: async () => {
-      const raffles = await base44.entities.GameCallRaffle.filter({ active: true, ended: false });
-      return raffles[0] || null;
-    },
+    queryKey: ['active-gamecall-raffles'],
+    queryFn: () => base44.entities.GameCallRaffle.filter({ active: true, ended: false }),
+    select: (raffles) => raffles[0] || null,
+    staleTime: 15_000,
   });
 
   const { data: myParticipation } = useQuery({
@@ -35,10 +35,7 @@ export default function GameCallBox({ user }) {
     enabled: !!activeRaffle && !!user,
   });
 
-  const { data: settings = [] } = useQuery({
-    queryKey: ['gamecall-settings'],
-    queryFn: () => base44.entities.AppSettings.list(),
-  });
+  const { data: settings = [] } = useAppSettings();
 
   const whatsappRedeemLink = settings.find((s) => s.key === "cashback_redeem_link")?.value || "#";
   const hasApprovedPhoto = Boolean(user?.profile_image_status === "approved" && user?.profile_image_url);

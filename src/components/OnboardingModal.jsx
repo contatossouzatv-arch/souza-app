@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Check, CircleHelp, ExternalLink, Sparkles } from "lucide-react";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 export default function OnboardingModal({ open, onComplete }) {
   const [step, setStep] = useState(1);
@@ -15,10 +16,7 @@ export default function OnboardingModal({ open, onComplete }) {
   const [acceptPrivacy, setAcceptPrivacy] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const { data: settings = [] } = useQuery({
-    queryKey: ["onboarding-settings"],
-    queryFn: () => base44.entities.AppSettings.list(),
-  });
+  const { data: settings = [] } = useAppSettings();
 
   const { data: platforms = [] } = useQuery({
     queryKey: ["current-platform-onboarding"],

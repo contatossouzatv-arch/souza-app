@@ -4,25 +4,23 @@ import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Zap, Sparkles, Trophy, ExternalLink, Heart } from "lucide-react";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 export default function LiveDrawBox({ user }) {
   const queryClient = useQueryClient();
 
-  const { data: settings = [] } = useQuery({
-    queryKey: ["live-settings"],
-    queryFn: () => base44.entities.AppSettings.list(),
-  });
+  const { data: settings = [] } = useAppSettings();
 
   const liveLink = settings.find((s) => s.key === "live_link")?.value || "";
 
   const { data: activeRaffle = null } = useQuery({
-    queryKey: ["active-live-raffle-box"],
-    queryFn: async () => {
-      const raffles = await base44.entities.LiveDrawRaffle.filter({ active: true, ended: false });
-      return raffles[0] || null;
-    },
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
+    queryKey: ["active-live-raffles"],
+    queryFn: () => base44.entities.LiveDrawRaffle.filter({ active: true, ended: false }),
+    select: (raffles) => raffles[0] || null,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
 
   const { data: myParticipation = [] } = useQuery({
@@ -33,8 +31,8 @@ export default function LiveDrawBox({ user }) {
         user_id: user.id,
       }),
     enabled: !!activeRaffle && !!user?.id,
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
   });
 
   const hasParticipated = myParticipation.length > 0;
