@@ -16,6 +16,20 @@ function formatMoney(value) {
   }).format(Number(value || 0));
 }
 
+function formatWinnerDateTime(value) {
+  if (!value) return "Data nao informada";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Data nao informada";
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date);
+}
+
 function WinnerAvatar({ winner }) {
   const imageUrl = resolveAssetUrl(winner?.profile_image_url || "");
   if (imageUrl) {
@@ -209,6 +223,11 @@ export default function WinnersHistoryBox() {
                                 <span>Validado</span>
                               </div>
                             </div>
+                          </div>
+
+                          <div className="mt-3 rounded-2xl border border-white/8 bg-slate-900/70 px-3 py-3">
+                            <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Data e horario</p>
+                            <p className="mt-1 text-xs font-semibold text-slate-200">{formatWinnerDateTime(winner.drawn_at)}</p>
                           </div>
                         </div>
                       ))}

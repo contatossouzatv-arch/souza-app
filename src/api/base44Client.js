@@ -51,6 +51,13 @@ export function resolveAssetUrl(rawUrl) {
   if (!value) return "";
   if (value.startsWith("blob:") || value.startsWith("data:")) return value;
 
+  const normalizeUploadPath = (pathname = "") => {
+    const safePath = String(pathname || "").replace(/\\/g, "/");
+    if (safePath.startsWith("/api/uploads/")) return safePath;
+    if (safePath.startsWith("/uploads/")) return `/api${safePath}`;
+    return safePath;
+  };
+
   try {
     if (value.startsWith("http://") || value.startsWith("https://")) {
       const parsed = new URL(value);
@@ -61,13 +68,19 @@ export function resolveAssetUrl(rawUrl) {
       if (uploadLikePath && parsed.host !== api.host) {
         parsed.protocol = api.protocol;
         parsed.host = api.host;
+        parsed.pathname = normalizeUploadPath(parsed.pathname);
         return parsed.toString();
       }
 
       if (isLocalHost(parsed.hostname) && !isLocalHost(api.hostname)) {
         parsed.protocol = api.protocol;
         parsed.host = api.host;
+        parsed.pathname = normalizeUploadPath(parsed.pathname);
         return parsed.toString();
+      }
+
+      if (uploadLikePath) {
+        parsed.pathname = normalizeUploadPath(parsed.pathname);
       }
 
       return parsed.toString();
@@ -77,10 +90,10 @@ export function resolveAssetUrl(rawUrl) {
   }
 
   if (value.startsWith("/")) {
-    return `${API_BASE_URL}${value}`;
+    return `${API_BASE_URL}${normalizeUploadPath(value)}`;
   }
 
-  return `${API_BASE_URL}/${value.replace(/^\/+/, "")}`;
+  return `${API_BASE_URL}/${normalizeUploadPath(`/${value.replace(/^\/+/, "")}`).replace(/^\/+/, "")}`;
 }
 
 async function parseResponse(response) {

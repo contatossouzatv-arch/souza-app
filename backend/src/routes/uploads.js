@@ -56,7 +56,10 @@ function sanitizeFileName(value, originalName) {
 
 function buildUploadUrl(relativePath) {
   const configuredBase = String(env.uploadsBaseUrl || "").trim().replace(/\/$/, "");
-  const normalized = `/${String(relativePath || "").replace(/^\/+/, "")}`;
+  const rawNormalized = `/${String(relativePath || "").replace(/^\/+/, "")}`;
+  const normalized = rawNormalized.startsWith("/uploads/")
+    ? `/api${rawNormalized}`
+    : rawNormalized;
   if (!configuredBase) return normalized;
   try {
     const url = new URL(configuredBase);

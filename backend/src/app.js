@@ -122,6 +122,7 @@ export function createApp(io) {
   });
 
   app.use("/uploads", express.static(uploadsDir));
+  app.use("/api/uploads", express.static(uploadsDir));
 
   app.use("/api/auth", authApiRateLimiter, authRoutes);
   app.use("/api", apiRateLimiter);
