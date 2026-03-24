@@ -4,7 +4,7 @@ import { Router } from "express";
 import multer from "multer";
 import { env } from "../config/env.js";
 import { requireAuth } from "../middleware/auth.js";
-import { uploadsDir } from "../lib/paths.js";
+import { genericUploadsDir, uploadsDir } from "../lib/paths.js";
 
 const MAX_UPLOAD_SIZE_BYTES = 40 * 1024 * 1024;
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"]);
@@ -28,6 +28,8 @@ const ALLOWED_MIME_TYPES = new Set([
   "application/octet-stream",
   "application/json",
 ]);
+
+const uploadRoots = Array.from(new Set([path.resolve(genericUploadsDir), path.resolve(uploadsDir)]));
 
 function sanitizeSegment(value) {
   return String(value || "")
@@ -129,11 +131,32 @@ function canDeleteRelativePath(req, relativePath) {
   return String(relativePath || "").replace(/\\/g, "/").startsWith(userPrefix);
 }
 
+function resolvePathInsideRoot(rootDir, relativePath) {
+  const normalizedRoot = path.resolve(rootDir);
+  const absolutePath = path.resolve(normalizedRoot, relativePath);
+  if (!absolutePath.startsWith(normalizedRoot)) return null;
+  return absolutePath;
+}
+
+async function findExistingUploadPath(relativePath) {
+  for (const rootDir of uploadRoots) {
+    const absolutePath = resolvePathInsideRoot(rootDir, relativePath);
+    if (!absolutePath) continue;
+    try {
+      await fs.promises.access(absolutePath, fs.constants.R_OK);
+      return absolutePath;
+    } catch {
+      // try next root
+    }
+  }
+  return null;
+}
+
 const storage = multer.diskStorage({
   destination: async (req, _file, cb) => {
     try {
       const subFolder = resolveScopedFolder(req);
-      const fullDir = subFolder ? path.resolve(uploadsDir, subFolder) : uploadsDir;
+      const fullDir = subFolder ? path.resolve(genericUploadsDir, subFolder) : genericUploadsDir;
       await fs.promises.mkdir(fullDir, { recursive: true });
       cb(null, fullDir);
     } catch (error) {
@@ -171,14 +194,16 @@ router.get(/^\/(.+)/, async (req, res) => {
     return res.status(400).json({ error: "Valid upload path is required" });
   }
 
-  const absolutePath = path.resolve(uploadsDir, relativePath);
-  const normalizedRoot = path.resolve(uploadsDir);
-  if (!absolutePath.startsWith(normalizedRoot)) {
-    return res.status(400).json({ error: "Invalid upload path" });
+  const absolutePath = await findExistingUploadPath(relativePath);
+  if (!absolutePath) {
+    const insideAnyRoot = uploadRoots.some((rootDir) => resolvePathInsideRoot(rootDir, relativePath));
+    if (!insideAnyRoot) {
+      return res.status(400).json({ error: "Invalid upload path" });
+    }
+    return res.status(404).json({ error: "File not found" });
   }
 
   try {
-    await fs.promises.access(absolutePath, fs.constants.R_OK);
     return res.sendFile(absolutePath);
   } catch (error) {
     if (error?.code === "ENOENT") {
@@ -194,7 +219,7 @@ router.post("/", requireAuth, upload.single("file"), (req, res) => {
   }
 
   const absoluteSavedPath = path.resolve(req.file.path);
-  const relativeToUploadDir = path.relative(uploadsDir, absoluteSavedPath).replace(/\\/g, "/");
+  const relativeToUploadDir = path.relative(genericUploadsDir, absoluteSavedPath).replace(/\\/g, "/");
   const safeRelative = String(relativeToUploadDir || req.file.filename).replace(/^\/+/, "");
   const relativeFilePath = `uploads/${safeRelative}`;
   const fileUrl = buildUploadUrl(relativeFilePath);
@@ -215,9 +240,8 @@ router.delete("/", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Valid upload path is required" });
   }
 
-  const absolutePath = path.resolve(uploadsDir, relativePath);
-  const normalizedRoot = path.resolve(uploadsDir);
-  if (!absolutePath.startsWith(normalizedRoot)) {
+  const insideAnyRoot = uploadRoots.some((rootDir) => resolvePathInsideRoot(rootDir, relativePath));
+  if (!insideAnyRoot) {
     return res.status(400).json({ error: "Invalid upload path" });
   }
   if (!canDeleteRelativePath(req, relativePath)) {
@@ -225,6 +249,10 @@ router.delete("/", requireAuth, async (req, res) => {
   }
 
   try {
+    const absolutePath = (await findExistingUploadPath(relativePath)) || resolvePathInsideRoot(genericUploadsDir, relativePath);
+    if (!absolutePath) {
+      return res.status(400).json({ error: "Invalid upload path" });
+    }
     await fs.promises.unlink(absolutePath);
     return res.status(200).json({ ok: true });
   } catch (error) {

@@ -53,6 +53,7 @@ export const env = {
   resendFromEmail: readEnv("RESEND_FROM_EMAIL", ""),
   resendFromName: readEnv("RESEND_FROM_NAME", "SouzaTV"),
   uploadsBaseUrl: process.env.UPLOADS_BASE_URL || "",
+  genericUploadsDir: readEnv("GENERIC_UPLOADS_DIR", ""),
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",
   adminEmail: readEnv("ADMIN_EMAIL", isProd ? "" : "admin@local.dev"),
   adminPassword: readEnv("ADMIN_PASSWORD", isProd ? "" : "admin123456"),

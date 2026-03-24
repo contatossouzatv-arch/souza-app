@@ -17,7 +17,7 @@ import createEntitiesRouter from "./routes/entities.js";
 import pointsRoutes from "./routes/points.js";
 import uploadsRoutes from "./routes/uploads.js";
 import { appendNavigationLog } from "./db/index.js";
-import { uploadsDir } from "./lib/paths.js";
+import { genericUploadsDir, uploadsDir } from "./lib/paths.js";
 
 function buildCors() {
   if (env.origin === "*") {
@@ -121,8 +121,14 @@ export function createApp(io) {
     });
   });
 
-  app.use("/uploads", express.static(uploadsDir));
-  app.use("/api/uploads", express.static(uploadsDir));
+  app.use("/uploads", express.static(genericUploadsDir));
+  if (path.resolve(genericUploadsDir) !== path.resolve(uploadsDir)) {
+    app.use("/uploads", express.static(uploadsDir));
+  }
+  app.use("/api/uploads", express.static(genericUploadsDir));
+  if (path.resolve(genericUploadsDir) !== path.resolve(uploadsDir)) {
+    app.use("/api/uploads", express.static(uploadsDir));
+  }
 
   app.use("/api/auth", authApiRateLimiter, authRoutes);
   app.use("/api", apiRateLimiter);
