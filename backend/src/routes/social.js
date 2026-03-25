@@ -330,12 +330,23 @@ async function listDiscoverProfiles(client, viewerUserId, { limit = 12, offset =
       AND viewer_follow.follower_user_id = $3
      LEFT JOIN profile_likes viewer_like
        ON viewer_like.target_user_id = u.id
-      AND viewer_like.actor_user_id = $3
-     WHERE COALESCE(u.account_status, 'active') <> 'deactivated'
-     ORDER BY u.created_at DESC
-     LIMIT $1 OFFSET $2`,
-    [queryLimit + 1, queryOffset, viewerUserId]
-  );
+       AND viewer_like.actor_user_id = $3
+       WHERE COALESCE(u.account_status, 'active') <> 'deactivated'
+       ORDER BY
+         CASE
+           WHEN LOWER(COALESCE(u.profile_image_mode, '')) = 'photo'
+            AND LOWER(COALESCE(u.profile_image_status, '')) = 'approved'
+            AND COALESCE(NULLIF(BTRIM(u.profile_image_url), ''), '') <> ''
+             THEN 0
+           WHEN COALESCE(NULLIF(BTRIM(u.profile_avatar_id), ''), '') <> ''
+             OR COALESCE(NULLIF(BTRIM(u.avatar_emoji), ''), '') <> ''
+             THEN 1
+           ELSE 2
+         END ASC,
+         u.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [queryLimit + 1, queryOffset, viewerUserId]
+    );
 
   const rows = result.rows || [];
   const items = rows.slice(0, queryLimit).map(mapSocialProfile);
