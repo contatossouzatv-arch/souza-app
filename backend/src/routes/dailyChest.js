@@ -666,18 +666,6 @@ async function applyMetricGrant({ userId, metricKey, amount, requestId, rewardSn
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const existing = await client.query(
-      `SELECT amount
-         FROM user_metric_ledger
-        WHERE user_id = $1
-          AND metric_key = $2
-          AND cycle_key = $3
-          AND source_type = 'daily_chest_reward'
-          AND source_ref = $4
-        LIMIT 1`,
-      [userId, metricKey, cycleKey, requestId]
-    );
-
     const currentBalance = await client.query(
       `SELECT amount
          FROM user_metric_balances
@@ -689,31 +677,50 @@ async function applyMetricGrant({ userId, metricKey, amount, requestId, rewardSn
     );
 
     const beforeValue = Number(currentBalance.rows[0]?.amount || 0);
-    const appliedAmount = existing.rows[0] ? Number(existing.rows[0].amount || 0) : safeAmount;
+    const insertedLedger = await client.query(
+      `INSERT INTO user_metric_ledger (
+        user_id, metric_key, cycle_key, amount, source_type, source_ref, occurred_at, metadata, updated_at
+      )
+       VALUES ($1, $2, $3, $4, 'daily_chest_reward', $5, NOW(), $6::jsonb, NOW())
+       ON CONFLICT (user_id, metric_key, cycle_key, source_type, source_ref)
+       DO NOTHING
+       RETURNING amount`,
+      [
+        userId,
+        metricKey,
+        cycleKey,
+        safeAmount,
+        requestId,
+        JSON.stringify({
+          source: "daily_chest",
+          exact_event: true,
+          source_ref_id: openingId,
+          chest_day_key: chestDayKey,
+          reward_title: String(rewardSnapshot?.title || "Recompensa do bau").trim() || "Recompensa do bau",
+          reward_type: String(rewardSnapshot?.rewardType || metricKey).trim(),
+        }),
+      ]
+    );
 
-    if (!existing.rows[0]) {
-      await client.query(
-        `INSERT INTO user_metric_ledger (
-          user_id, metric_key, cycle_key, amount, source_type, source_ref, occurred_at, metadata, updated_at
-        )
-         VALUES ($1, $2, $3, $4, 'daily_chest_reward', $5, NOW(), $6::jsonb, NOW())`,
-        [
-          userId,
-          metricKey,
-          cycleKey,
-          safeAmount,
-          requestId,
-          JSON.stringify({
-            source: "daily_chest",
-            exact_event: true,
-            source_ref_id: openingId,
-            chest_day_key: chestDayKey,
-            reward_title: String(rewardSnapshot?.title || "Recompensa do baú").trim() || "Recompensa do baú",
-            reward_type: String(rewardSnapshot?.rewardType || metricKey).trim(),
-          }),
-        ]
+    const didInsertLedger = insertedLedger.rowCount > 0;
+    let appliedAmount = didInsertLedger ? Number(insertedLedger.rows[0]?.amount || safeAmount) : 0;
+
+    if (!didInsertLedger) {
+      const existing = await client.query(
+        `SELECT amount
+           FROM user_metric_ledger
+          WHERE user_id = $1
+            AND metric_key = $2
+            AND cycle_key = $3
+            AND source_type = 'daily_chest_reward'
+            AND source_ref = $4
+          LIMIT 1`,
+        [userId, metricKey, cycleKey, requestId]
       );
+      appliedAmount = Number(existing.rows[0]?.amount || 0);
+    }
 
+    if (didInsertLedger) {
       await client.query(
         `INSERT INTO user_metric_balances (user_id, metric_key, cycle_key, amount, metadata, updated_at)
          VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
@@ -744,7 +751,7 @@ async function applyMetricGrant({ userId, metricKey, amount, requestId, rewardSn
       metricKey,
       cycleKey,
       pointsAwarded: appliedAmount,
-      finalValue: beforeValue + (existing.rows[0] ? 0 : safeAmount),
+      finalValue: beforeValue + (didInsertLedger ? safeAmount : 0),
     };
   } catch (error) {
     await client.query("ROLLBACK");
