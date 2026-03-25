@@ -1779,6 +1779,32 @@ export default function Profile() {
       if (timers.progressInterval) window.clearInterval(timers.progressInterval);
       if (timers.hideTimeout) window.clearTimeout(timers.hideTimeout);
       if (timers.failSafeTimeout) window.clearTimeout(timers.failSafeTimeout);
+
+      const releasePointerCaptureSafely = (ref, dragRef) => {
+        const container = ref?.current;
+        const pointerId = dragRef?.current?.pointerId;
+        if (container && pointerId !== null && pointerId !== undefined) {
+          try {
+            container.releasePointerCapture?.(pointerId);
+          } catch {
+            // ignore release failures during teardown
+          }
+        }
+        if (dragRef?.current) {
+          dragRef.current.isDragging = false;
+          dragRef.current.moved = false;
+          if ("pointerId" in dragRef.current) {
+            dragRef.current.pointerId = null;
+          }
+        }
+      };
+
+      releasePointerCaptureSafely(checkInCarouselRef, checkInCarouselDragRef);
+      releasePointerCaptureSafely(simulatedStripRef, simulatedDragRef);
+      releasePointerCaptureSafely(publicOtherStripRef, publicOtherDragRef);
+      releasePointerCaptureSafely(publicBadgeStripRef, publicBadgeDragRef);
+      releasePointerCaptureSafely(privateBadgeStripRef, privateBadgeDragRef);
+      releasePointerCaptureSafely(competitionRankingRef, competitionRankingDragRef);
     };
   }, []);
 
@@ -4632,7 +4658,7 @@ export default function Profile() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(activeBadgeCelebration)} onOpenChange={(open) => !open && setActiveBadgeCelebration(null)}>
+      <Dialog modal={false} open={Boolean(activeBadgeCelebration)} onOpenChange={(open) => !open && setActiveBadgeCelebration(null)}>
         <DialogContent
           hideClose
           className="w-screen max-w-none border-0 bg-transparent p-0 text-white shadow-none outline-none ring-0"
