@@ -52,6 +52,9 @@ pool.query = (text, values) => timedQueryRunner(originalPoolQuery, text, values)
 const originalPoolConnect = pool.connect.bind(pool);
 pool.connect = async (...args) => {
   const client = await originalPoolConnect(...args);
+  if (!client || typeof client.query !== "function") {
+    return client;
+  }
   if (!client.__timedQueryPatched) {
     const originalClientQuery = client.query.bind(client);
     client.query = (text, values) => timedQueryRunner(originalClientQuery, text, values);
