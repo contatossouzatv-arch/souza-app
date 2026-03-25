@@ -131,6 +131,8 @@ const BADGE_CELEBRATION_STORAGE_PREFIX = "profile_badge_celebration_seen_v1_";
 const PROFILE_GESTURE_DRAG_ENABLED = true;
 const PROFILE_AUTOPLAY_MEDIA_ENABLED = true;
 const PROFILE_DEBUG_ENABLED = false;
+const PROFILE_NON_CRITICAL_LOAD_DELAY_MS = 1800;
+const PROFILE_ENGAGED_QUERY_LIMIT = 3;
 
 function profileDebugLog(label, payload = undefined) {
   if (!PROFILE_DEBUG_ENABLED || typeof console === "undefined") return;
@@ -1226,6 +1228,18 @@ export default function Profile() {
   });
   const deferredProfileGamification = React.useDeferredValue(profileGamification);
   const [isRefreshingCompetitionData, setIsRefreshingCompetitionData] = useState(false);
+  const [loadNonCriticalProfileData, setLoadNonCriticalProfileData] = useState(false);
+
+  useEffect(() => {
+    setLoadNonCriticalProfileData(false);
+    if (!user?.id) return undefined;
+
+    const timerId = window.setTimeout(() => {
+      setLoadNonCriticalProfileData(true);
+    }, PROFILE_NON_CRITICAL_LOAD_DELAY_MS);
+
+    return () => window.clearTimeout(timerId);
+  }, [location.pathname, location.search, user?.id]);
 
   const refreshProfileCompetitionData = React.useCallback(async () => {
     if (!user?.id) return;
@@ -1253,8 +1267,9 @@ export default function Profile() {
   const { data: mySocialState } = useQuery({
     queryKey: ["social-my-state", user?.id],
     queryFn: () => base44.social.state("me"),
-    enabled: !!user,
+    enabled: !!user && loadNonCriticalProfileData,
     staleTime: 15000,
+    retry: false,
   });
 
   const { data: myFollowingProfiles = [], isLoading: loadingFollowingProfiles } = useQuery({
@@ -1274,8 +1289,9 @@ export default function Profile() {
   const { data: dailyCheckInState } = useQuery({
     queryKey: ["daily-checkin-state", user?.id],
     queryFn: () => base44.social.checkInState(),
-    enabled: !!user,
+    enabled: !!user && loadNonCriticalProfileData,
     staleTime: 15000,
+    retry: false,
   });
 
   const pointsRules = useMemo(() => ({
@@ -1634,40 +1650,47 @@ export default function Profile() {
     realProfilesById,
   ]);
   const engagedProfileSummaryQueries = useQueries({
-    queries: engagedProfiles.slice(0, 8).map((profile) => ({
+    queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
       queryKey: ["public-profile-summary", profile.id, "engaged-card"],
       queryFn: () => base44.gamification.publicProfileSummary(profile.id),
-      enabled: !!user && !!profile?.id,
+      enabled: !!user && loadNonCriticalProfileData && !!profile?.id,
       staleTime: 30000,
       refetchOnWindowFocus: false,
+      retry: false,
     })),
   });
   const engagedProfileUserQueries = useQueries({
-    queries: engagedProfiles.slice(0, 8).map((profile) => ({
+    queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
       queryKey: ["public-profile-user", profile.id, "engaged-card"],
       queryFn: async () => {
         const items = await base44.entities.User.filter({ id: profile.id }, undefined, 1);
         return Array.isArray(items) ? items[0] || null : null;
       },
-      enabled: !!user && !!profile?.id,
+      enabled: !!user && loadNonCriticalProfileData && !!profile?.id,
       staleTime: 30000,
       refetchOnWindowFocus: false,
+      retry: false,
     })),
   });
   const engagedProfileSocialQueries = useQueries({
-    queries: engagedProfiles.slice(0, 8).map((profile) => ({
+    queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
       queryKey: ["social-target-state", user?.id, profile.id, "engaged-card"],
       queryFn: () => base44.social.state(profile.id),
-      enabled: !!user && !!profile?.id && String(profile.id || "") !== String(user?.id || ""),
+      enabled:
+        !!user &&
+        loadNonCriticalProfileData &&
+        !!profile?.id &&
+        String(profile.id || "") !== String(user?.id || ""),
       staleTime: 15000,
       refetchOnWindowFocus: false,
+      retry: false,
     })),
   });
   const engagedProfilesWithSummary = useMemo(() => {
     const summaryMap = new Map();
     const userMap = new Map();
     const socialMap = new Map();
-    engagedProfiles.slice(0, 8).forEach((profile, index) => {
+    engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).forEach((profile, index) => {
       const payload = engagedProfileSummaryQueries[index]?.data || null;
       if (payload) summaryMap.set(profile.id, payload);
       const userPayload = engagedProfileUserQueries[index]?.data || null;
