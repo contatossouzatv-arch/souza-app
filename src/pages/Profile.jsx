@@ -658,9 +658,18 @@ function normalizeMetricSourceLabel(entry) {
 function buildPointsHistorySummary(ledger = [], allowedMetricKeys = []) {
   const allowedSet = new Set(allowedMetricKeys);
   const grouped = new Map();
+  const cycleKey =
+    arguments.length > 2 && arguments[2] && typeof arguments[2] === "object"
+      ? String(arguments[2].cycleKey || "").trim()
+      : "";
 
   ledger
-    .filter((entry) => allowedSet.has(String(entry.metric_key || "")))
+    .filter((entry) => {
+      const metricKey = String(entry.metric_key || "");
+      if (!allowedSet.has(metricKey)) return false;
+      if (!cycleKey || metricKey !== "weekly_points") return true;
+      return String(entry.cycle_key || "").trim() === cycleKey;
+    })
     .forEach((entry) => {
       const label = normalizeMetricSourceLabel(entry);
       const current = grouped.get(label) || {
@@ -1216,16 +1225,22 @@ export default function Profile() {
     retry: 1,
   });
   const deferredProfileGamification = React.useDeferredValue(profileGamification);
+  const [isRefreshingCompetitionData, setIsRefreshingCompetitionData] = useState(false);
 
   const refreshProfileCompetitionData = React.useCallback(async () => {
     if (!user?.id) return;
-    const freshGamification = await base44.gamification.profileMetrics({ force: true });
-    queryClient.setQueryData(["profile-gamification-authoritative", user.id], freshGamification);
-    await Promise.allSettled([
-      queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative", user.id] }),
-      queryClient.invalidateQueries({ queryKey: ["social-my-state", user.id] }),
-      queryClient.invalidateQueries({ queryKey: ["daily-checkin-state", user.id] }),
-    ]);
+    setIsRefreshingCompetitionData(true);
+    try {
+      const freshGamification = await base44.gamification.profileMetrics({ force: true });
+      queryClient.setQueryData(["profile-gamification-authoritative", user.id], freshGamification);
+      await Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative", user.id] }),
+        queryClient.invalidateQueries({ queryKey: ["social-my-state", user.id] }),
+        queryClient.invalidateQueries({ queryKey: ["daily-checkin-state", user.id] }),
+      ]);
+    } finally {
+      setIsRefreshingCompetitionData(false);
+    }
   }, [queryClient, user?.id]);
 
   const { data: profileHistory, isLoading: loadingProfileHistory } = useQuery({
@@ -1520,8 +1535,11 @@ export default function Profile() {
   const authoritativeXpTotal = Number(metrics.xpTotal ?? metrics.xp_total ?? 0);
   const levelProgress = useMemo(() => getLevelProgress(authoritativeXpTotal), [authoritativeXpTotal]);
   const weeklyPointsHistory = useMemo(
-    () => buildPointsHistorySummary(profileHistory?.ledger || [], ["weekly_points"]),
-    [profileHistory?.ledger]
+    () =>
+      buildPointsHistorySummary(profileHistory?.ledger || [], ["weekly_points"], {
+        cycleKey: deferredProfileGamification?.competitionBoard?.cycle?.cycle_key || "",
+      }),
+    [deferredProfileGamification?.competitionBoard?.cycle?.cycle_key, profileHistory?.ledger]
   );
   const profileLevelHistory = useMemo(
     () => buildPointsHistorySummary(profileHistory?.ledger || [], ["engagement_points", "xp_total"]),
@@ -3140,6 +3158,7 @@ export default function Profile() {
   const openPublicProfilePage = (profileRef) => {
     if (!profileRef) return;
     const entryByUser = typeof profileRef === "string" ? competitionEntryByUserId[profileRef] : null;
+    const normalizedProfileRef = typeof profileRef === "string" ? String(profileRef).trim() : "";
     const resolvedProfile =
       typeof profileRef === "string" && !entryByUser
         ? simulatedProfiles.find((profile) => profile.id === profileRef || profile.handle === profileRef)
@@ -3151,6 +3170,14 @@ export default function Profile() {
       if (targetUrl === currentUrl) return;
       startProfileSwitchLoader();
       debugNavigate(targetUrl, undefined, "openPublicProfilePage:ranking-entry");
+      return;
+    }
+    if (normalizedProfileRef && (realProfilesById[normalizedProfileRef] || selectedPublicUserById?.id === normalizedProfileRef || normalizedProfileRef.includes("-"))) {
+      const targetUrl = `${createPageUrl("Profile")}?user=${encodeURIComponent(normalizedProfileRef)}`;
+      const currentUrl = `${location.pathname}${location.search}`;
+      if (targetUrl === currentUrl) return;
+      startProfileSwitchLoader();
+      debugNavigate(targetUrl, undefined, "openPublicProfilePage:user-id");
       return;
     }
     const nextHandle = resolvedProfile?.handle;
@@ -3653,10 +3680,10 @@ export default function Profile() {
                 <Button
                   type="button"
                   onClick={() => refreshProfileCompetitionData()}
-                  disabled={fetchingProfileGamification}
+                  disabled={fetchingProfileGamification || isRefreshingCompetitionData}
                   className="h-8 rounded-full border border-cyan-400/45 bg-cyan-500/10 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-100 hover:bg-cyan-500/20 disabled:cursor-wait disabled:opacity-70"
                 >
-                  {fetchingProfileGamification ? "Atualizando..." : "Atualizar dados"}
+                  {fetchingProfileGamification || isRefreshingCompetitionData ? "Atualizando..." : "Atualizar dados"}
                 </Button>
               </div>
               {visibleEntries.length === 0 ? (
@@ -3800,9 +3827,10 @@ export default function Profile() {
         <Button
           type="button"
           onClick={() => refreshProfileCompetitionData()}
+          disabled={isRefreshingCompetitionData}
           className="mt-3 h-9 rounded-xl bg-amber-400 px-4 text-slate-950 hover:bg-amber-300"
         >
-          Atualizar dados
+          {isRefreshingCompetitionData ? "Atualizando..." : "Atualizar dados"}
         </Button>
       </div>
     </Card>
@@ -5357,7 +5385,7 @@ export default function Profile() {
                     <p className="truncate text-sm font-bold text-white">{profile.nick}</p>
                     <button
                       type="button"
-                      onClick={() => openPublicProfilePage(profile.id)}
+                      onClick={() => openPublicProfileByUserId(profile.id)}
                       className="truncate text-xs text-cyan-300 transition hover:text-cyan-200"
                     >
                       @{profile.handle}

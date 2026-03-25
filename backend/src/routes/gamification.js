@@ -2448,7 +2448,8 @@ router.get("/profile/history", requireAuth, async (req, res) => {
 
 router.get("/profile/prize-gallery", requireAuth, async (req, res) => {
   try {
-    const userId = String(req.auth.sub || "").trim();
+    const requestedUserId = String(req.query?.userId || "").trim();
+    const userId = requestedUserId || String(req.auth.sub || "").trim();
     const limit = clampInt(req.query?.limit, 3, 1, 24);
     const offset = clampInt(req.query?.offset, 0, 0, 2000);
 
