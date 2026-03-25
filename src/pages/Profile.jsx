@@ -1124,12 +1124,18 @@ export default function Profile() {
     },
   });
 
-  const { data: profileGamification, isLoading: loadingProfileGamification } = useQuery({
+  const {
+    data: profileGamification,
+    isLoading: loadingProfileGamification,
+    isFetching: fetchingProfileGamification,
+    refetch: refetchProfileGamification,
+  } = useQuery({
     queryKey: ["profile-gamification-authoritative", user?.id],
     queryFn: () => base44.gamification.profileMetrics(),
     enabled: !!user,
-    staleTime: 15000,
+    staleTime: 120000,
   });
+  const deferredProfileGamification = React.useDeferredValue(profileGamification);
 
   const { data: profileHistory, isLoading: loadingProfileHistory } = useQuery({
     queryKey: ["profile-history-authoritative", user?.id],
@@ -1168,48 +1174,45 @@ export default function Profile() {
 
   const pointsRules = useMemo(() => ({
     ...DEFAULT_POINTS_RULES,
-    ...(profileGamification?.pointsRules || {}),
-  }), [profileGamification]);
+    ...(deferredProfileGamification?.pointsRules || {}),
+  }), [deferredProfileGamification]);
 
   const badgeRules = useMemo(
-    () => normalizeBadgeRules(profileGamification?.badgeRules || DEFAULT_BADGE_RULES),
-    [profileGamification]
+    () => normalizeBadgeRules(deferredProfileGamification?.badgeRules || DEFAULT_BADGE_RULES),
+    [deferredProfileGamification]
   );
 
   const competitionBoard = useMemo(
     () =>
-      profileGamification?.competitionBoard || {
+      deferredProfileGamification?.competitionBoard || {
         config: DEFAULT_PROFILE_COMPETITION_CONFIG,
         cycle: { remainingMs: 0, progressPct: 0 },
         entries: [],
         rewardLabel: "",
       },
-    [profileGamification]
+    [deferredProfileGamification]
   );
 
   const activeCycle = competitionBoard?.cycle || null;
 
   const isLoading =
     isLoadingAuth ||
-    !user ||
-    loadingProfileGamification;
+    !user;
 
   const initialProfileLoadTarget = useMemo(() => {
     const steps = [
       !isLoadingAuth,
       Boolean(user),
-      !loadingProfileGamification,
     ];
     const completed = steps.filter(Boolean).length;
     return Math.round((completed / steps.length) * 100);
-  }, [isLoadingAuth, loadingProfileGamification, user]);
+  }, [isLoadingAuth, user]);
 
   const initialProfileLoadLabel = useMemo(() => {
     if (isLoadingAuth) return "Validando acesso";
     if (!user) return "Carregando dados do perfil";
-    if (loadingProfileGamification) return "Preparando ranking e metricas";
     return "Finalizando perfil";
-  }, [isLoadingAuth, loadingProfileGamification, user]);
+  }, [isLoadingAuth, user]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -1235,7 +1238,7 @@ export default function Profile() {
 
   const metrics = useMemo(
     () =>
-      profileGamification?.metrics || {
+      deferredProfileGamification?.metrics || {
         position: 0,
         totalApproved: 0,
         totalTickets: 0,
@@ -1252,7 +1255,7 @@ export default function Profile() {
         xp_total: 0,
         weeklyPoints: 0,
       },
-    [profileGamification]
+    [deferredProfileGamification]
   );
 
   useEffect(() => {
@@ -1268,7 +1271,7 @@ export default function Profile() {
 
   const achievements = useMemo(
     () =>
-      (profileGamification?.achievements || []).map((achievement) => ({
+      (deferredProfileGamification?.achievements || []).map((achievement) => ({
         key: achievement.key,
         label: achievement.label,
         icon: BADGE_ICON_MAP[achievement.iconKey] || Star,
@@ -1276,12 +1279,15 @@ export default function Profile() {
         iconUrl: achievement.iconUrl || "",
         ruleText: achievement.ruleText || "",
       })),
-    [profileGamification]
+    [deferredProfileGamification]
   );
   const badgeGallery = useMemo(() => buildBadgeGalleryFromRules(badgeRules, achievements), [badgeRules, achievements]);
   const progressBadges = useMemo(
-    () => (profileGamification?.progressBadges?.length ? profileGamification.progressBadges : [buildProgressBadge(metrics, pointsRules)]),
-    [metrics, pointsRules, profileGamification]
+    () =>
+      deferredProfileGamification?.progressBadges?.length
+        ? deferredProfileGamification.progressBadges
+        : [buildProgressBadge(metrics, pointsRules)],
+    [deferredProfileGamification, metrics, pointsRules]
   );
   const superFanProgress = progressBadges[0]?.progress ?? 0;
   const competitionEntryByUserId = useMemo(() => {
@@ -1312,15 +1318,19 @@ export default function Profile() {
       .map((profile) => {
         const leaderboardProfile = competitionEntryByUserId[profile.id] || {};
         const xpTotal = Math.max(0, Number(leaderboardProfile.xp_total || 0));
+        const level = getLevelProgress(xpTotal).level;
         const engagementPoints = Math.max(0, Number(leaderboardProfile.engagement_points || 0));
         const followers = Math.max(0, Number(profile.followers || leaderboardProfile.totalFollowers || 0));
+        const weeklyPosition = Math.max(0, Number(leaderboardProfile.position || profile.position || 0));
         const engagementScore = followers + xpTotal + engagementPoints;
         return {
           ...profile,
           points: engagementPoints,
+          level,
           xpTotal,
           engagementPoints,
           engagementScore,
+          weeklyPosition,
           tickets: Math.max(0, profile.followers + profile.likes),
           totalApproved: Number(leaderboardProfile.totalApproved || 0),
           totalWins: Number(leaderboardProfile.totalWins || 0),
@@ -1334,10 +1344,15 @@ export default function Profile() {
         };
       })
       .sort((a, b) => {
-        if (b.engagementScore !== a.engagementScore) return b.engagementScore - a.engagementScore;
-        if (b.followers !== a.followers) return b.followers - a.followers;
-        if (b.xpTotal !== a.xpTotal) return b.xpTotal - a.xpTotal;
+        if (b.level !== a.level) return b.level - a.level;
+        if (a.weeklyPosition !== b.weeklyPosition) {
+          if (!a.weeklyPosition) return 1;
+          if (!b.weeklyPosition) return -1;
+          return a.weeklyPosition - b.weeklyPosition;
+        }
         if (b.engagementPoints !== a.engagementPoints) return b.engagementPoints - a.engagementPoints;
+        if (b.xpTotal !== a.xpTotal) return b.xpTotal - a.xpTotal;
+        if (b.engagementScore !== a.engagementScore) return b.engagementScore - a.engagementScore;
         if (b.followers !== a.followers) return b.followers - a.followers;
         return b.likes - a.likes;
       })
@@ -1365,7 +1380,7 @@ export default function Profile() {
     });
   }, [myFollowingProfiles, simulatedProfiles]);
 
-  const currentCompetitionEntry = profileGamification?.currentCompetitionEntry || competitionEntryByUserId[user?.id] || {
+  const currentCompetitionEntry = deferredProfileGamification?.currentCompetitionEntry || competitionEntryByUserId[user?.id] || {
     user_id: user?.id || "",
     points: 0,
     position: 0,
@@ -3191,8 +3206,18 @@ export default function Profile() {
           ) : (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-300">Top Ranking do Ciclo</p>
-                <p className="text-[11px] text-slate-400">{titleSuffix}</p>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-300">Top Ranking do Ciclo</p>
+                  <p className="text-[11px] text-slate-400">{titleSuffix}</p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => refetchProfileGamification()}
+                  disabled={fetchingProfileGamification}
+                  className="h-8 rounded-full border border-cyan-400/45 bg-cyan-500/10 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-100 hover:bg-cyan-500/20 disabled:cursor-wait disabled:opacity-70"
+                >
+                  {fetchingProfileGamification ? "Atualizando..." : "Atualizar dados"}
+                </Button>
               </div>
               {visibleEntries.length === 0 ? (
                 <p className="rounded-xl border border-slate-700 bg-slate-900/70 p-3 text-xs text-slate-300">
