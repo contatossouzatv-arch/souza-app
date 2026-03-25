@@ -47,18 +47,18 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
-import { lazy } from "react";
+import { lazyWithRecovery } from "@/lib/lazyWithRecovery";
 
-const AdminPanel = lazy(() => import("./pages/AdminPanel"));
-const DailyEvent = lazy(() => import("./pages/DailyEvent"));
-const Dashboard = lazy(() => import("./pages/Dashboard"));
-const Deposits = lazy(() => import("./pages/Deposits"));
-const Home = lazy(() => import("./pages/Home"));
-const LiveDrawDisplay = lazy(() => import("./pages/LiveDrawDisplay"));
-const Profile = lazy(() => import("./pages/Profile"));
-const ProfilesGallery = lazy(() => import("./pages/ProfilesGallery"));
-const Settings = lazy(() => import("./pages/Settings"));
-const __Layout = lazy(() => import("./Layout.jsx"));
+const AdminPanel = lazyWithRecovery(() => import("./pages/AdminPanel"));
+const DailyEvent = lazyWithRecovery(() => import("./pages/DailyEvent"));
+const Dashboard = lazyWithRecovery(() => import("./pages/Dashboard"));
+const Deposits = lazyWithRecovery(() => import("./pages/Deposits"));
+const Home = lazyWithRecovery(() => import("./pages/Home"));
+const LiveDrawDisplay = lazyWithRecovery(() => import("./pages/LiveDrawDisplay"));
+const Profile = lazyWithRecovery(() => import("./pages/Profile"));
+const ProfilesGallery = lazyWithRecovery(() => import("./pages/ProfilesGallery"));
+const Settings = lazyWithRecovery(() => import("./pages/Settings"));
+const __Layout = lazyWithRecovery(() => import("./Layout.jsx"));
 
 
 export const PAGES = {

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import './App.css'
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -15,15 +15,16 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import { warmAppShell } from '@/lib/appBoot';
+import { lazyWithRecovery } from '@/lib/lazyWithRecovery';
 
-const Login = lazy(() => import('@/pages/Login'));
-const LoginTwoFactor = lazy(() => import('@/pages/LoginTwoFactor'));
-const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
-const TermsOfUse = lazy(() => import('@/pages/TermsOfUse'));
-const PrivacyPolicy = lazy(() => import('@/pages/PrivacyPolicy'));
-const Onboarding = lazy(() => import('@/pages/Onboarding'));
-const MainGameComingSoon = lazy(() => import('@/pages/MainGameComingSoon'));
-const DailyChestHub = lazy(() => import('@/pages/DailyChestHub'));
+const Login = lazyWithRecovery(() => import('@/pages/Login'));
+const LoginTwoFactor = lazyWithRecovery(() => import('@/pages/LoginTwoFactor'));
+const ResetPassword = lazyWithRecovery(() => import('@/pages/ResetPassword'));
+const TermsOfUse = lazyWithRecovery(() => import('@/pages/TermsOfUse'));
+const PrivacyPolicy = lazyWithRecovery(() => import('@/pages/PrivacyPolicy'));
+const Onboarding = lazyWithRecovery(() => import('@/pages/Onboarding'));
+const MainGameComingSoon = lazyWithRecovery(() => import('@/pages/MainGameComingSoon'));
+const DailyChestHub = lazyWithRecovery(() => import('@/pages/DailyChestHub'));
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
