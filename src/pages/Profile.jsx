@@ -779,6 +779,7 @@ export default function Profile() {
   const [badgeViewerDirection, setBadgeViewerDirection] = useState(0);
   const [isCompetitionHelpOpen, setIsCompetitionHelpOpen] = useState(false);
   const [isEngagementGuideOpen, setIsEngagementGuideOpen] = useState(false);
+  const [isSecondaryProfileUiReady, setIsSecondaryProfileUiReady] = useState(false);
   const [isLevelHudOpen, setIsLevelHudOpen] = useState(false);
   const [isPointsHistoryOpen, setIsPointsHistoryOpen] = useState(false);
   const [pointsHistoryTab, setPointsHistoryTab] = useState("weekly");
@@ -815,6 +816,22 @@ export default function Profile() {
   const lastAchievementKeysRef = React.useRef(new Set());
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    setIsSecondaryProfileUiReady(false);
+    const idleScheduler = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 900));
+    const handle = idleScheduler(() => {
+      setIsSecondaryProfileUiReady(true);
+    });
+
+    return () => {
+      if (typeof window.cancelIdleCallback === "function" && typeof handle === "number") {
+        window.cancelIdleCallback(handle);
+        return;
+      }
+      window.clearTimeout(handle);
+    };
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
@@ -4185,7 +4202,13 @@ export default function Profile() {
 
       </Card>
 
-      {isProfileGamificationPending ? (
+      {!isSecondaryProfileUiReady ? (
+        renderSectionSkeleton({
+          title: "Mais Engajados",
+          subtitle: "Preparando os perfis em destaque.",
+          rows: 2,
+        })
+      ) : isProfileGamificationPending ? (
         renderSectionSkeleton({
           title: "Mais Engajados",
           subtitle: "Carregando os perfis com maior nível, top semanal e engajamento.",
@@ -4348,7 +4371,14 @@ export default function Profile() {
         </Card>
       )}
 
-      {isProfileGamificationPending ? (
+      {!isSecondaryProfileUiReady ? (
+        renderSectionSkeleton({
+          title: "Resumo Publico",
+          subtitle: "Preparando o resumo do perfil.",
+          rows: 2,
+          compact: true,
+        })
+      ) : isProfileGamificationPending ? (
         renderSectionSkeleton({
           title: "Resumo Publico",
           subtitle: "Buscando bilhetes, posição no top semanal e progresso geral.",
@@ -4393,7 +4423,13 @@ export default function Profile() {
         </Card>
       )}
 
-      {isProfileGamificationPending ? (
+      {!isSecondaryProfileUiReady ? (
+        renderSectionSkeleton({
+          title: "Selos e Conquistas",
+          subtitle: "Preparando selos e progresso do perfil.",
+          rows: 4,
+        })
+      ) : isProfileGamificationPending ? (
         renderSectionSkeleton({
           title: "Selos e Conquistas",
           subtitle: "Carregando selos, níveis e progresso do perfil.",
@@ -4476,23 +4512,31 @@ export default function Profile() {
         </Card>
       )}
 
-      <Suspense
-        fallback={renderSectionSkeleton({
+      {isSecondaryProfileUiReady ? (
+        <Suspense
+          fallback={renderSectionSkeleton({
+            title: "Seus Prêmios",
+            subtitle: "Montando sua galeria privada de prêmios.",
+            rows: 3,
+          })}
+        >
+          <PrizeGalleryCard
+            userId={user?.id}
+            title="Seus Prêmios"
+            subtitle="Esta é a sua galeria privada. Aqui você acompanha tudo o que já ganhou no app em formato de coleção."
+            emptyTitle="Você ainda não tem prêmios salvos na sua galeria"
+            emptySubtitle="Os prêmios resgatados no Baú Diário e nas próximas experiências vão aparecer aqui automaticamente."
+            countLabel="na coleção"
+            privateView={true}
+          />
+        </Suspense>
+      ) : (
+        renderSectionSkeleton({
           title: "Seus Prêmios",
-          subtitle: "Montando sua galeria privada de prêmios.",
+          subtitle: "Preparando sua galeria privada.",
           rows: 3,
-        })}
-      >
-        <PrizeGalleryCard
-          userId={user?.id}
-          title="Seus Prêmios"
-          subtitle="Esta é a sua galeria privada. Aqui você acompanha tudo o que já ganhou no app em formato de coleção."
-          emptyTitle="Você ainda não tem prêmios salvos na sua galeria"
-          emptySubtitle="Os prêmios resgatados no Baú Diário e nas próximas experiências vão aparecer aqui automaticamente."
-          countLabel="na coleção"
-          privateView={true}
-        />
-      </Suspense>
+        })
+      )}
 
       <Dialog open={isPointsHistoryOpen} onOpenChange={setIsPointsHistoryOpen}>
         <DialogContent className="border-cyan-500/30 bg-slate-950 text-white shadow-[0_0_45px_rgba(34,211,238,0.15)]">
