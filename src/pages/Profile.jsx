@@ -1128,12 +1128,15 @@ export default function Profile() {
     data: profileGamification,
     isLoading: loadingProfileGamification,
     isFetching: fetchingProfileGamification,
+    isError: isProfileGamificationError,
+    error: profileGamificationError,
     refetch: refetchProfileGamification,
   } = useQuery({
     queryKey: ["profile-gamification-authoritative", user?.id],
     queryFn: () => base44.gamification.profileMetrics(),
     enabled: !!user,
     staleTime: 120000,
+    retry: 1,
   });
   const deferredProfileGamification = React.useDeferredValue(profileGamification);
 
@@ -1198,7 +1201,9 @@ export default function Profile() {
   const isLoading =
     isLoadingAuth ||
     !user;
-  const isProfileGamificationPending = loadingProfileGamification && !profileGamification;
+  const hasProfileGamification = Boolean(profileGamification);
+  const isProfileGamificationPending = !hasProfileGamification && (loadingProfileGamification || fetchingProfileGamification);
+  const isProfileGamificationUnavailable = !hasProfileGamification && isProfileGamificationError;
 
   const initialProfileLoadTarget = useMemo(() => {
     const steps = [
@@ -1260,7 +1265,7 @@ export default function Profile() {
   );
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id || !hasProfileGamification) return;
     setSocial({
       followers: Number(mySocialState?.followers ?? metrics.totalFollowers ?? 0),
       following: Number(mySocialState?.following ?? metrics.followingCount ?? 0),
@@ -1268,7 +1273,7 @@ export default function Profile() {
       isFollowing: false,
       isLiked: false,
     });
-  }, [metrics.followingCount, metrics.totalFollowers, metrics.totalLikes, mySocialState, user?.id]);
+  }, [hasProfileGamification, metrics.followingCount, metrics.totalFollowers, metrics.totalLikes, mySocialState, user?.id]);
 
   const achievements = useMemo(
     () =>
@@ -3396,6 +3401,26 @@ export default function Profile() {
     </Card>
   );
 
+  const renderGamificationUnavailableCard = ({ title, subtitle }) => (
+    <Card className="border-slate-800 bg-slate-900/70 p-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">{title}</h2>
+      <p className="mt-1 text-xs text-slate-400">{subtitle}</p>
+      <div className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4">
+        <p className="text-sm font-semibold text-amber-100">Os dados deste bloco não carregaram agora.</p>
+        <p className="mt-1 text-xs text-amber-50/80">
+          {profileGamificationError?.message || "Tente atualizar os dados do perfil novamente."}
+        </p>
+        <Button
+          type="button"
+          onClick={() => refetchProfileGamification()}
+          className="mt-3 h-9 rounded-xl bg-amber-400 px-4 text-slate-950 hover:bg-amber-300"
+        >
+          Atualizar dados
+        </Button>
+      </div>
+    </Card>
+  );
+
   if (isLoading) {
     return (
       <div className="relative min-h-screen overflow-hidden bg-slate-950">
@@ -3987,7 +4012,7 @@ export default function Profile() {
           </div>
 
           {renderProfileNotificationsHud()}
-          {isProfileGamificationPending ? null : renderLevelHud(levelProgress)}
+          {isProfileGamificationPending || isProfileGamificationUnavailable ? null : renderLevelHud(levelProgress)}
 
           <button
             type="button"
@@ -4083,6 +4108,11 @@ export default function Profile() {
                 subtitle: "Preparando ranking, pontos e premiação do ciclo.",
                 rows: 4,
               })
+            : isProfileGamificationUnavailable
+            ? renderGamificationUnavailableCard({
+                title: "Top Semanal",
+                subtitle: "Não foi possível carregar o ranking do ciclo agora.",
+              })
             : renderCompetitionCard({
                 entry: currentCompetitionEntry,
                 titleSuffix: "Sua pontuacao atual na temporada.",
@@ -4096,6 +4126,11 @@ export default function Profile() {
           title: "Mais Engajados",
           subtitle: "Carregando os perfis com maior nível, top semanal e engajamento.",
           rows: 2,
+        })
+      ) : isProfileGamificationUnavailable ? (
+        renderGamificationUnavailableCard({
+          title: "Mais Engajados",
+          subtitle: "Não foi possível montar a lista de perfis mais engajados agora.",
         })
       ) : (
         <Card className="border-slate-800 bg-slate-900/70 p-4">
@@ -4256,6 +4291,11 @@ export default function Profile() {
           rows: 2,
           compact: true,
         })
+      ) : isProfileGamificationUnavailable ? (
+        renderGamificationUnavailableCard({
+          title: "Resumo Publico",
+          subtitle: "Não foi possível carregar o resumo do perfil agora.",
+        })
       ) : (
         <Card className="border-slate-800 bg-slate-900/70 p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Resumo Publico</h2>
@@ -4294,6 +4334,11 @@ export default function Profile() {
           title: "Selos e Conquistas",
           subtitle: "Carregando selos, níveis e progresso do perfil.",
           rows: 4,
+        })
+      ) : isProfileGamificationUnavailable ? (
+        renderGamificationUnavailableCard({
+          title: "Selos e Conquistas",
+          subtitle: "Não foi possível validar seus selos e progresso agora.",
         })
       ) : (
         <Card className="border-slate-800 bg-slate-900/70 p-4">
