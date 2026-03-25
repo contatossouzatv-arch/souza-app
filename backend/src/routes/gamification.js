@@ -1569,7 +1569,7 @@ async function buildLightweightProfileMetrics(userId) {
   ]);
   const cycle = await ensureActiveWeeklyCycle(weeklyConfig);
 
-  const [balanceRows, profileRow, depositsAgg, participationsAgg, socialAgg, leaderboardRows] = await Promise.all([
+  const [balanceRows, profileAggRows, leaderboardRows] = await Promise.all([
     pool.query(
       `SELECT metric_key, cycle_key, amount
          FROM user_metric_balances
@@ -1586,7 +1586,24 @@ async function buildLightweightProfileMetrics(userId) {
       ),
       pool.query(
         `SELECT
-            COALESCE(SUM(CASE WHEN COALESCE(data->>'status', '') = 'approved' THEN NULLIF(data->>'amount', '')::numeric ELSE 0 END), 0) AS total_approved,
+            COALESCE(SUM(
+              CASE
+                WHEN COALESCE(data->>'status', '') <> 'approved' THEN 0
+                ELSE CASE
+                  WHEN REPLACE(
+                    REGEXP_REPLACE(COALESCE(data->>'amount', ''), '[^0-9,.-]', '', 'g'),
+                    ',',
+                    '.'
+                  ) ~ '^-?[0-9]+(\\.[0-9]+)?$'
+                  THEN REPLACE(
+                    REGEXP_REPLACE(COALESCE(data->>'amount', ''), '[^0-9,.-]', '', 'g'),
+                    ',',
+                    '.'
+                  )::numeric
+                  ELSE 0
+                END
+              END
+            ), 0) AS total_approved,
             COUNT(*) FILTER (WHERE COALESCE(data->>'status', '') = 'approved')::int AS deposit_count,
             COALESCE(SUM(
               CASE
@@ -1668,13 +1685,13 @@ async function buildLightweightProfileMetrics(userId) {
   const balanceMap = new Map(
     balanceRows.rows.map((row) => [`${row.metric_key}::${row.cycle_key || ""}`, Number(row.amount || 0)])
   );
-  const winsRow = profileRow[0].rows[0] || {};
-  const depositRow = profileRow[1].rows[0] || {};
-  const participationRow = profileRow[2].rows[0] || {};
-  const socialRow = profileRow[3].rows[0] || {};
+  const winsRow = profileAggRows[0]?.rows?.[0] || {};
+  const depositRow = profileAggRows[1]?.rows?.[0] || {};
+  const participationRow = profileAggRows[2]?.rows?.[0] || {};
+  const socialRow = profileAggRows[3]?.rows?.[0] || {};
 
   const weeklyCycleKey = String(cycle?.cycle_key || "");
-  const leaderboardEntries = leaderboardRows.rows.map((row) => ({
+  const leaderboardEntries = (leaderboardRows?.rows || []).map((row) => ({
     user_id: row.user_id,
     nick: String(row.nick || row.full_name || "Usuario"),
     profile_avatar_id: String(row.profile_avatar_id || ""),
@@ -2343,8 +2360,17 @@ function formatUserAdminSummary(user) {
 }
 
 router.get("/profile/metrics", requireAuth, async (req, res) => {
-  const payload = await buildLightweightProfileMetrics(req.auth.sub);
-  res.json(payload);
+  try {
+    const payload = await buildLightweightProfileMetrics(req.auth.sub);
+    return res.json(payload);
+  } catch (error) {
+    console.error("Failed to load lightweight profile metrics", {
+      userId: req.auth?.sub || "",
+      message: error?.message || String(error),
+      stack: error?.stack || "",
+    });
+    return res.status(500).json({ error: "Nao foi possivel carregar os dados do perfil agora." });
+  }
 });
 
 router.get("/profile/history", requireAuth, async (req, res) => {
