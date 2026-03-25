@@ -139,6 +139,15 @@ function toIso(value) {
   return new Date(value).toISOString();
 }
 
+function normalizeEntityRecordRow(row) {
+  if (!row) return null;
+  const data = { ...(row.data || {}) };
+  if (!data.id) data.id = row.id;
+  if (!data.created_date) data.created_date = toIso(row.created_at);
+  data.updated_date = toIso(row.updated_at);
+  return data;
+}
+
 function safeDate(value) {
   const parsed = new Date(value || "");
   return Number.isNaN(parsed.getTime()) ? null : parsed;
@@ -2233,6 +2242,52 @@ router.get("/profile/history", requireAuth, async (req, res) => {
     })),
     prizes,
   });
+});
+
+router.get("/profile/prize-gallery", requireAuth, async (req, res) => {
+  try {
+    const requestedUserId = String(req.query?.userId || "").trim();
+    const userId = requestedUserId || String(req.auth.sub || "").trim();
+    const limit = clampInt(req.query?.limit, 3, 1, 24);
+    const offset = clampInt(req.query?.offset, 0, 0, 2000);
+
+    const [countResult, itemsResult] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*)::int AS total
+           FROM entity_records
+          WHERE entity_name = 'UserPrizeGalleryItem'
+            AND COALESCE(data->>'user_id', '') = $1`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT id, data, created_at, updated_at
+           FROM entity_records
+          WHERE entity_name = 'UserPrizeGalleryItem'
+            AND COALESCE(data->>'user_id', '') = $1
+          ORDER BY COALESCE(NULLIF(data->>'claimed_at', ''), created_at::text)::timestamptz DESC,
+                   created_at DESC,
+                   id ASC
+          LIMIT $2
+         OFFSET $3`,
+        [userId, limit, offset]
+      ),
+    ]);
+
+    const items = itemsResult.rows.map(normalizeEntityRecordRow);
+    const total = Number(countResult.rows[0]?.total || 0);
+
+    return res.json({
+      items,
+      total,
+      limit,
+      offset,
+      nextOffset: offset + items.length,
+      hasMore: offset + items.length < total,
+    });
+  } catch (error) {
+    console.error("Failed to load profile prize gallery", error);
+    return res.status(500).json({ error: "Nao foi possivel carregar a galeria de premios." });
+  }
 });
 
 router.get("/prizes/winners-history", requireAuth, async (_req, res) => {

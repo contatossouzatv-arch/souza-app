@@ -1197,25 +1197,23 @@ export default function Profile() {
 
   const isLoading =
     isLoadingAuth ||
-    !user ||
-    (loadingProfileGamification && !profileGamification);
+    !user;
+  const isProfileGamificationPending = loadingProfileGamification && !profileGamification;
 
   const initialProfileLoadTarget = useMemo(() => {
     const steps = [
       !isLoadingAuth,
       Boolean(user),
-      Boolean(profileGamification),
     ];
     const completed = steps.filter(Boolean).length;
     return Math.round((completed / steps.length) * 100);
-  }, [isLoadingAuth, profileGamification, user]);
+  }, [isLoadingAuth, user]);
 
   const initialProfileLoadLabel = useMemo(() => {
     if (isLoadingAuth) return "Validando acesso";
     if (!user) return "Carregando dados do perfil";
-    if (!profileGamification) return "Preparando ranking, pontos e métricas";
     return "Finalizando perfil";
-  }, [isLoadingAuth, profileGamification, user]);
+  }, [isLoadingAuth, user]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -3071,10 +3069,10 @@ export default function Profile() {
     if (!competitionBoard.config.enabled || competitionBoard.config.active === false) return null;
     const safeEntryPoints = Number(entry?.weekly_points ?? entry?.points ?? 0);
     const isCompetitionFinishedPreview = competitionBoard.config.preview_mode === "finished";
-    const topEntries = competitionBoard.entries.slice(0, 50);
+    const topEntries = competitionBoard.entries.slice(0, 20);
     const visibleEntries = [...topEntries];
-    const isEntryInTop50 = Boolean(entry?.user_id) && topEntries.some((item) => item.user_id === entry.user_id);
-    const showOwnEntryOutsideTop = Boolean(entry?.user_id) && Number(entry?.position || 0) > 50 && !isEntryInTop50;
+    const isEntryInTop20 = Boolean(entry?.user_id) && topEntries.some((item) => item.user_id === entry.user_id);
+    const showOwnEntryOutsideTop = Boolean(entry?.user_id) && Number(entry?.position || 0) > 20 && !isEntryInTop20;
     const winnersCount = Math.max(1, Number(competitionBoard.config.winners_count || 10));
     const prizePerWinner = Number(competitionBoard.config.fallback_reward_value || 0);
     const rankedEntriesByPoints = [...competitionBoard.entries]
@@ -3374,6 +3372,29 @@ export default function Profile() {
       </Card>
     );
   };
+
+  const renderSectionSkeleton = ({ title, subtitle = "Carregando dados...", rows = 3, compact = false }) => (
+    <Card className="border-slate-800 bg-slate-900/70 p-4">
+      <div className="animate-pulse">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <div className="h-4 w-32 rounded-full bg-slate-800" />
+            <div className="mt-2 h-3 w-44 rounded-full bg-slate-800/80" />
+          </div>
+          {!compact ? <div className="h-8 w-28 rounded-full bg-slate-800" /> : null}
+        </div>
+        <p className="mb-3 text-xs text-slate-400">{subtitle}</p>
+        <div className="space-y-2">
+          {Array.from({ length: rows }).map((_, index) => (
+            <div
+              key={`${title}-${index}`}
+              className={`rounded-xl border border-slate-800 bg-slate-950/70 ${compact ? "h-12" : "h-16"}`}
+            />
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
 
   if (isLoading) {
     return (
@@ -3966,7 +3987,7 @@ export default function Profile() {
           </div>
 
           {renderProfileNotificationsHud()}
-          {renderLevelHud(levelProgress)}
+          {isProfileGamificationPending ? null : renderLevelHud(levelProgress)}
 
           <button
             type="button"
@@ -4056,266 +4077,303 @@ export default function Profile() {
         </div>
 
         <div className="mt-4">
-          {renderCompetitionCard({
-            entry: currentCompetitionEntry,
-            titleSuffix: "Sua pontuacao atual na temporada.",
-          })}
+          {isProfileGamificationPending
+            ? renderSectionSkeleton({
+                title: "Top Semanal",
+                subtitle: "Preparando ranking, pontos e premiação do ciclo.",
+                rows: 4,
+              })
+            : renderCompetitionCard({
+                entry: currentCompetitionEntry,
+                titleSuffix: "Sua pontuacao atual na temporada.",
+              })}
         </div>
 
       </Card>
 
-      <Card className="border-slate-800 bg-slate-900/70 p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Mais Engajados</h2>
-          {engagementGuideConfig.enabled ? (
-            <button
-              type="button"
-              onClick={() => setIsEngagementGuideOpen(true)}
-              className="text-xs text-slate-400 underline decoration-slate-500/70 underline-offset-2 transition hover:text-cyan-300"
-            >
-              {engagementGuideConfig.link_label}
-            </button>
-          ) : (
-            <span className="text-xs text-slate-500">Guia oculto</span>
-          )}
-        </div>
-        <div
-          ref={simulatedStripRef}
-          data-nav-swipe-lock="true"
-          onPointerDown={handleSimPointerDown}
-          onPointerMove={handleSimPointerMove}
-          onPointerUp={handleSimPointerUpOrCancel}
-          onPointerCancel={handleSimPointerUpOrCancel}
-          onClickCapture={handleSimClickCapture}
-          onWheel={handleSimWheel}
-          className="hide-scrollbar touch-pan-x flex gap-3 overflow-x-auto pb-1 select-none"
-          style={{ WebkitOverflowScrolling: "touch" }}
-        >
-          {simulatedProfiles.slice(0, 10).map((profile, index) => {
-            const state = simState[profile.id] || {
-              isFollowing: false,
-              isLiked: false,
-              followers: profile.followers,
-              likes: profile.likes,
-            };
-            const podiumPosition = index + 1;
-            const isPodium = podiumPosition <= 3;
-            const podiumFrameSrc = podiumFrameByPosition[podiumPosition] || "";
-
-            return (
-              <div
-                key={profile.id}
-                className="relative w-[240px] shrink-0 rounded-2xl border border-slate-800 bg-slate-950/80 p-3"
+      {isProfileGamificationPending ? (
+        renderSectionSkeleton({
+          title: "Mais Engajados",
+          subtitle: "Carregando os perfis com maior nível, top semanal e engajamento.",
+          rows: 2,
+        })
+      ) : (
+        <Card className="border-slate-800 bg-slate-900/70 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Mais Engajados</h2>
+            {engagementGuideConfig.enabled ? (
+              <button
+                type="button"
+                onClick={() => setIsEngagementGuideOpen(true)}
+                className="text-xs text-slate-400 underline decoration-slate-500/70 underline-offset-2 transition hover:text-cyan-300"
               >
-                {podiumPosition <= 10 ? (
-                  <span
-                    aria-hidden="true"
-                    className="pointer-events-none absolute right-2 top-1 z-10 select-none text-5xl font-black leading-none text-slate-600/40"
-                  >
-                    {podiumPosition}
+                {engagementGuideConfig.link_label}
+              </button>
+            ) : (
+              <span className="text-xs text-slate-500">Guia oculto</span>
+            )}
+          </div>
+          <div
+            ref={simulatedStripRef}
+            data-nav-swipe-lock="true"
+            onPointerDown={handleSimPointerDown}
+            onPointerMove={handleSimPointerMove}
+            onPointerUp={handleSimPointerUpOrCancel}
+            onPointerCancel={handleSimPointerUpOrCancel}
+            onClickCapture={handleSimClickCapture}
+            onWheel={handleSimWheel}
+            className="hide-scrollbar touch-pan-x flex gap-3 overflow-x-auto pb-1 select-none"
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
+            {simulatedProfiles.slice(0, 5).map((profile, index) => {
+              const state = simState[profile.id] || {
+                isFollowing: false,
+                isLiked: false,
+                followers: profile.followers,
+                likes: profile.likes,
+              };
+              const podiumPosition = index + 1;
+              const isPodium = podiumPosition <= 3;
+              const podiumFrameSrc = podiumFrameByPosition[podiumPosition] || "";
+
+              return (
+                <div
+                  key={profile.id}
+                  className="relative w-[240px] shrink-0 rounded-2xl border border-slate-800 bg-slate-950/80 p-3"
+                >
+                  {podiumPosition <= 10 ? (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute right-2 top-1 z-10 select-none text-5xl font-black leading-none text-slate-600/40"
+                    >
+                      {podiumPosition}
+                    </span>
+                  ) : null}
+                  <div className="mb-2 flex items-center gap-2.5">
+                    <div className="relative h-11 w-11 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => openPublicProfilePage(profile.id)}
+                        className={`h-11 w-11 overflow-hidden rounded-full transition ${
+                          isPodium ? "border border-transparent" : "border border-cyan-500/40 hover:border-cyan-300/70"
+                        }`}
+                        aria-label={`Abrir perfil de ${profile.nick}`}
+                      >
+                        {profile.avatarSrc ? (
+                          <img
+                            src={profile.avatarSrc}
+                            alt={profile.nick}
+                            className="h-full w-full object-cover"
+                            onError={(event) => {
+                              event.currentTarget.src = defaultAvatar;
+                            }}
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-xs text-white">
+                            {getProfileAvatarFallback(profile, "AV")}
+                          </div>
+                        )}
+                      </button>
+                      {isPodium && podiumFrameSrc ? (
+                        <SmartVideo
+                          src={podiumFrameSrc}
+                          preload="metadata"
+                          className="pointer-events-none absolute left-1/2 top-1/2 z-20 h-[12.8rem] w-[12.8rem] -translate-x-1/2 -translate-y-1/2 scale-[1.2] object-contain"
+                        />
+                      ) : null}
+                    </div>
+                    <div className="min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => openPublicProfilePage(profile.id)}
+                        className="block w-full truncate text-left text-sm font-bold leading-tight text-white transition hover:text-cyan-200"
+                      >
+                        {profile.nick}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openPublicProfilePage(profile.id)}
+                        className="mt-0 block w-full truncate text-left text-xs leading-tight text-cyan-300 transition hover:text-cyan-200"
+                      >
+                        @{profile.handle}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mb-2 grid grid-cols-3 gap-1 text-center">
+                    <div className="rounded-lg bg-slate-900 p-1.5">
+                      <p className="text-center text-[10px] text-slate-400">LV</p>
+                      <p className="text-xs font-bold text-cyan-200">{getLevelLabelFromXp(profile.xpTotal ?? profile.xp_total ?? 0)}</p>
+                    </div>
+                    <div className="rounded-lg bg-slate-900 p-1.5">
+                      <p className="text-center text-[10px] text-slate-400">Prêmios</p>
+                      <p className="text-xs font-bold text-indigo-200">{profile.totalWins}</p>
+                    </div>
+                    <div className="rounded-lg bg-slate-900 p-1.5">
+                      <p className="text-center text-[10px] text-slate-400 whitespace-nowrap">Top sem.</p>
+                      <p className="text-xs font-bold text-emerald-200">{getCompetitiveTopLabel(profile)}</p>
+                    </div>
+                  </div>
+
+                  <div className="mb-2 flex items-center justify-between text-[11px] text-slate-300">
+                    <span>{state.followers} seguidores</span>
+                    <span>{state.likes} curtidas</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleDiscoverFollow(profile)}
+                      className={`rounded-lg px-2 py-1.5 text-xs font-bold transition ${
+                        state.isFollowing
+                          ? "bg-cyan-500/25 text-cyan-100 ring-1 ring-cyan-400/40"
+                          : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+                      }`}
+                    >
+                      {state.isFollowing ? "Seguindo" : "Seguir"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleDiscoverLike(profile)}
+                      className={`rounded-lg px-2 py-1.5 text-xs font-bold text-white transition ${
+                        state.isLiked ? "bg-pink-500 hover:bg-pink-400" : "bg-pink-600/60 hover:bg-pink-500/80"
+                      }`}
+                    >
+                      {state.isLiked ? "Curtido" : "Curtir"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {isProfileGamificationPending ? (
+        renderSectionSkeleton({
+          title: "Resumo Publico",
+          subtitle: "Buscando bilhetes, posição no top semanal e progresso geral.",
+          rows: 2,
+          compact: true,
+        })
+      ) : (
+        <Card className="border-slate-800 bg-slate-900/70 p-4">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Resumo Publico</h2>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
+              <p className="text-xs text-slate-400">Bilhetes</p>
+              <p className="text-xl font-black text-cyan-300">{metrics.totalTickets}</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
+              <p className="text-xs text-slate-400">Top Semanal</p>
+              <p className="text-xl font-black text-emerald-300">#{metrics.position || "-"}</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
+              <p className="text-xs text-slate-400">Prêmios Ganhos</p>
+              <p className="text-xl font-black text-yellow-300">{metrics.totalWins}</p>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <div className="mb-1 flex items-center justify-between text-xs">
+              <span className="text-slate-400">Super Fã das Lives do SouzaTV</span>
+              <span className="text-cyan-300">{superFanProgress}%</span>
+            </div>
+            <div className="h-2 w-full rounded-full bg-slate-800">
+              <div
+                className="h-2 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-500"
+                style={{ width: `${superFanProgress}%` }}
+              />
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {isProfileGamificationPending ? (
+        renderSectionSkeleton({
+          title: "Selos e Conquistas",
+          subtitle: "Carregando selos, níveis e progresso do perfil.",
+          rows: 4,
+        })
+      ) : (
+        <Card className="border-slate-800 bg-slate-900/70 p-4">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Selos e Conquistas</h2>
+          <div className="mb-2 flex items-center justify-between text-[11px]">
+            <p className="font-semibold uppercase tracking-wide text-emerald-300">
+              {badgeGallery.unlocked.length} de {badgeGallery.ordered.length} desbloqueados
+            </p>
+            <p className="text-slate-400">Arraste para ver</p>
+          </div>
+          <div
+            ref={privateBadgeStripRef}
+            onPointerDown={handlePrivateBadgePointerDown}
+            onPointerMove={handlePrivateBadgePointerMove}
+            onPointerUp={handlePrivateBadgePointerUpOrCancel}
+            onPointerCancel={handlePrivateBadgePointerUpOrCancel}
+            onClickCapture={handlePrivateBadgeClickCapture}
+            onWheel={handlePrivateBadgeWheel}
+            className="hide-scrollbar touch-pan-x flex cursor-grab gap-2 overflow-x-auto overflow-y-hidden pb-1 pr-1 active:cursor-grabbing select-none"
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
+            {badgeGallery.ordered.map((achievement) => (
+              <button
+                key={`badge-${achievement.key}`}
+                type="button"
+                onClick={() => openBadgeInfo(achievement, badgeGallery.ordered)}
+                className={`relative h-[86px] w-[86px] shrink-0 rounded-xl border p-2 text-center transition ${
+                  achievement.unlocked
+                    ? "border-emerald-400/35 bg-gradient-to-b from-emerald-500/10 via-slate-950 to-slate-900 hover:border-emerald-300/60"
+                    : "border-slate-800 bg-slate-950/90 hover:border-slate-600"
+                }`}
+                aria-label={`Detalhes do selo ${achievement.label}`}
+              >
+                {!achievement.unlocked ? (
+                  <span className="pointer-events-none absolute right-1.5 top-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-600/90 bg-slate-900/90">
+                    <Lock className="h-2.5 w-2.5 text-slate-300" />
                   </span>
                 ) : null}
-                <div className="mb-2 flex items-center gap-2.5">
-                  <div className="relative h-11 w-11 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => openPublicProfilePage(profile.id)}
-                      className={`h-11 w-11 overflow-hidden rounded-full transition ${
-                        isPodium ? "border border-transparent" : "border border-cyan-500/40 hover:border-cyan-300/70"
-                      }`}
-                      aria-label={`Abrir perfil de ${profile.nick}`}
-                    >
-                      {profile.avatarSrc ? (
-                        <img
-                          src={profile.avatarSrc}
-                          alt={profile.nick}
-                          className="h-full w-full object-cover"
-                          onError={(event) => {
-                            event.currentTarget.src = defaultAvatar;
-                          }}
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-xs text-white">
-                          {getProfileAvatarFallback(profile, "AV")}
-                        </div>
-                      )}
-                    </button>
-                    {isPodium && podiumFrameSrc ? (
-                      <SmartVideo
-                        src={podiumFrameSrc}
-                        preload="metadata"
-                        className="pointer-events-none absolute left-1/2 top-1/2 z-20 h-[12.8rem] w-[12.8rem] -translate-x-1/2 -translate-y-1/2 scale-[1.2] object-contain"
-                      />
-                    ) : null}
-                  </div>
-                  <div className="min-w-0">
-                    <button
-                      type="button"
-                      onClick={() => openPublicProfilePage(profile.id)}
-                      className="block w-full truncate text-left text-sm font-bold leading-tight text-white transition hover:text-cyan-200"
-                    >
-                      {profile.nick}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openPublicProfilePage(profile.id)}
-                      className="mt-0 block w-full truncate text-left text-xs leading-tight text-cyan-300 transition hover:text-cyan-200"
-                    >
-                      @{profile.handle}
-                    </button>
-                  </div>
+                {achievement.unlocked ? (
+                  <div className="pointer-events-none absolute inset-0 rounded-xl bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.14),transparent_65%)]" />
+                ) : null}
+                <div className={`${achievement.unlocked ? "" : "opacity-40 grayscale"} flex h-full items-center justify-center ${getSpecialBadgeVisual(achievement) ? "scale-[0.72]" : ""}`}>
+                  <AchievementIcon achievement={achievement} playVideo={shouldPlayInlineBadgeVideos} />
                 </div>
-
-                <div className="mb-2 grid grid-cols-3 gap-1 text-center">
-                  <div className="rounded-lg bg-slate-900 p-1.5">
-                    <p className="text-center text-[10px] text-slate-400">LV</p>
-                    <p className="text-xs font-bold text-cyan-200">{getLevelLabelFromXp(profile.xpTotal ?? profile.xp_total ?? 0)}</p>
-                  </div>
-                  <div className="rounded-lg bg-slate-900 p-1.5">
-                    <p className="text-center text-[10px] text-slate-400">Prêmios</p>
-                    <p className="text-xs font-bold text-indigo-200">{profile.totalWins}</p>
-                  </div>
-                  <div className="rounded-lg bg-slate-900 p-1.5">
-                    <p className="text-center text-[10px] text-slate-400 whitespace-nowrap">Top sem.</p>
-                    <p className="text-xs font-bold text-emerald-200">{getCompetitiveTopLabel(profile)}</p>
-                  </div>
+                {!achievement.unlocked ? <span className="pointer-events-none absolute inset-0 rounded-xl bg-black/40" /> : null}
+              </button>
+            ))}
+          </div>
+          <div className="mt-4 space-y-2">
+            {progressBadges.map((badge) => (
+              <div key={badge.key} className="rounded-xl border border-slate-800 bg-slate-900 p-3">
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <p className="font-semibold text-cyan-200">{badge.title}</p>
+                  <p className="text-slate-300">
+                    Nível {badge.level}
+                  </p>
                 </div>
-
-                <div className="mb-2 flex items-center justify-between text-[11px] text-slate-300">
-                  <span>{state.followers} seguidores</span>
-                  <span>{state.likes} curtidas</span>
+                <p className="mb-2 text-[11px] text-slate-400">{badge.subtitle}</p>
+                <div className="h-2 w-full rounded-full bg-slate-800">
+                  <div
+                    className={`h-2 rounded-full transition-all duration-500 ${badge.completed ? "bg-emerald-400" : "bg-gradient-to-r from-cyan-400 to-blue-500"}`}
+                    style={{ width: `${badge.progress}%` }}
+                  />
                 </div>
-
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => toggleDiscoverFollow(profile)}
-                    className={`rounded-lg px-2 py-1.5 text-xs font-bold transition ${
-                      state.isFollowing
-                        ? "bg-cyan-500/25 text-cyan-100 ring-1 ring-cyan-400/40"
-                        : "bg-slate-800 text-slate-200 hover:bg-slate-700"
-                    }`}
-                  >
-                    {state.isFollowing ? "Seguindo" : "Seguir"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => toggleDiscoverLike(profile)}
-                    className={`rounded-lg px-2 py-1.5 text-xs font-bold text-white transition ${
-                      state.isLiked ? "bg-pink-500 hover:bg-pink-400" : "bg-pink-600/60 hover:bg-pink-500/80"
-                    }`}
-                  >
-                    {state.isLiked ? "Curtido" : "Curtir"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-
-      <Card className="border-slate-800 bg-slate-900/70 p-4">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Resumo Publico</h2>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-            <p className="text-xs text-slate-400">Bilhetes</p>
-            <p className="text-xl font-black text-cyan-300">{metrics.totalTickets}</p>
-          </div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-            <p className="text-xs text-slate-400">Top Semanal</p>
-            <p className="text-xl font-black text-emerald-300">#{metrics.position || "-"}</p>
-          </div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-            <p className="text-xs text-slate-400">Prêmios Ganhos</p>
-            <p className="text-xl font-black text-yellow-300">{metrics.totalWins}</p>
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="text-slate-400">Super Fã das Lives do SouzaTV</span>
-            <span className="text-cyan-300">{superFanProgress}%</span>
-          </div>
-          <div className="h-2 w-full rounded-full bg-slate-800">
-            <div
-              className="h-2 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-500"
-              style={{ width: `${superFanProgress}%` }}
-            />
-          </div>
-        </div>
-      </Card>
-
-      <Card className="border-slate-800 bg-slate-900/70 p-4">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Selos e Conquistas</h2>
-        <div className="mb-2 flex items-center justify-between text-[11px]">
-          <p className="font-semibold uppercase tracking-wide text-emerald-300">
-            {badgeGallery.unlocked.length} de {badgeGallery.ordered.length} desbloqueados
-          </p>
-          <p className="text-slate-400">Arraste para ver</p>
-        </div>
-        <div
-          ref={privateBadgeStripRef}
-          onPointerDown={handlePrivateBadgePointerDown}
-          onPointerMove={handlePrivateBadgePointerMove}
-          onPointerUp={handlePrivateBadgePointerUpOrCancel}
-          onPointerCancel={handlePrivateBadgePointerUpOrCancel}
-          onClickCapture={handlePrivateBadgeClickCapture}
-          onWheel={handlePrivateBadgeWheel}
-          className="hide-scrollbar touch-pan-x flex cursor-grab gap-2 overflow-x-auto overflow-y-hidden pb-1 pr-1 active:cursor-grabbing select-none"
-          style={{ WebkitOverflowScrolling: "touch" }}
-        >
-          {badgeGallery.ordered.map((achievement) => (
-            <button
-              key={`badge-${achievement.key}`}
-              type="button"
-              onClick={() => openBadgeInfo(achievement, badgeGallery.ordered)}
-              className={`relative h-[86px] w-[86px] shrink-0 rounded-xl border p-2 text-center transition ${
-                achievement.unlocked
-                  ? "border-emerald-400/35 bg-gradient-to-b from-emerald-500/10 via-slate-950 to-slate-900 hover:border-emerald-300/60"
-                  : "border-slate-800 bg-slate-950/90 hover:border-slate-600"
-              }`}
-              aria-label={`Detalhes do selo ${achievement.label}`}
-            >
-              {!achievement.unlocked ? (
-                <span className="pointer-events-none absolute right-1.5 top-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-600/90 bg-slate-900/90">
-                  <Lock className="h-2.5 w-2.5 text-slate-300" />
-                </span>
-              ) : null}
-              {achievement.unlocked ? (
-                <div className="pointer-events-none absolute inset-0 rounded-xl bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.14),transparent_65%)]" />
-              ) : null}
-              <div className={`${achievement.unlocked ? "" : "opacity-40 grayscale"} flex h-full items-center justify-center ${getSpecialBadgeVisual(achievement) ? "scale-[0.72]" : ""}`}>
-                <AchievementIcon achievement={achievement} playVideo={shouldPlayInlineBadgeVideos} />
-              </div>
-              {!achievement.unlocked ? <span className="pointer-events-none absolute inset-0 rounded-xl bg-black/40" /> : null}
-            </button>
-          ))}
-        </div>
-        <div className="mt-4 space-y-2">
-          {progressBadges.map((badge) => (
-            <div key={badge.key} className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-              <div className="mb-1 flex items-center justify-between text-xs">
-                <p className="font-semibold text-cyan-200">{badge.title}</p>
-                <p className="text-slate-300">
-                  Nível {badge.level}
+                <p className={`mt-1 text-[11px] ${badge.completed ? "text-emerald-300" : "text-slate-400"}`}>
+                  {badge.current}/{badge.target} para o Nível {badge.nextLevel} ({badge.progress}%)
                 </p>
               </div>
-              <p className="mb-2 text-[11px] text-slate-400">{badge.subtitle}</p>
-              <div className="h-2 w-full rounded-full bg-slate-800">
-                <div
-                  className={`h-2 rounded-full transition-all duration-500 ${badge.completed ? "bg-emerald-400" : "bg-gradient-to-r from-cyan-400 to-blue-500"}`}
-                  style={{ width: `${badge.progress}%` }}
-                />
-              </div>
-              <p className={`mt-1 text-[11px] ${badge.completed ? "text-emerald-300" : "text-slate-400"}`}>
-                {badge.current}/{badge.target} para o Nível {badge.nextLevel} ({badge.progress}%)
-              </p>
-            </div>
-          ))}
-        </div>
-      </Card>
+            ))}
+          </div>
+        </Card>
+      )}
 
-      <Suspense fallback={null}>
+      <Suspense
+        fallback={renderSectionSkeleton({
+          title: "Seus Prêmios",
+          subtitle: "Montando sua galeria privada de prêmios.",
+          rows: 3,
+        })}
+      >
         <PrizeGalleryCard
           userId={user?.id}
           title="Seus Prêmios"

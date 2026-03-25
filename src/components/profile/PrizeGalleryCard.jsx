@@ -1,5 +1,5 @@
 import React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { CalendarDays, Check, Clock3, Copy, Gem, Gift, MapPin, ShieldCheck, Sparkles, Trophy } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -325,28 +325,16 @@ export default function PrizeGalleryCard({
   countLabel = "ganhos",
   privateView = false,
 }) {
-  const galleryBatchSize = 18;
+  const previewBatchSize = 3;
+  const galleryBatchSize = 12;
   const [selectedItem, setSelectedItem] = React.useState(null);
   const [isGalleryOpen, setIsGalleryOpen] = React.useState(false);
-  const [galleryVisibleCount, setGalleryVisibleCount] = React.useState(galleryBatchSize);
-  const [isDesktop, setIsDesktop] = React.useState(() =>
-    typeof window !== "undefined" ? window.matchMedia("(min-width: 1024px)").matches : false
-  );
 
-  React.useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    const media = window.matchMedia("(min-width: 1024px)");
-    const sync = () => setIsDesktop(media.matches);
-    sync();
-    media.addEventListener?.("change", sync);
-    return () => media.removeEventListener?.("change", sync);
-  }, []);
-
-  const { data: items = [] } = useQuery({
-    queryKey: ["user-prize-gallery", userId],
-    queryFn: () => base44.entities.UserPrizeGalleryItem.filter({ user_id: userId }, "-claimed_at", 24),
+  const { data: previewResponse = null, isLoading: isLoadingPreview } = useQuery({
+    queryKey: ["user-prize-gallery-preview", userId],
+    queryFn: () => base44.gamification.prizeGallery({ userId, limit: previewBatchSize, offset: 0 }),
     enabled: Boolean(userId),
-    staleTime: 15000,
+    staleTime: 30000,
   });
   const { data: viewer = null } = useQuery({
     queryKey: ["prize-gallery-viewer"],
@@ -354,28 +342,39 @@ export default function PrizeGalleryCard({
     enabled: Boolean(privateView),
     staleTime: 60000,
   });
+  const {
+    data: pagedGallery = null,
+    isLoading: isLoadingGallery,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery({
+    queryKey: ["user-prize-gallery-pages", userId],
+    queryFn: ({ pageParam = 0 }) => base44.gamification.prizeGallery({ userId, limit: galleryBatchSize, offset: pageParam }),
+    enabled: Boolean(userId) && isGalleryOpen,
+    initialPageParam: 0,
+    staleTime: 30000,
+    getNextPageParam: (lastPage) => (lastPage?.hasMore ? lastPage.nextOffset : undefined),
+  });
 
-  const previewCount = privateView ? (isDesktop ? 3 : 2) : 2;
-  const visibleItems = items.slice(0, previewCount);
-  const hiddenCount = Math.max(0, items.length - visibleItems.length);
-  const galleryItems = React.useMemo(() => items.slice(0, galleryVisibleCount), [items, galleryVisibleCount]);
-  const remainingGalleryItems = Math.max(0, items.length - galleryItems.length);
-
-  React.useEffect(() => {
-    if (isGalleryOpen) {
-      setGalleryVisibleCount(galleryBatchSize);
-    }
-  }, [isGalleryOpen]);
+  const items = previewResponse?.items || [];
+  const totalItems = Number(previewResponse?.total || 0);
+  const visibleItems = items.slice(0, previewBatchSize);
+  const hiddenCount = Math.max(0, totalItems - visibleItems.length);
+  const galleryItems = React.useMemo(
+    () => pagedGallery?.pages?.flatMap((page) => page?.items || []) || [],
+    [pagedGallery]
+  );
+  const totalGalleryItems = Number(pagedGallery?.pages?.[0]?.total || totalItems || 0);
+  const remainingGalleryItems = Math.max(0, totalGalleryItems - galleryItems.length);
 
   const handleGalleryScroll = React.useCallback((event) => {
     const element = event.currentTarget;
     const distanceToBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
     if (distanceToBottom > 160) return;
-    setGalleryVisibleCount((current) => {
-      if (current >= items.length) return current;
-      return Math.min(items.length, current + galleryBatchSize);
-    });
-  }, [items.length]);
+    if (!hasNextPage || isFetchingNextPage) return;
+    fetchNextPage();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const renderPrizeCard = (item) => {
     const rarity = getDailyChestRarityMeta(item?.rarity);
@@ -435,11 +434,26 @@ export default function PrizeGalleryCard({
             <p className="mt-1 text-xs text-slate-400">{subtitle}</p>
           </div>
           <div className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-[11px] font-bold text-cyan-200">
-            {items.length} {countLabel}
+            {totalItems} {countLabel}
           </div>
         </div>
 
-        {items.length === 0 ? (
+        {isLoadingPreview ? (
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {Array.from({ length: previewBatchSize }).map((_, index) => (
+              <div key={`prize-gallery-preview-skeleton-${index}`} className="overflow-hidden rounded-[1.45rem] border border-white/8 bg-slate-900/80">
+                <div className="h-24 animate-pulse bg-slate-800/90" />
+                <div className="space-y-2 p-3">
+                  <div className="mx-auto h-4 w-16 animate-pulse rounded-full bg-slate-800/90" />
+                  <div className="space-y-1">
+                    <div className="h-3 w-full animate-pulse rounded bg-slate-800/90" />
+                    <div className="h-3 w-3/4 animate-pulse rounded bg-slate-800/90" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : totalItems === 0 ? (
           <div className="mt-4 rounded-3xl border border-dashed border-slate-700 bg-slate-950/60 p-5 text-center">
             <Sparkles className="mx-auto h-8 w-8 text-cyan-300/70" />
             <p className="mt-3 text-sm font-semibold text-white">{emptyTitle}</p>
@@ -453,7 +467,7 @@ export default function PrizeGalleryCard({
             {hiddenCount > 0 ? (
               <button
                 type="button"
-                onClick={() => { setGalleryVisibleCount(galleryBatchSize); setIsGalleryOpen(true); }}
+                onClick={() => setIsGalleryOpen(true)}
                 className="mt-3 flex w-full items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-sm font-bold text-cyan-200 transition hover:border-cyan-300/40 hover:bg-cyan-500/15"
               >
                 Ver todos os prêmios (+{hiddenCount})
@@ -472,9 +486,19 @@ export default function PrizeGalleryCard({
             </DialogDescription>
           </DialogHeader>
           <div className="hide-scrollbar max-h-[70vh] overflow-y-auto pr-1" onScroll={handleGalleryScroll}>
+            {isLoadingGallery && galleryItems.length === 0 ? (
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 text-center text-sm text-slate-300">
+                Carregando sua galeria...
+              </div>
+            ) : null}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {galleryItems.map(renderPrizeCard)}
             </div>
+            {isFetchingNextPage ? (
+              <div className="pt-4 text-center text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                Carregando mais prêmios...
+              </div>
+            ) : null}
             {remainingGalleryItems > 0 ? (
               <div className="pt-4 text-center text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
                 Role para carregar mais prêmios ({remainingGalleryItems} restantes)
