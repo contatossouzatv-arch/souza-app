@@ -1642,6 +1642,18 @@ export default function Profile() {
       refetchOnWindowFocus: false,
     })),
   });
+  const engagedProfileUserQueries = useQueries({
+    queries: engagedProfiles.slice(0, 8).map((profile) => ({
+      queryKey: ["public-profile-user", profile.id, "engaged-card"],
+      queryFn: async () => {
+        const items = await base44.entities.User.filter({ id: profile.id }, undefined, 1);
+        return Array.isArray(items) ? items[0] || null : null;
+      },
+      enabled: !!user && !!profile?.id,
+      staleTime: 30000,
+      refetchOnWindowFocus: false,
+    })),
+  });
   const engagedProfileSocialQueries = useQueries({
     queries: engagedProfiles.slice(0, 8).map((profile) => ({
       queryKey: ["social-target-state", user?.id, profile.id, "engaged-card"],
@@ -1653,16 +1665,20 @@ export default function Profile() {
   });
   const engagedProfilesWithSummary = useMemo(() => {
     const summaryMap = new Map();
+    const userMap = new Map();
     const socialMap = new Map();
     engagedProfiles.slice(0, 8).forEach((profile, index) => {
       const payload = engagedProfileSummaryQueries[index]?.data || null;
       if (payload) summaryMap.set(profile.id, payload);
+      const userPayload = engagedProfileUserQueries[index]?.data || null;
+      if (userPayload) userMap.set(profile.id, userPayload);
       const socialPayload = engagedProfileSocialQueries[index]?.data || null;
       if (socialPayload) socialMap.set(profile.id, socialPayload);
     });
 
     return engagedProfiles
       .map((profile) => {
+        const realUser = userMap.get(profile.id) || null;
         const summary = summaryMap.get(profile.id) || null;
         const summaryMetrics = summary?.metrics || {};
         const summaryEntry = summary?.currentCompetitionEntry || {};
@@ -1684,9 +1700,16 @@ export default function Profile() {
           followers * 10 +
           Math.max(0, 500 - weeklyPosition) +
           likes;
+        const avatarMatch = avatarSrcById[realUser?.profile_avatar_id || ""] || "";
+        const avatarSrc =
+          getProfileAvatarSrc(realUser || profile, avatarSrcById, avatarMatch || profile.avatarSrc || defaultAvatar) ||
+          avatarMatch ||
+          profile.avatarSrc ||
+          defaultAvatar;
 
         return {
           ...profile,
+          avatarSrc,
           xpTotal,
           level,
           points,
@@ -1721,7 +1744,7 @@ export default function Profile() {
         ...profile,
         position: index + 1,
       }));
-  }, [engagedProfileSocialQueries, engagedProfileSummaryQueries, engagedProfiles]);
+  }, [avatarSrcById, engagedProfileSocialQueries, engagedProfileSummaryQueries, engagedProfileUserQueries, engagedProfiles]);
 
   useEffect(() => {
     if (!simulatedProfiles.length) return;
