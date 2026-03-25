@@ -2811,8 +2811,58 @@ export default function Profile() {
 
   const toggleAuthoritativePublicFollow = async () => {
     if (!selectedPublicProfile?.id || !isSelectedRealProfile) return;
-    const shouldFollow = !selectedPublicSocialState?.isFollowing;
-    await followMutation.mutateAsync({ targetUserId: selectedPublicProfile.id, shouldFollow });
+    const targetUserId = String(selectedPublicProfile.id || "");
+    const current = {
+      isFollowing:
+        typeof simState?.[targetUserId]?.isFollowing === "boolean"
+          ? Boolean(simState[targetUserId].isFollowing)
+          : Boolean(selectedPublicSocialState?.isFollowing),
+      followers: Number(
+        simState?.[targetUserId]?.followers ??
+        selectedPublicSocialState?.followers ??
+        selectedPublicProfile?.followers ??
+        0
+      ),
+      following: Number(
+        simState?.[targetUserId]?.following ??
+        selectedPublicSocialState?.following ??
+        selectedPublicProfile?.following ??
+        0
+      ),
+      isLiked:
+        typeof simState?.[targetUserId]?.isLiked === "boolean"
+          ? Boolean(simState[targetUserId].isLiked)
+          : Boolean(selectedPublicSocialState?.isLiked),
+      likes: Number(
+        simState?.[targetUserId]?.likes ??
+        selectedPublicSocialState?.likes ??
+        selectedPublicProfile?.likes ??
+        0
+      ),
+    };
+    const shouldFollow = !current.isFollowing;
+
+    setSimState((prev) => ({
+      ...prev,
+      [targetUserId]: {
+        ...(prev?.[targetUserId] || {}),
+        ...current,
+        isFollowing: shouldFollow,
+        followers: Math.max(0, current.followers + (shouldFollow ? 1 : -1)),
+      },
+    }));
+
+    try {
+      await followMutation.mutateAsync({ targetUserId, shouldFollow });
+    } catch {
+      setSimState((prev) => ({
+        ...prev,
+        [targetUserId]: {
+          ...(prev?.[targetUserId] || {}),
+          ...current,
+        },
+      }));
+    }
   };
 
   const syncDiscoverCardState = React.useCallback((profileId, updater) => {
@@ -2957,8 +3007,58 @@ export default function Profile() {
 
   const toggleAuthoritativePublicLike = async () => {
     if (!selectedPublicProfile?.id || !isSelectedRealProfile) return;
-    const shouldLike = !selectedPublicSocialState?.isLiked;
-    await likeMutation.mutateAsync({ targetUserId: selectedPublicProfile.id, shouldLike });
+    const targetUserId = String(selectedPublicProfile.id || "");
+    const current = {
+      isFollowing:
+        typeof simState?.[targetUserId]?.isFollowing === "boolean"
+          ? Boolean(simState[targetUserId].isFollowing)
+          : Boolean(selectedPublicSocialState?.isFollowing),
+      followers: Number(
+        simState?.[targetUserId]?.followers ??
+        selectedPublicSocialState?.followers ??
+        selectedPublicProfile?.followers ??
+        0
+      ),
+      following: Number(
+        simState?.[targetUserId]?.following ??
+        selectedPublicSocialState?.following ??
+        selectedPublicProfile?.following ??
+        0
+      ),
+      isLiked:
+        typeof simState?.[targetUserId]?.isLiked === "boolean"
+          ? Boolean(simState[targetUserId].isLiked)
+          : Boolean(selectedPublicSocialState?.isLiked),
+      likes: Number(
+        simState?.[targetUserId]?.likes ??
+        selectedPublicSocialState?.likes ??
+        selectedPublicProfile?.likes ??
+        0
+      ),
+    };
+    const shouldLike = !current.isLiked;
+
+    setSimState((prev) => ({
+      ...prev,
+      [targetUserId]: {
+        ...(prev?.[targetUserId] || {}),
+        ...current,
+        isLiked: shouldLike,
+        likes: Math.max(0, current.likes + (shouldLike ? 1 : -1)),
+      },
+    }));
+
+    try {
+      await likeMutation.mutateAsync({ targetUserId, shouldLike });
+    } catch {
+      setSimState((prev) => ({
+        ...prev,
+        [targetUserId]: {
+          ...(prev?.[targetUserId] || {}),
+          ...current,
+        },
+      }));
+    }
   };
 
   const toggleDiscoverLike = React.useCallback(
@@ -4153,11 +4253,32 @@ export default function Profile() {
     const publicState = selectedPublicProfile
       ? isSelectedRealProfile
         ? {
-            isFollowing: Boolean(selectedPublicSocialState?.isFollowing),
-            isLiked: Boolean(selectedPublicSocialState?.isLiked),
-            following: Number(selectedPublicSocialState?.following ?? selectedPublicProfile.following ?? 0),
-            followers: Number(selectedPublicSocialState?.followers ?? selectedPublicProfile.followers ?? 0),
-            likes: Number(selectedPublicSocialState?.likes ?? selectedPublicProfile.likes ?? 0),
+            isFollowing:
+              typeof simState?.[selectedPublicProfile.id]?.isFollowing === "boolean"
+                ? Boolean(simState[selectedPublicProfile.id].isFollowing)
+                : Boolean(selectedPublicSocialState?.isFollowing),
+            isLiked:
+              typeof simState?.[selectedPublicProfile.id]?.isLiked === "boolean"
+                ? Boolean(simState[selectedPublicProfile.id].isLiked)
+                : Boolean(selectedPublicSocialState?.isLiked),
+            following: Number(
+              simState?.[selectedPublicProfile.id]?.following ??
+              selectedPublicSocialState?.following ??
+              selectedPublicProfile.following ??
+              0
+            ),
+            followers: Number(
+              simState?.[selectedPublicProfile.id]?.followers ??
+              selectedPublicSocialState?.followers ??
+              selectedPublicProfile.followers ??
+              0
+            ),
+            likes: Number(
+              simState?.[selectedPublicProfile.id]?.likes ??
+              selectedPublicSocialState?.likes ??
+              selectedPublicProfile.likes ??
+              0
+            ),
           }
         : simState[selectedPublicProfile.id] || {
             isFollowing: false,

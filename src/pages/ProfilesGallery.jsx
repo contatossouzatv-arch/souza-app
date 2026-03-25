@@ -22,6 +22,20 @@ const avatarById = Object.entries(avatarModules).reduce((acc, [path, src]) => {
 
 const PAGE_SIZE = 24;
 
+function getProfilePriority(profile) {
+  const hasPhoto =
+    String(profile?.profile_image_mode || "").toLowerCase() === "photo" &&
+    Boolean(String(profile?.profile_image_url || "").trim());
+  if (hasPhoto) return 0;
+
+  const hasCustomAvatar =
+    Boolean(String(profile?.profile_avatar_id || "").trim()) ||
+    Boolean(String(profile?.avatar_emoji || "").trim());
+  if (hasCustomAvatar) return 1;
+
+  return 2;
+}
+
 export default function ProfilesGallery() {
   const navigate = useNavigate();
   const loadMoreRef = React.useRef(null);
@@ -57,11 +71,18 @@ export default function ProfilesGallery() {
   const normalizedSearch = search.trim().toLowerCase().replace(/^@+/, "");
 
   const filteredProfiles = React.useMemo(() => {
-    if (!normalizedSearch) return profiles;
-    return profiles.filter((profile) => {
+    const baseProfiles = !normalizedSearch
+      ? profiles
+      : profiles.filter((profile) => {
       const nick = String(profile?.nick || "").toLowerCase();
       const handle = String(profile?.handle || "").toLowerCase().replace(/^@+/, "");
       return nick.includes(normalizedSearch) || handle.includes(normalizedSearch);
+    });
+
+    return [...baseProfiles].sort((a, b) => {
+      const priorityDiff = getProfilePriority(a) - getProfilePriority(b);
+      if (priorityDiff !== 0) return priorityDiff;
+      return new Date(b?.created_date || 0).getTime() - new Date(a?.created_date || 0).getTime();
     });
   }, [normalizedSearch, profiles]);
 

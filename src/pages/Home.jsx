@@ -386,6 +386,7 @@ export default function Home() {
                 />
                 <p className="mt-2 truncate text-sm font-semibold text-white">{profile.name}</p>
                 <p className="truncate text-[11px] text-slate-400">@{profile.handle || "usuario"}</p>
+                <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">NOVO</p>
               </button>
             ))}
           </div>
