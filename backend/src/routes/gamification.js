@@ -4,6 +4,7 @@ import {
   createEntity,
   createSecurityEvent,
   deleteEntity,
+  getAppSettingsMap,
   getEntityById,
   listEntity,
   pool,
@@ -18,6 +19,8 @@ const PROFILE_COMPETITION_KEY = "profile_competition_rules_v1";
 const WEEKLY_TOP_CONFIG_KEY = "weekly_top_config_v2";
 const DAILY_CHECKIN_CONFIG_KEY = "daily_checkin_config_v1";
 const GAMIFICATION_STATE_TTL_MS = 30000;
+const GAMIFICATION_RULES_TTL_MS = 30000;
+const WEEKLY_CYCLE_TTL_MS = 15000;
 
 const DEFAULT_POINTS_RULES = {
   points_per_participation: 12,
@@ -56,6 +59,16 @@ let gamificationStateCache = {
 };
 
 let gamificationStatePromise = null;
+let gamificationRulesCache = {
+  value: null,
+  expiresAt: 0,
+  promise: null,
+};
+let weeklyCycleCache = {
+  key: "",
+  value: null,
+  expiresAt: 0,
+};
 
 const DEFAULT_DAILY_CHECKIN_CONFIG = {
   enabled: false,
@@ -219,10 +232,10 @@ function isPrizeGalleryMatchForAudit(item = {}, audit = {}) {
 }
 
 async function listAppSettingsMap() {
-  const items = await listEntity("AppSettings");
+  const values = await getAppSettingsMap();
   const map = new Map();
-  items.forEach((item) => {
-    if (item?.key) map.set(String(item.key), item);
+  values.forEach((value, key) => {
+    map.set(String(key), { key: String(key), value });
   });
   return map;
 }
@@ -389,6 +402,16 @@ function invalidateGamificationStateCache() {
     value: null,
     expiresAt: 0,
   };
+  gamificationRulesCache = {
+    value: null,
+    expiresAt: 0,
+    promise: null,
+  };
+  weeklyCycleCache = {
+    key: "",
+    value: null,
+    expiresAt: 0,
+  };
 }
 
 export async function refreshGamificationState() {
@@ -545,21 +568,52 @@ function buildLegacyRules(settingsMap) {
 }
 
 async function loadGamificationRules() {
-  const settingsMap = await listAppSettingsMap();
-  const configured = await listEntity("GamificationRule", "-updated_date", 500);
-  const rules = configured.length > 0 ? configured.map(normalizeRule) : buildLegacyRules(settingsMap);
-  const badgeRules = parseJsonValue(settingsMap.get(BADGE_RULES_KEY)?.value, DEFAULT_BADGE_RULES);
-  const weeklyConfig = normalizeWeeklyConfig(parseJsonValue(settingsMap.get(WEEKLY_TOP_CONFIG_KEY)?.value, null) || parseJsonValue(settingsMap.get(PROFILE_COMPETITION_KEY)?.value, DEFAULT_WEEKLY_CONFIG));
-  const dailyCheckInConfig = normalizeDailyCheckInConfig(
-    parseJsonValue(settingsMap.get(DAILY_CHECKIN_CONFIG_KEY)?.value, DEFAULT_DAILY_CHECKIN_CONFIG),
-    rules
-  );
-  return {
-    rules: rules.sort((a, b) => a.priority - b.priority),
-    badgeRules: Array.isArray(badgeRules) ? badgeRules : DEFAULT_BADGE_RULES,
-    weeklyConfig,
-    dailyCheckInConfig,
-  };
+  const now = Date.now();
+  if (gamificationRulesCache.value && now < gamificationRulesCache.expiresAt) {
+    return gamificationRulesCache.value;
+  }
+
+  if (gamificationRulesCache.promise) {
+    return gamificationRulesCache.promise;
+  }
+
+  gamificationRulesCache.promise = (async () => {
+    const [settingsMap, configured] = await Promise.all([
+      listAppSettingsMap(),
+      listEntity("GamificationRule", "-updated_date", 500),
+    ]);
+    const rules = configured.length > 0 ? configured.map(normalizeRule) : buildLegacyRules(settingsMap);
+    const badgeRules = parseJsonValue(settingsMap.get(BADGE_RULES_KEY)?.value, DEFAULT_BADGE_RULES);
+    const weeklyConfig = normalizeWeeklyConfig(
+      parseJsonValue(settingsMap.get(WEEKLY_TOP_CONFIG_KEY)?.value, null) ||
+        parseJsonValue(settingsMap.get(PROFILE_COMPETITION_KEY)?.value, DEFAULT_WEEKLY_CONFIG)
+    );
+    const dailyCheckInConfig = normalizeDailyCheckInConfig(
+      parseJsonValue(settingsMap.get(DAILY_CHECKIN_CONFIG_KEY)?.value, DEFAULT_DAILY_CHECKIN_CONFIG),
+      rules
+    );
+    const payload = {
+      rules: rules.sort((a, b) => a.priority - b.priority),
+      badgeRules: Array.isArray(badgeRules) ? badgeRules : DEFAULT_BADGE_RULES,
+      weeklyConfig,
+      dailyCheckInConfig,
+    };
+    gamificationRulesCache = {
+      value: payload,
+      expiresAt: Date.now() + GAMIFICATION_RULES_TTL_MS,
+      promise: null,
+    };
+    return payload;
+  })().catch((error) => {
+    gamificationRulesCache = {
+      value: null,
+      expiresAt: 0,
+      promise: null,
+    };
+    throw error;
+  });
+
+  return gamificationRulesCache.promise;
 }
 
 function resolveCurrentCycleWindow(config) {
@@ -594,8 +648,24 @@ function resolveCurrentCycleWindow(config) {
   };
 }
 
+function storeWeeklyCycleCache(key, value) {
+  weeklyCycleCache = {
+    key: String(key || ""),
+    value,
+    expiresAt: Date.now() + WEEKLY_CYCLE_TTL_MS,
+  };
+  return value;
+}
+
 async function ensureActiveWeeklyCycle(config) {
   const windowData = resolveCurrentCycleWindow(config);
+  if (
+    weeklyCycleCache.value &&
+    weeklyCycleCache.key === windowData.cycleKey &&
+    Date.now() < weeklyCycleCache.expiresAt
+  ) {
+    return weeklyCycleCache.value;
+  }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -679,7 +749,7 @@ async function ensureActiveWeeklyCycle(config) {
       );
       await client.query("COMMIT");
       const row = migrated.rows[0];
-      return {
+      return storeWeeklyCycleCache(windowData.cycleKey, {
         id: row.id,
         cycle_key: row.cycle_key,
         title: row.title,
@@ -690,7 +760,7 @@ async function ensureActiveWeeklyCycle(config) {
         config_snapshot: row.config_snapshot || {},
         winners_snapshot: row.winners_snapshot || [],
         metadata: row.metadata || {},
-      };
+      });
     }
 
     await client.query(
@@ -725,7 +795,7 @@ async function ensureActiveWeeklyCycle(config) {
         );
         await client.query("COMMIT");
         const row = reopened.rows[0];
-        return {
+        return storeWeeklyCycleCache(windowData.cycleKey, {
           id: row.id,
           cycle_key: row.cycle_key,
           title: row.title,
@@ -736,7 +806,7 @@ async function ensureActiveWeeklyCycle(config) {
           config_snapshot: row.config_snapshot || {},
           winners_snapshot: row.winners_snapshot || [],
           metadata: row.metadata || {},
-        };
+        });
       }
 
       const currentStartsAt = safeDate(currentCycle.starts_at);
@@ -769,7 +839,7 @@ async function ensureActiveWeeklyCycle(config) {
         );
         await client.query("COMMIT");
         const row = refreshed.rows[0];
-        return {
+        return storeWeeklyCycleCache(windowData.cycleKey, {
           id: row.id,
           cycle_key: row.cycle_key,
           title: row.title,
@@ -780,11 +850,11 @@ async function ensureActiveWeeklyCycle(config) {
           config_snapshot: row.config_snapshot || {},
           winners_snapshot: row.winners_snapshot || [],
           metadata: row.metadata || {},
-        };
+        });
       }
 
       await client.query("COMMIT");
-      return {
+      return storeWeeklyCycleCache(windowData.cycleKey, {
         id: currentCycle.id,
         cycle_key: currentCycle.cycle_key,
         title: currentCycle.title,
@@ -795,7 +865,7 @@ async function ensureActiveWeeklyCycle(config) {
         config_snapshot: currentCycle.config_snapshot || {},
         winners_snapshot: currentCycle.winners_snapshot || [],
         metadata: currentCycle.metadata || {},
-      };
+      });
     }
 
     const inserted = await client.query(
@@ -813,7 +883,7 @@ async function ensureActiveWeeklyCycle(config) {
       [windowData.cycleKey, windowData.title, windowData.startsAt.toISOString(), windowData.endsAt.toISOString(), JSON.stringify(normalizeWeeklyConfig(config))]
     );
     await client.query("COMMIT");
-    return {
+    return storeWeeklyCycleCache(windowData.cycleKey, {
       id: inserted.rows[0].id,
       cycle_key: inserted.rows[0].cycle_key,
       title: inserted.rows[0].title,
@@ -824,7 +894,7 @@ async function ensureActiveWeeklyCycle(config) {
       config_snapshot: inserted.rows[0].config_snapshot || {},
       winners_snapshot: [],
       metadata: inserted.rows[0].metadata || {},
-    };
+    });
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -1574,72 +1644,67 @@ async function buildLightweightProfileMetrics(userId) {
   ]);
   const cycle = await ensureActiveWeeklyCycle(weeklyConfig);
 
-  const [balanceRows, profileAggRows, leaderboardRows] = await Promise.all([
+  const [balanceRows, summaryRows, leaderboardRows] = await Promise.all([
     pool.query(
       `SELECT metric_key, cycle_key, amount
          FROM user_metric_balances
         WHERE user_id = $1`,
       [userId]
     ),
-    Promise.all([
-      pool.query(
-        `SELECT COUNT(*)::int AS total_wins
+    pool.query(
+      `WITH wins AS (
+         SELECT COUNT(*)::int AS total_wins
            FROM entity_records
           WHERE entity_name = 'UserPrizeGalleryItem'
-            AND COALESCE(data->>'user_id', '') = $1`,
-        [userId]
-      ),
-      pool.query(
-        `SELECT
-            COALESCE(SUM(
-              CASE
-                WHEN COALESCE(data->>'status', '') <> 'approved' THEN 0
-                ELSE CASE
-                  WHEN REPLACE(
-                    REGEXP_REPLACE(COALESCE(data->>'amount', ''), '[^0-9,.-]', '', 'g'),
-                    ',',
-                    '.'
-                  ) ~ '^-?[0-9]+(\\.[0-9]+)?$'
-                  THEN REPLACE(
-                    REGEXP_REPLACE(COALESCE(data->>'amount', ''), '[^0-9,.-]', '', 'g'),
-                    ',',
-                    '.'
-                  )::numeric
-                  ELSE 0
-                END
-              END
-            ), 0) AS total_approved,
-            COUNT(*) FILTER (WHERE COALESCE(data->>'status', '') = 'approved')::int AS deposit_count,
-            COALESCE(SUM(
-              CASE
-                WHEN COALESCE(data->>'status', '') <> 'approved' THEN 0
-                WHEN jsonb_typeof(data->'ticket_numbers') = 'array' THEN jsonb_array_length(data->'ticket_numbers')
-                WHEN COALESCE(data->>'tickets_count', '') ~ '^[0-9]+$' THEN (data->>'tickets_count')::int
-                ELSE 0
-              END
-            ), 0)::int AS total_tickets
-          FROM entity_records
+            AND COALESCE(data->>'user_id', '') = $1
+       ),
+       deposits AS (
+         SELECT
+           COALESCE(SUM(
+             CASE
+               WHEN COALESCE(data->>'status', '') <> 'approved' THEN 0
+               WHEN REPLACE(REGEXP_REPLACE(COALESCE(data->>'amount', ''), '[^0-9,.-]', '', 'g'), ',', '.') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+               THEN REPLACE(REGEXP_REPLACE(COALESCE(data->>'amount', ''), '[^0-9,.-]', '', 'g'), ',', '.')::numeric
+               ELSE 0
+             END
+           ), 0) AS total_approved,
+           COUNT(*) FILTER (WHERE COALESCE(data->>'status', '') = 'approved')::int AS deposit_count,
+           COALESCE(SUM(
+             CASE
+               WHEN COALESCE(data->>'status', '') <> 'approved' THEN 0
+               WHEN jsonb_typeof(data->'ticket_numbers') = 'array' THEN jsonb_array_length(data->'ticket_numbers')
+               WHEN COALESCE(data->>'tickets_count', '') ~ '^[0-9]+$' THEN (data->>'tickets_count')::int
+               ELSE 0
+             END
+           ), 0)::int AS total_tickets
+         FROM entity_records
          WHERE entity_name = 'Deposit'
-           AND COALESCE(data->>'user_id', '') = $1`,
-        [userId]
-      ),
-      pool.query(
-        `SELECT
-            (SELECT COUNT(*)::int FROM entity_records WHERE entity_name = 'LiveDrawParticipant' AND COALESCE(data->>'user_id', '') = $1) AS live_participations,
-            (SELECT COUNT(*)::int FROM entity_records WHERE entity_name = 'GameCallParticipant' AND COALESCE(data->>'user_id', '') = $1) AS game_participations,
-            (SELECT COUNT(*)::int FROM entity_records WHERE entity_name = 'InstantRaffleParticipant' AND COALESCE(data->>'user_id', '') = $1) AS instant_participations,
-            (SELECT COUNT(*)::int FROM entity_records WHERE entity_name = 'DailyChestXpGrant' AND COALESCE(data->>'user_id', '') = $1) AS chest_rewards`,
-        [userId]
-      ),
-      pool.query(
-        `SELECT
-            (SELECT COUNT(*)::int FROM daily_checkins WHERE user_id = $1) AS total_checkins,
-            (SELECT COUNT(*)::int FROM user_follows WHERE target_user_id = $1 AND active = true) AS total_followers,
-            (SELECT COUNT(*)::int FROM user_follows WHERE follower_user_id = $1 AND active = true) AS following_count,
-            (SELECT COUNT(*)::int FROM profile_likes WHERE target_user_id = $1 AND active = true) AS total_likes`,
-        [userId]
-      ),
-    ]),
+           AND COALESCE(data->>'user_id', '') = $1
+       ),
+       participations AS (
+         SELECT
+           COUNT(*) FILTER (WHERE entity_name = 'LiveDrawParticipant')::int AS live_participations,
+           COUNT(*) FILTER (WHERE entity_name = 'GameCallParticipant')::int AS game_participations,
+           COUNT(*) FILTER (WHERE entity_name = 'InstantRaffleParticipant')::int AS instant_participations,
+           COUNT(*) FILTER (WHERE entity_name = 'DailyChestXpGrant')::int AS chest_rewards
+         FROM entity_records
+         WHERE entity_name IN ('LiveDrawParticipant', 'GameCallParticipant', 'InstantRaffleParticipant', 'DailyChestXpGrant')
+           AND COALESCE(data->>'user_id', '') = $1
+       ),
+       social AS (
+         SELECT
+           (SELECT COUNT(*)::int FROM daily_checkins WHERE user_id = $1) AS total_checkins,
+           (SELECT COUNT(*)::int FROM user_follows WHERE target_user_id = $1 AND active = true) AS total_followers,
+           (SELECT COUNT(*)::int FROM user_follows WHERE follower_user_id = $1 AND active = true) AS following_count,
+           (SELECT COUNT(*)::int FROM profile_likes WHERE target_user_id = $1 AND active = true) AS total_likes
+       )
+       SELECT *
+         FROM wins
+         CROSS JOIN deposits
+         CROSS JOIN participations
+         CROSS JOIN social`,
+      [userId]
+    ),
     pool.query(
       `WITH weekly AS (
          SELECT user_id, amount
@@ -1690,10 +1755,7 @@ async function buildLightweightProfileMetrics(userId) {
   const balanceMap = new Map(
     balanceRows.rows.map((row) => [`${row.metric_key}::${row.cycle_key || ""}`, Number(row.amount || 0)])
   );
-  const winsRow = profileAggRows[0]?.rows?.[0] || {};
-  const depositRow = profileAggRows[1]?.rows?.[0] || {};
-  const participationRow = profileAggRows[2]?.rows?.[0] || {};
-  const socialRow = profileAggRows[3]?.rows?.[0] || {};
+  const summaryRow = summaryRows?.rows?.[0] || {};
 
   const weeklyCycleKey = String(cycle?.cycle_key || "");
   const leaderboardEntries = (leaderboardRows?.rows || []).map((row) => ({
@@ -1718,25 +1780,25 @@ async function buildLightweightProfileMetrics(userId) {
 
   const metrics = {
     position: Number(currentCompetitionEntry.position || 0),
-    totalApproved: Number(depositRow.total_approved || 0),
-    totalTickets: Number(depositRow.total_tickets || 0),
+    totalApproved: Number(summaryRow.total_approved || 0),
+    totalTickets: Number(summaryRow.total_tickets || 0),
     totalParticipations:
-      Number(participationRow.live_participations || 0) +
-      Number(participationRow.game_participations || 0) +
-      Number(participationRow.instant_participations || 0),
-    totalWins: Number(winsRow.total_wins || 0),
-    liveParticipations: Number(participationRow.live_participations || 0),
-    totalFollowers: Number(socialRow.total_followers || 0),
-    totalLikes: Number(socialRow.total_likes || 0),
-    totalCheckins: Number(socialRow.total_checkins || 0),
-    followingCount: Number(socialRow.following_count || 0),
+      Number(summaryRow.live_participations || 0) +
+      Number(summaryRow.game_participations || 0) +
+      Number(summaryRow.instant_participations || 0),
+    totalWins: Number(summaryRow.total_wins || 0),
+    liveParticipations: Number(summaryRow.live_participations || 0),
+    totalFollowers: Number(summaryRow.total_followers || 0),
+    totalLikes: Number(summaryRow.total_likes || 0),
+    totalCheckins: Number(summaryRow.total_checkins || 0),
+    followingCount: Number(summaryRow.following_count || 0),
     points: Number(balanceMap.get("engagement_points::") || 0),
     progress: Math.min(
       100,
       Math.round(
-        ((Number(participationRow.live_participations || 0) +
-          Number(participationRow.game_participations || 0) +
-          Number(participationRow.instant_participations || 0)) /
+        ((Number(summaryRow.live_participations || 0) +
+          Number(summaryRow.game_participations || 0) +
+          Number(summaryRow.instant_participations || 0)) /
           Math.max(1, Number(pointsRules.progress_target_participations || 25))) *
           100
       )
@@ -1745,8 +1807,8 @@ async function buildLightweightProfileMetrics(userId) {
     xp_total: Number(balanceMap.get("xp_total::") || 0),
     weeklyPoints: Number(balanceMap.get(`weekly_points::${weeklyCycleKey}`) || 0),
     weekly_points: Number(balanceMap.get(`weekly_points::${weeklyCycleKey}`) || 0),
-    chestRewards: Number(participationRow.chest_rewards || 0),
-    prizeCounts: Number(winsRow.total_wins || 0),
+    chestRewards: Number(summaryRow.chest_rewards || 0),
+    prizeCounts: Number(summaryRow.total_wins || 0),
   };
 
   const achievements = computeAchievements(metrics, badgeRules);

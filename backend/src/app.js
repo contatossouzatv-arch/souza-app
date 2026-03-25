@@ -69,6 +69,19 @@ function buildRateLimiter({ windowMs, limit, prefix = "ratelimit:" } = {}) {
   });
 }
 
+function shouldLogRouteTiming(path = "") {
+  const normalized = String(path || "").trim();
+  return [
+    "/health",
+    "/api/auth/login",
+    "/api/auth/me",
+    "/api/auth/refresh",
+    "/api/profile/metrics",
+    "/api/leaderboards/weekly",
+    "/api/entities/AppSettings",
+  ].includes(normalized);
+}
+
 export function createApp(io) {
   const app = express();
   app.locals.io = io;
@@ -95,12 +108,7 @@ export function createApp(io) {
   app.use((req, res, next) => {
     req._startedAtMs = Date.now();
 
-    if (
-      req.path === "/health" ||
-      req.path === "/api/auth/me" ||
-      req.path === "/api/auth/refresh" ||
-      req.path === "/api/auth/login"
-    ) {
+    if (shouldLogRouteTiming(req.path)) {
       console.info("[http] request:start", {
         method: req.method,
         path: req.originalUrl,

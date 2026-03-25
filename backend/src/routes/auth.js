@@ -532,28 +532,32 @@ router.post("/login", loginRateLimiter, async (req, res) => {
   if (Boolean(userRow.two_factor_enabled) && userRow.two_factor_secret) {
     const otpOk = verifyTotp(userRow.two_factor_secret, otp);
     if (!otpOk) {
-      await createLoginAttempt({
-        identifier: normalizedEmail,
-        ip: meta.ip,
-        user_agent: meta.user_agent,
-        success: false,
-      });
-      await auditEvent(req, "LOGIN_2FA_FAILED", userRow.id, { identifier: normalizedEmail });
+      await Promise.all([
+        createLoginAttempt({
+          identifier: normalizedEmail,
+          ip: meta.ip,
+          user_agent: meta.user_agent,
+          success: false,
+        }),
+        auditEvent(req, "LOGIN_2FA_FAILED", userRow.id, { identifier: normalizedEmail }),
+      ]);
       return res.status(401).json({ error: "Código 2FA inválido." });
     }
   }
 
   const activeUser = await reactivateIfNeeded(userRow.id);
-  await createLoginAttempt({
-    identifier: normalizedEmail,
-    ip: meta.ip,
-    user_agent: meta.user_agent,
-    success: true,
-  });
   const session = await issueSession(req, activeUser);
   setSessionCookies(res, session);
   logAuthRoute(req, "session issued", { userId: activeUser.id, reason: "login" });
-  await auditEvent(req, "USER_LOGGED_IN", activeUser.id, { method: "password" });
+  await Promise.all([
+    createLoginAttempt({
+      identifier: normalizedEmail,
+      ip: meta.ip,
+      user_agent: meta.user_agent,
+      success: true,
+    }),
+    auditEvent(req, "USER_LOGGED_IN", activeUser.id, { method: "password" }),
+  ]);
   return res.json(session);
 });
 

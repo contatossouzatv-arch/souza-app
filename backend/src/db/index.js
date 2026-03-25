@@ -3,6 +3,63 @@ import { env } from "../config/env.js";
 
 export const pool = new Pool({ connectionString: env.databaseUrl });
 
+const SLOW_QUERY_THRESHOLD_MS = 200;
+
+function formatQueryLogText(text = "") {
+  return String(text || "").replace(/\s+/g, " ").trim().slice(0, 240);
+}
+
+function logQueryDuration(durationMs, text, values, rowCount = null) {
+  const payload = {
+    durationMs,
+    rowCount,
+    sql: formatQueryLogText(text),
+    valuesCount: Array.isArray(values) ? values.length : 0,
+  };
+
+  if (durationMs >= SLOW_QUERY_THRESHOLD_MS) {
+    console.warn("[db] slow query", payload);
+    return;
+  }
+
+  console.info("[db] query", payload);
+}
+
+async function timedQueryRunner(queryFn, text, values) {
+  const startedAt = Date.now();
+  try {
+    const result = await queryFn(text, values);
+    const durationMs = Date.now() - startedAt;
+    if (durationMs >= SLOW_QUERY_THRESHOLD_MS) {
+      logQueryDuration(durationMs, text, values, result?.rowCount ?? null);
+    }
+    return result;
+  } catch (error) {
+    const durationMs = Date.now() - startedAt;
+    console.error("[db] query error", {
+      durationMs,
+      sql: formatQueryLogText(text),
+      valuesCount: Array.isArray(values) ? values.length : 0,
+      message: error?.message || "Database query failed",
+    });
+    throw error;
+  }
+}
+
+const originalPoolQuery = pool.query.bind(pool);
+pool.query = (text, values) => timedQueryRunner(originalPoolQuery, text, values);
+
+const originalPoolConnect = pool.connect.bind(pool);
+pool.connect = async (...args) => {
+  const client = await originalPoolConnect(...args);
+  if (!client.__timedQueryPatched) {
+    const originalClientQuery = client.query.bind(client);
+    client.query = (text, values) => timedQueryRunner(originalClientQuery, text, values);
+    client.__timedQueryPatched = true;
+  }
+  return client;
+};
+
 function toIso(value) {
   if (!value) return new Date().toISOString();
   return new Date(value).toISOString();
@@ -102,6 +159,9 @@ export async function ensureDb() {
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS idx_login_attempts_identifier ON login_attempts(identifier)");
   await pool.query("CREATE INDEX IF NOT EXISTS idx_login_attempts_created_at ON login_attempts(created_at)");
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_login_attempts_identifier_ip_success_created ON login_attempts(identifier, ip, success, created_at DESC)"
+  );
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -325,6 +385,18 @@ export async function ensureDb() {
   );
   await pool.query(
     "CREATE INDEX IF NOT EXISTS idx_entity_records_data_gin ON entity_records USING GIN (data)"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_entity_records_entity_user_id ON entity_records(entity_name, ((data->>'user_id')))"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_entity_records_entity_user_status ON entity_records(entity_name, ((data->>'user_id')), ((data->>'status')))"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_entity_records_app_settings_key ON entity_records(((data->>'key'))) WHERE entity_name = 'AppSettings'"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_entity_records_deposit_cycle_status_user ON entity_records(entity_name, ((data->>'cycle_id')), ((data->>'status')), ((data->>'user_id'))) WHERE entity_name = 'Deposit'"
   );
 
   await pool.query(`
@@ -1692,7 +1764,7 @@ export function getEntityRecordData(row) {
   return normalizeRecord(row);
 }
 
-async function getAppSettingsMap() {
+export async function getAppSettingsMap() {
   const result = await pool.query(
     "SELECT data FROM entity_records WHERE entity_name = 'AppSettings' ORDER BY created_at DESC"
   );
@@ -3638,6 +3710,23 @@ function matchesFilters(row, filters = {}) {
 }
 
 export async function listEntity(entityName, sort, limit) {
+  if (entityName === "AppSettings") {
+    const values = ["AppSettings"];
+    const parsedLimit = Number(limit);
+    const limitClause =
+      Number.isFinite(parsedLimit) && parsedLimit > 0 ? ` LIMIT ${pushSqlValue(values, parsedLimit)}` : "";
+    const result = await pool.query(
+      `SELECT id, data, created_at, updated_at
+       FROM entity_records
+       WHERE entity_name = $1
+       ORDER BY created_at DESC
+       ${limitClause}`,
+      values
+    );
+
+    return result.rows.map(normalizeRecord);
+  }
+
   if (entityName === "User") {
     const values = [];
     let query = `SELECT * FROM users ${buildUserOrderBySql(sort)}`;
