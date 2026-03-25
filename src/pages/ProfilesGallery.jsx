@@ -43,7 +43,7 @@ export default function ProfilesGallery() {
 
   const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage } = useInfiniteQuery({
     queryKey: ["profiles-gallery"],
-    queryFn: ({ pageParam = 0 }) => base44.social.discover({ limit: PAGE_SIZE, offset: pageParam }),
+    queryFn: ({ pageParam = 0 }) => base44.social.discover({ limit: PAGE_SIZE, offset: pageParam, sort: "priority" }),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => (lastPage?.hasMore ? lastPage?.nextOffset ?? undefined : undefined),
     staleTime: 60000,

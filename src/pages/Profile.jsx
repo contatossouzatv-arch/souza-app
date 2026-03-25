@@ -1757,10 +1757,22 @@ export default function Profile() {
         const current = next[profileId] || {};
         const computed = {
           ...current,
-          isFollowing: Boolean(profile.isFollowing) || followingIds.has(profileId),
-          isLiked: Boolean(profile.isLiked),
-          followers: Number(profile.followers || 0),
-          likes: Number(profile.likes || 0),
+          isFollowing:
+            typeof current.isFollowing === "boolean"
+              ? current.isFollowing
+              : Boolean(profile.isFollowing) || followingIds.has(profileId),
+          isLiked:
+            typeof current.isLiked === "boolean"
+              ? current.isLiked
+              : Boolean(profile.isLiked),
+          followers:
+            typeof current.followers === "number"
+              ? current.followers
+              : Number(profile.followers || 0),
+          likes:
+            typeof current.likes === "number"
+              ? current.likes
+              : Number(profile.likes || 0),
         };
 
         if (
@@ -2621,6 +2633,22 @@ export default function Profile() {
       shouldFollow ? base44.social.follow(targetUserId) : base44.social.unfollow(targetUserId),
     onSuccess: (response) => {
       const targetUserId = String(response?.state?.targetUserId || "");
+      if (targetUserId) {
+        setSimState((prev) => ({
+          ...prev,
+          [targetUserId]: {
+            ...(prev?.[targetUserId] || {}),
+            isFollowing: Boolean(response?.state?.isFollowing),
+            followers: Number(response?.state?.followers ?? prev?.[targetUserId]?.followers ?? 0),
+            following: Number(response?.state?.following ?? prev?.[targetUserId]?.following ?? 0),
+            isLiked:
+              typeof prev?.[targetUserId]?.isLiked === "boolean"
+                ? Boolean(prev[targetUserId].isLiked)
+                : false,
+            likes: Number(response?.state?.likes ?? prev?.[targetUserId]?.likes ?? 0),
+          },
+        }));
+      }
       if (targetUserId && user?.id) {
         queryClient.setQueryData(["social-target-state", user.id, targetUserId], (previous) => ({
           ...(previous && typeof previous === "object" ? previous : {}),
@@ -2658,6 +2686,22 @@ export default function Profile() {
       shouldLike ? base44.social.like(targetUserId) : base44.social.unlike(targetUserId),
     onSuccess: (response) => {
       const targetUserId = String(response?.state?.targetUserId || "");
+      if (targetUserId) {
+        setSimState((prev) => ({
+          ...prev,
+          [targetUserId]: {
+            ...(prev?.[targetUserId] || {}),
+            isLiked: Boolean(response?.state?.isLiked),
+            likes: Number(response?.state?.likes ?? prev?.[targetUserId]?.likes ?? 0),
+            isFollowing:
+              typeof prev?.[targetUserId]?.isFollowing === "boolean"
+                ? Boolean(prev[targetUserId].isFollowing)
+                : false,
+            followers: Number(response?.state?.followers ?? prev?.[targetUserId]?.followers ?? 0),
+            following: Number(response?.state?.following ?? prev?.[targetUserId]?.following ?? 0),
+          },
+        }));
+      }
       if (targetUserId && user?.id) {
         queryClient.setQueryData(["social-target-state", user.id, targetUserId], (previous) => ({
           ...(previous && typeof previous === "object" ? previous : {}),

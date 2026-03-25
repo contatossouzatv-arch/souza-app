@@ -68,7 +68,7 @@ export default function Home() {
 
   const { data: recentProfilesData } = useQuery({
     queryKey: ["inicio-recent-profiles"],
-    queryFn: () => base44.social.discover({ limit: 10, offset: 0 }),
+    queryFn: () => base44.social.discover({ limit: 10, offset: 0, sort: "recent" }),
     staleTime: 60000,
   });
 

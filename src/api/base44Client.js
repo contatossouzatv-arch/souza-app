@@ -1077,10 +1077,11 @@ export const base44 = {
       return request("/api/social/followers/my");
     },
 
-    async discover({ limit = 12, offset = 0 } = {}) {
+    async discover({ limit = 12, offset = 0, sort = "recent" } = {}) {
       const params = new URLSearchParams();
       params.set("limit", String(limit));
       params.set("offset", String(offset));
+      params.set("sort", String(sort || "recent"));
       return request(`/api/social/discover?${params.toString()}`);
     },
 

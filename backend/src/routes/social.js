@@ -296,9 +296,24 @@ async function listRelationProfiles(client, type, userId) {
   return result.rows.map(mapSocialProfile);
 }
 
-async function listDiscoverProfiles(client, viewerUserId, { limit = 12, offset = 0 } = {}) {
+async function listDiscoverProfiles(client, viewerUserId, { limit = 12, offset = 0, sort = "recent" } = {}) {
   const queryLimit = Math.max(1, Number(limit || 12));
   const queryOffset = Math.max(0, Number(offset || 0));
+  const normalizedSort = String(sort || "recent").toLowerCase() === "priority" ? "priority" : "recent";
+  const orderByClause =
+    normalizedSort === "priority"
+      ? `CASE
+           WHEN LOWER(COALESCE(u.profile_image_mode, '')) = 'photo'
+            AND LOWER(COALESCE(u.profile_image_status, '')) = 'approved'
+            AND COALESCE(NULLIF(BTRIM(u.profile_image_url), ''), '') <> ''
+             THEN 0
+           WHEN COALESCE(NULLIF(BTRIM(u.profile_avatar_id), ''), '') <> ''
+             OR COALESCE(NULLIF(BTRIM(u.avatar_emoji), ''), '') <> ''
+             THEN 1
+           ELSE 2
+         END ASC,
+         u.created_at DESC`
+      : "u.created_at DESC";
   const result = await client.query(
     `SELECT u.*,
         COALESCE(followers.count, 0) AS followers,
@@ -332,18 +347,7 @@ async function listDiscoverProfiles(client, viewerUserId, { limit = 12, offset =
        ON viewer_like.target_user_id = u.id
        AND viewer_like.actor_user_id = $3
        WHERE COALESCE(u.account_status, 'active') <> 'deactivated'
-       ORDER BY
-         CASE
-           WHEN LOWER(COALESCE(u.profile_image_mode, '')) = 'photo'
-            AND LOWER(COALESCE(u.profile_image_status, '')) = 'approved'
-            AND COALESCE(NULLIF(BTRIM(u.profile_image_url), ''), '') <> ''
-             THEN 0
-           WHEN COALESCE(NULLIF(BTRIM(u.profile_avatar_id), ''), '') <> ''
-             OR COALESCE(NULLIF(BTRIM(u.avatar_emoji), ''), '') <> ''
-             THEN 1
-           ELSE 2
-         END ASC,
-         u.created_at DESC
+       ORDER BY ${orderByClause}
        LIMIT $1 OFFSET $2`,
       [queryLimit + 1, queryOffset, viewerUserId]
     );
@@ -527,7 +531,8 @@ router.get("/social/discover", requireAuth, async (req, res) => {
   try {
     const limit = normalizeListLimit(req.query?.limit, 12, 60);
     const offset = normalizeListOffset(req.query?.offset);
-    const result = await listDiscoverProfiles(client, req.auth.sub, { limit, offset });
+    const sort = String(req.query?.sort || "recent").toLowerCase();
+    const result = await listDiscoverProfiles(client, req.auth.sub, { limit, offset, sort });
     res.json(result);
   } finally {
     client.release();
