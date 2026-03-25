@@ -419,9 +419,12 @@ function invalidateGamificationStateCache() {
   profileMetricsPromises = new Map();
 }
 
-export async function refreshGamificationState() {
+export async function refreshGamificationState(options = {}) {
   invalidateGamificationStateCache();
-  return buildGamificationState({ forceFresh: true });
+  return buildGamificationState({
+    forceFresh: true,
+    persistDerived: options?.persistDerived === true,
+  });
 }
 
 function normalizeDailyCheckInConfig(raw = {}, rules = []) {
@@ -1524,7 +1527,8 @@ function buildPrizeRewardLabel(item = {}) {
   return String(item.special_label || item.title || "Prêmio").trim() || "Prêmio";
 }
 
-async function buildGamificationStateFresh() {
+async function buildGamificationStateFresh(options = {}) {
+  const persistDerived = options?.persistDerived === true;
   const [users, deposits, liveParticipants, gameParticipants, instantParticipants, prizeGalleryItems, chestXpGrants, competitionPointEvents, dailyCheckins, userFollows, profileLikes] =
     await Promise.all([
       listEntity("User"),
@@ -1559,8 +1563,10 @@ async function buildGamificationStateFresh() {
     cycle,
     dailyCheckInConfig,
   });
-  await reconcileSnapshotsWithAuthoritativeBalances(snapshots, cycle.cycle_key);
-  await persistSnapshots(snapshots, cycle.cycle_key);
+  if (persistDerived) {
+    await reconcileSnapshotsWithAuthoritativeBalances(snapshots, cycle.cycle_key);
+    await persistSnapshots(snapshots, cycle.cycle_key);
+  }
 
   const leaderboardEntries = Object.values(snapshots)
     .sort((a, b) => {
@@ -1601,7 +1607,9 @@ async function buildGamificationState(options = {}) {
     return gamificationStatePromise;
   }
 
-  gamificationStatePromise = buildGamificationStateFresh()
+  gamificationStatePromise = buildGamificationStateFresh({
+    persistDerived: options?.persistDerived === true,
+  })
     .then((state) => {
       gamificationStateCache = {
         value: state,
@@ -2531,7 +2539,8 @@ router.get("/profile/metrics", requireAuth, async (req, res) => {
   const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
   try {
     if (shouldForceRefresh) {
-      await refreshGamificationState();
+      profileMetricsCache.delete(String(userId || "").trim());
+      profileMetricsPromises.delete(String(userId || "").trim());
     }
     const payload = await buildLightweightProfileMetrics(userId, {
       forceFresh: shouldForceRefresh,
