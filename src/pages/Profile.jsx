@@ -130,6 +130,16 @@ const BADGE_ICON_MAP = {
 const BADGE_CELEBRATION_STORAGE_PREFIX = "profile_badge_celebration_seen_v1_";
 const PROFILE_GESTURE_DRAG_ENABLED = true;
 const PROFILE_AUTOPLAY_MEDIA_ENABLED = false;
+const PROFILE_DEBUG_ENABLED = true;
+
+function profileDebugLog(label, payload = undefined) {
+  if (!PROFILE_DEBUG_ENABLED || typeof console === "undefined") return;
+  if (payload === undefined) {
+    console.log(`[PROFILE_DEBUG] ${label}`);
+    return;
+  }
+  console.log(`[PROFILE_DEBUG] ${label}`, payload);
+}
 
 function getSpecialBadgeVisual(achievement) {
   const normalizedLabel = String(achievement?.label || "").toLowerCase();
@@ -779,7 +789,6 @@ export default function Profile() {
   const [badgeViewerDirection, setBadgeViewerDirection] = useState(0);
   const [isCompetitionHelpOpen, setIsCompetitionHelpOpen] = useState(false);
   const [isEngagementGuideOpen, setIsEngagementGuideOpen] = useState(false);
-  const [isSecondaryProfileUiReady, setIsSecondaryProfileUiReady] = useState(false);
   const [isLevelHudOpen, setIsLevelHudOpen] = useState(false);
   const [isPointsHistoryOpen, setIsPointsHistoryOpen] = useState(false);
   const [pointsHistoryTab, setPointsHistoryTab] = useState("weekly");
@@ -816,22 +825,32 @@ export default function Profile() {
   const lastAchievementKeysRef = React.useRef(new Set());
   const navigate = useNavigate();
   const location = useLocation();
+  const profileDebugRenderCountRef = React.useRef(0);
+  const profileDebugPrevEffectDepsRef = React.useRef({});
 
-  useEffect(() => {
-    setIsSecondaryProfileUiReady(false);
-    const idleScheduler = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 900));
-    const handle = idleScheduler(() => {
-      setIsSecondaryProfileUiReady(true);
+  const debugNavigate = React.useCallback(
+    (target, options = undefined, reason = "unknown") => {
+      profileDebugLog("navigate", {
+        reason,
+        fromPathname: location.pathname,
+        fromSearch: location.search,
+        target,
+        options: options || null,
+      });
+      navigate(target, options);
+    },
+    [location.pathname, location.search, navigate]
+  );
+
+  const debugEffect = React.useCallback((name, deps) => {
+    if (!PROFILE_DEBUG_ENABLED) return;
+    const previous = profileDebugPrevEffectDepsRef.current[name];
+    profileDebugPrevEffectDepsRef.current[name] = deps;
+    profileDebugLog(`effect:${name}`, {
+      previous: previous || null,
+      current: deps,
     });
-
-    return () => {
-      if (typeof window.cancelIdleCallback === "function" && typeof handle === "number") {
-        window.cancelIdleCallback(handle);
-        return;
-      }
-      window.clearTimeout(handle);
-    };
-  }, [location.pathname, location.search]);
+  }, []);
 
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
@@ -1154,7 +1173,14 @@ export default function Profile() {
     refetch: refetchProfileGamification,
   } = useQuery({
     queryKey: ["profile-gamification-authoritative", user?.id],
-    queryFn: () => base44.gamification.profileMetrics(),
+    queryFn: () => {
+      profileDebugLog("query:profile-gamification-authoritative", {
+        loggedUserId: user?.id || "",
+        pathname: location.pathname,
+        search: location.search,
+      });
+      return base44.gamification.profileMetrics();
+    },
     enabled: !!user,
     staleTime: 120000,
     retry: 1,
@@ -1617,9 +1643,38 @@ export default function Profile() {
 
   const isViewingPublicProfile = Boolean(selectedPublicProfileHandle || selectedPublicProfileId);
 
+  profileDebugRenderCountRef.current += 1;
+  profileDebugLog("render", {
+    renderCount: profileDebugRenderCountRef.current,
+    pathname: location.pathname,
+    search: location.search,
+    routeUserId: selectedPublicProfileId,
+    routeHandle: selectedPublicProfileHandle,
+    loggedUserId: user?.id || "",
+    isViewingPublicProfile,
+  });
+
+  useEffect(() => {
+    profileDebugLog("mount", {
+      pathname: location.pathname,
+      search: location.search,
+      loggedUserId: user?.id || "",
+    });
+    return () => {
+      profileDebugLog("unmount", {
+        pathname: location.pathname,
+        search: location.search,
+        loggedUserId: user?.id || "",
+      });
+    };
+  }, []);
+
   const { data: selectedPublicUserById } = useQuery({
     queryKey: ["public-profile-user", selectedPublicProfileId],
     queryFn: async () => {
+      profileDebugLog("query:public-profile-user", {
+        selectedPublicProfileId,
+      });
       const items = await base44.entities.User.filter({ id: selectedPublicProfileId }, undefined, 1);
       return Array.isArray(items) ? items[0] || null : null;
     },
@@ -1628,6 +1683,11 @@ export default function Profile() {
   });
 
   useEffect(() => {
+    debugEffect("scroll-public-profile", {
+      isViewingPublicProfile,
+      selectedPublicProfileHandle,
+      selectedPublicProfileId,
+    });
     if (!isViewingPublicProfile) return;
     const scrollRoot = document.querySelector('[data-app-scroll-root="true"]');
     if (scrollRoot && "scrollTo" in scrollRoot) {
@@ -1694,6 +1754,16 @@ export default function Profile() {
   const isSelectedRealProfile = Boolean(selectedPublicProfile?.id);
   const isOwnSelectedPublicProfile = Boolean(selectedPublicProfile?.id && selectedPublicProfile.id === user?.id);
 
+  profileDebugLog("resolved-profile-target", {
+    selectedPublicProfileId,
+    selectedPublicProfileHandle,
+    selectedPublicProfileResolvedId: selectedPublicProfile?.id || "",
+    selectedPublicProfileResolvedHandle: selectedPublicProfile?.handle || "",
+    isSelectedRealProfile,
+    isOwnSelectedPublicProfile,
+    loggedUserId: user?.id || "",
+  });
+
   const { data: profileNotifications = [] } = useQuery({
     queryKey: ["profile-notifications", user?.id],
     queryFn: () => base44.entities.ProfileNotification.filter({ user_id: user.id }, "-created_date", 50),
@@ -1726,14 +1796,26 @@ export default function Profile() {
 
   const { data: selectedPublicSocialState } = useQuery({
     queryKey: ["social-target-state", user?.id, selectedPublicProfile?.id],
-    queryFn: () => base44.social.state(selectedPublicProfile.id),
+    queryFn: () => {
+      profileDebugLog("query:social-target-state", {
+        viewerUserId: user?.id || "",
+        targetUserId: selectedPublicProfile?.id || "",
+      });
+      return base44.social.state(selectedPublicProfile.id);
+    },
     enabled: !!user && !!selectedPublicProfile?.id && isSelectedRealProfile,
     staleTime: 15000,
   });
 
   const { data: selectedPublicProfileSummary } = useQuery({
     queryKey: ["public-profile-summary", selectedPublicProfile?.id],
-    queryFn: () => base44.gamification.publicProfileSummary(selectedPublicProfile.id),
+    queryFn: () => {
+      profileDebugLog("query:public-profile-summary", {
+        targetUserId: selectedPublicProfile?.id || "",
+        loggedUserId: user?.id || "",
+      });
+      return base44.gamification.publicProfileSummary(selectedPublicProfile.id);
+    },
     enabled: !!user && !!selectedPublicProfile?.id && isSelectedRealProfile,
     staleTime: 30000,
     refetchOnWindowFocus: false,
@@ -1763,6 +1845,10 @@ export default function Profile() {
   }, [selectedPublicProfile?.id, simulatedProfiles, simState]);
 
   useEffect(() => {
+    debugEffect("badge-celebration-reset", {
+      loggedUserId: user?.id || "",
+      isViewingPublicProfile,
+    });
     if (!user?.id || isViewingPublicProfile) {
       badgeCelebrationQueueRef.current = [];
       seenBadgeCelebrationsRef.current = new Set();
@@ -1784,6 +1870,11 @@ export default function Profile() {
   }, [user?.id, isViewingPublicProfile]);
 
   useEffect(() => {
+    debugEffect("simulated-badge-from-querystring", {
+      loggedUserId: user?.id || "",
+      isViewingPublicProfile,
+      search: location.search,
+    });
     if (!user?.id || isViewingPublicProfile) return;
     const params = new URLSearchParams(location.search || "");
     const simulatedBadgeId = String(params.get("simBadge") || "").trim();
@@ -1804,6 +1895,11 @@ export default function Profile() {
   }, [user?.id, isViewingPublicProfile, location.search, badgeRules]);
 
   useEffect(() => {
+    debugEffect("new-achievements", {
+      loggedUserId: user?.id || "",
+      isViewingPublicProfile,
+      achievementCount: achievements?.length || 0,
+    });
     if (!user?.id || isViewingPublicProfile) return;
 
     const currentKeys = new Set((achievements || []).map((item) => item.key));
@@ -1830,6 +1926,10 @@ export default function Profile() {
 
   useEffect(() => {
     return () => {
+      profileDebugLog("cleanup:profile-unmount", {
+        pathname: location.pathname,
+        search: location.search,
+      });
       const timers = profileSwitchLoaderTimerRef.current;
       if (timers.progressInterval) window.clearInterval(timers.progressInterval);
       if (timers.hideTimeout) window.clearTimeout(timers.hideTimeout);
@@ -1924,6 +2024,11 @@ export default function Profile() {
   };
 
   useEffect(() => {
+    debugEffect("profile-switch-loader-finish", {
+      isProfileSwitchLoading,
+      isViewingPublicProfile,
+      selectedPublicProfileId: selectedPublicProfile?.id || "",
+    });
     if (!isProfileSwitchLoading) return;
     if (isViewingPublicProfile && selectedPublicProfile) {
       finishProfileSwitchLoader();
@@ -2836,7 +2941,7 @@ export default function Profile() {
       const currentUrl = `${location.pathname}${location.search}`;
       if (targetUrl === currentUrl) return;
       startProfileSwitchLoader();
-      navigate(targetUrl);
+      debugNavigate(targetUrl, undefined, "openPublicProfilePage:ranking-entry");
       return;
     }
     const nextHandle = resolvedProfile?.handle;
@@ -2845,7 +2950,7 @@ export default function Profile() {
     const currentUrl = `${location.pathname}${location.search}`;
     if (targetUrl === currentUrl) return;
     startProfileSwitchLoader();
-    navigate(targetUrl);
+    debugNavigate(targetUrl, undefined, "openPublicProfilePage:handle");
   };
 
   const openPublicProfileByUserId = (userId) => {
@@ -2856,12 +2961,12 @@ export default function Profile() {
     if (targetUrl === currentUrl) return;
     setIsSocialListOpen(false);
     startProfileSwitchLoader();
-    navigate(targetUrl);
+    debugNavigate(targetUrl, undefined, "openPublicProfileByUserId");
   };
 
   const closePublicProfilePage = () => {
     setIsPublicPhotoViewerOpen(false);
-    navigate(createPageUrl("Profile"));
+    debugNavigate(createPageUrl("Profile"), undefined, "closePublicProfilePage");
   };
 
   const getLevelLabelFromXp = (xpValue) => {
@@ -4202,13 +4307,7 @@ export default function Profile() {
 
       </Card>
 
-      {!isSecondaryProfileUiReady ? (
-        renderSectionSkeleton({
-          title: "Mais Engajados",
-          subtitle: "Preparando os perfis em destaque.",
-          rows: 2,
-        })
-      ) : isProfileGamificationPending ? (
+      {isProfileGamificationPending ? (
         renderSectionSkeleton({
           title: "Mais Engajados",
           subtitle: "Carregando os perfis com maior nível, top semanal e engajamento.",
@@ -4371,14 +4470,7 @@ export default function Profile() {
         </Card>
       )}
 
-      {!isSecondaryProfileUiReady ? (
-        renderSectionSkeleton({
-          title: "Resumo Publico",
-          subtitle: "Preparando o resumo do perfil.",
-          rows: 2,
-          compact: true,
-        })
-      ) : isProfileGamificationPending ? (
+      {isProfileGamificationPending ? (
         renderSectionSkeleton({
           title: "Resumo Publico",
           subtitle: "Buscando bilhetes, posição no top semanal e progresso geral.",
@@ -4423,13 +4515,7 @@ export default function Profile() {
         </Card>
       )}
 
-      {!isSecondaryProfileUiReady ? (
-        renderSectionSkeleton({
-          title: "Selos e Conquistas",
-          subtitle: "Preparando selos e progresso do perfil.",
-          rows: 4,
-        })
-      ) : isProfileGamificationPending ? (
+      {isProfileGamificationPending ? (
         renderSectionSkeleton({
           title: "Selos e Conquistas",
           subtitle: "Carregando selos, níveis e progresso do perfil.",
@@ -4512,31 +4598,23 @@ export default function Profile() {
         </Card>
       )}
 
-      {isSecondaryProfileUiReady ? (
-        <Suspense
-          fallback={renderSectionSkeleton({
-            title: "Seus Prêmios",
-            subtitle: "Montando sua galeria privada de prêmios.",
-            rows: 3,
-          })}
-        >
-          <PrizeGalleryCard
-            userId={user?.id}
-            title="Seus Prêmios"
-            subtitle="Esta é a sua galeria privada. Aqui você acompanha tudo o que já ganhou no app em formato de coleção."
-            emptyTitle="Você ainda não tem prêmios salvos na sua galeria"
-            emptySubtitle="Os prêmios resgatados no Baú Diário e nas próximas experiências vão aparecer aqui automaticamente."
-            countLabel="na coleção"
-            privateView={true}
-          />
-        </Suspense>
-      ) : (
-        renderSectionSkeleton({
+      <Suspense
+        fallback={renderSectionSkeleton({
           title: "Seus Prêmios",
-          subtitle: "Preparando sua galeria privada.",
+          subtitle: "Montando sua galeria privada de prêmios.",
           rows: 3,
-        })
-      )}
+        })}
+      >
+        <PrizeGalleryCard
+          userId={user?.id}
+          title="Seus Prêmios"
+          subtitle="Esta é a sua galeria privada. Aqui você acompanha tudo o que já ganhou no app em formato de coleção."
+          emptyTitle="Você ainda não tem prêmios salvos na sua galeria"
+          emptySubtitle="Os prêmios resgatados no Baú Diário e nas próximas experiências vão aparecer aqui automaticamente."
+          countLabel="na coleção"
+          privateView={true}
+        />
+      </Suspense>
 
       <Dialog open={isPointsHistoryOpen} onOpenChange={setIsPointsHistoryOpen}>
         <DialogContent className="border-cyan-500/30 bg-slate-950 text-white shadow-[0_0_45px_rgba(34,211,238,0.15)]">
