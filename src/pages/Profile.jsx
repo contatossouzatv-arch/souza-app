@@ -1,5 +1,5 @@
 ﻿import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -1624,6 +1624,80 @@ export default function Profile() {
     myFollowingProfiles,
     realProfilesById,
   ]);
+  const engagedProfileSummaryQueries = useQueries({
+    queries: engagedProfiles.slice(0, 8).map((profile) => ({
+      queryKey: ["public-profile-summary", profile.id, "engaged-card"],
+      queryFn: () => base44.gamification.publicProfileSummary(profile.id),
+      enabled: !!user && !!profile?.id,
+      staleTime: 30000,
+      refetchOnWindowFocus: false,
+    })),
+  });
+  const engagedProfilesWithSummary = useMemo(() => {
+    const summaryMap = new Map();
+    engagedProfiles.slice(0, 8).forEach((profile, index) => {
+      const payload = engagedProfileSummaryQueries[index]?.data || null;
+      if (payload) summaryMap.set(profile.id, payload);
+    });
+
+    return engagedProfiles
+      .map((profile) => {
+        const summary = summaryMap.get(profile.id) || null;
+        const summaryMetrics = summary?.metrics || {};
+        const summaryEntry = summary?.currentCompetitionEntry || {};
+        const xpTotal = Math.max(0, Number(summaryMetrics.xpTotal ?? summaryMetrics.xp_total ?? profile.xpTotal ?? 0));
+        const level = getLevelProgress(xpTotal).level;
+        const points = Math.max(0, Number(summaryEntry.weekly_points ?? profile.points ?? 0));
+        const weeklyPosition = Math.max(0, Number(summaryEntry.position ?? profile.weeklyPosition ?? 0));
+        const totalWins = Math.max(0, Number(summaryMetrics.totalWins ?? profile.totalWins ?? 0));
+        const participations = Math.max(0, Number(summaryMetrics.totalParticipations ?? profile.participations ?? 0));
+        const followers = Math.max(0, Number(summaryMetrics.totalFollowers ?? profile.followers ?? 0));
+        const likes = Math.max(0, Number(summaryMetrics.totalLikes ?? profile.likes ?? 0));
+        const engagementPoints = Math.max(0, Number(summaryMetrics.points ?? profile.engagementPoints ?? 0));
+        const participationStrength =
+          participations * 1000000 +
+          level * 100000 +
+          totalWins * 10000 +
+          points * 100 +
+          followers * 10 +
+          Math.max(0, 500 - weeklyPosition) +
+          likes;
+
+        return {
+          ...profile,
+          xpTotal,
+          level,
+          points,
+          weeklyPosition,
+          totalWins,
+          participations,
+          followers,
+          likes,
+          engagementPoints,
+          participationStrength,
+        };
+      })
+      .sort((a, b) => {
+        if (b.participations !== a.participations) return b.participations - a.participations;
+        if (b.level !== a.level) return b.level - a.level;
+        if (b.totalWins !== a.totalWins) return b.totalWins - a.totalWins;
+        if (b.points !== a.points) return b.points - a.points;
+        if (a.weeklyPosition !== b.weeklyPosition) {
+          if (!a.weeklyPosition) return 1;
+          if (!b.weeklyPosition) return -1;
+          return a.weeklyPosition - b.weeklyPosition;
+        }
+        if (b.followers !== a.followers) return b.followers - a.followers;
+        if (b.xpTotal !== a.xpTotal) return b.xpTotal - a.xpTotal;
+        if (b.participationStrength !== a.participationStrength) return b.participationStrength - a.participationStrength;
+        if (b.engagementPoints !== a.engagementPoints) return b.engagementPoints - a.engagementPoints;
+        return b.likes - a.likes;
+      })
+      .map((profile, index) => ({
+        ...profile,
+        position: index + 1,
+      }));
+  }, [engagedProfileSummaryQueries, engagedProfiles]);
 
   useEffect(() => {
     if (!simulatedProfiles.length) return;
@@ -4722,7 +4796,7 @@ export default function Profile() {
             className="hide-scrollbar touch-pan-x flex gap-3 overflow-x-auto pb-1 select-none"
             style={{ WebkitOverflowScrolling: "touch" }}
           >
-            {engagedProfiles.slice(0, 5).map((profile, index) => {
+            {engagedProfilesWithSummary.slice(0, 5).map((profile, index) => {
               const state = simState[profile.id] || {
                 isFollowing: false,
                 isLiked: false,
