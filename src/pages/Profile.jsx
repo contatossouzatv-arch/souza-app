@@ -1445,20 +1445,39 @@ export default function Profile() {
         const level = getLevelProgress(xpTotal).level;
         const engagementPoints = Math.max(0, Number(leaderboardProfile.engagement_points || profile.engagementPoints || profile.engagement_points || 0));
         const followers = Math.max(0, Number(profile.followers || leaderboardProfile.totalFollowers || 0));
+        const totalParticipations = Math.max(
+          0,
+          Number(
+            leaderboardProfile.totalParticipations ||
+              profile.participations ||
+              (Number(leaderboardProfile.liveParticipations || 0) +
+                Number(leaderboardProfile.gameParticipations || 0) +
+                Number(leaderboardProfile.instantParticipations || 0))
+          )
+        );
+        const totalWins = Math.max(0, Number(leaderboardProfile.totalWins || profile.totalWins || 0));
+        const weeklyPoints = Math.max(0, Number(leaderboardProfile.weekly_points || leaderboardProfile.points || profile.points || 0));
         const weeklyPosition = Math.max(0, Number(leaderboardProfile.position || 0));
-        const engagementScore = followers + xpTotal + engagementPoints;
+        const participationStrength =
+          totalParticipations * 1000000 +
+          level * 100000 +
+          totalWins * 10000 +
+          weeklyPoints * 100 +
+          followers * 10 +
+          Math.max(0, 500 - weeklyPosition) +
+          Number(profile.likes || leaderboardProfile.totalLikes || 0);
         return {
           ...profile,
-          points: engagementPoints,
+          points: weeklyPoints,
           level,
           xpTotal,
           engagementPoints,
-          engagementScore,
+          participationStrength,
           weeklyPosition,
           tickets: Math.max(0, profile.followers + profile.likes),
           totalApproved: Number(leaderboardProfile.totalApproved || 0),
-          totalWins: Number(leaderboardProfile.totalWins || 0),
-          participations: Number(leaderboardProfile.totalParticipations || 0),
+          totalWins,
+          participations: totalParticipations,
           liveParticipations: Number(leaderboardProfile.liveParticipations || 0),
           gameParticipations: Number(leaderboardProfile.gameParticipations || 0),
           instantParticipations: Number(leaderboardProfile.instantParticipations || 0),
@@ -1468,16 +1487,19 @@ export default function Profile() {
         };
       })
       .sort((a, b) => {
+        if (b.participations !== a.participations) return b.participations - a.participations;
         if (b.level !== a.level) return b.level - a.level;
+        if (b.totalWins !== a.totalWins) return b.totalWins - a.totalWins;
+        if (b.points !== a.points) return b.points - a.points;
         if (a.weeklyPosition !== b.weeklyPosition) {
           if (!a.weeklyPosition) return 1;
           if (!b.weeklyPosition) return -1;
           return a.weeklyPosition - b.weeklyPosition;
         }
-        if (b.engagementPoints !== a.engagementPoints) return b.engagementPoints - a.engagementPoints;
-        if (b.xpTotal !== a.xpTotal) return b.xpTotal - a.xpTotal;
-        if (b.engagementScore !== a.engagementScore) return b.engagementScore - a.engagementScore;
         if (b.followers !== a.followers) return b.followers - a.followers;
+        if (b.xpTotal !== a.xpTotal) return b.xpTotal - a.xpTotal;
+        if (b.participationStrength !== a.participationStrength) return b.participationStrength - a.participationStrength;
+        if (b.engagementPoints !== a.engagementPoints) return b.engagementPoints - a.engagementPoints;
         return b.likes - a.likes;
       })
       .map((profile, index) => ({
