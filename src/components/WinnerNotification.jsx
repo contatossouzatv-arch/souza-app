@@ -33,9 +33,18 @@ export default function WinnerNotification({ userId }) {
 
   const { data: settings = [] } = useAppSettings();
 
-  const { data: raffles = [] } = useQuery({
-    queryKey: ["winner-raffles"],
-    queryFn: () => base44.entities.LiveDrawRaffle.list(),
+  const activeWinning = winnings.find((w) => !w.claimed_at);
+  const activeDepositantWinning = depositantWinnings.find((w) => !w.claimed_at);
+
+  const { data: raffle = null } = useQuery({
+    queryKey: ["winner-raffle", activeWinning?.raffle_id],
+    queryFn: async () => {
+      const items = await base44.entities.LiveDrawRaffle.filter({ id: activeWinning.raffle_id }, undefined, 1);
+      return items[0] || null;
+    },
+    enabled: !!activeWinning?.raffle_id,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const updateParticipantMutation = useMutation({
@@ -52,17 +61,10 @@ export default function WinnerNotification({ userId }) {
     },
   });
 
-  const activeWinning = winnings.find((w) => !w.claimed_at);
-  const activeDepositantWinning = depositantWinnings.find((w) => !w.claimed_at);
-
   if (!activeWinning && !activeDepositantWinning) return null;
 
   const currentWinning = activeDepositantWinning || activeWinning;
   const isDepositantWinning = Boolean(activeDepositantWinning);
-
-  const raffle = isDepositantWinning
-    ? null
-    : raffles.find((r) => r.id === currentWinning?.raffle_id);
 
   const prizeAmount = Number(
     isDepositantWinning

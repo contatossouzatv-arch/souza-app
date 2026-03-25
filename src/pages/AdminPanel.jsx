@@ -52,8 +52,7 @@ export default function AdminPanel() {
     queryKey: ["admin-profile-images-pending-counter"],
     queryFn: () => base44.auth.listAdminProfileImages("manual_review"),
     staleTime: 5000,
-    refetchInterval: 15000,
-    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: false,
   });
 
   const pendingPhotosCount = pendingProfileImages.length;
@@ -65,8 +64,7 @@ export default function AdminPanel() {
       return response.items || [];
     },
     staleTime: 5000,
-    refetchInterval: 15000,
-    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: false,
   });
 
   const pendingDepositsCount = pendingDeposits.length;

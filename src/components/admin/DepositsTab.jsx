@@ -109,8 +109,7 @@ export default function DepositsTab() {
     queryKey: ["admin-deposits-authoritative", activeCycle?.id],
     queryFn: () => base44.deposits.adminList({ cycleId: activeCycle?.id || "" }),
     enabled: !!activeCycle,
-    refetchInterval: 15000,
-    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: false,
   });
 
   const { data: allUsers = [] } = useQuery({

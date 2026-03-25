@@ -864,9 +864,9 @@ export default function Profile() {
 
   const { data: discoverProfilesData } = useQuery({
     queryKey: ["profile-discover-profiles", user?.id],
-    queryFn: () => base44.social.discover({ limit: 50, offset: 0 }),
+    queryFn: () => base44.social.discover({ limit: 24, offset: 0 }),
     enabled: !!user,
-    staleTime: 15000,
+    staleTime: 60000,
   });
 
   const simulatedBaseProfiles = useMemo(
@@ -1131,11 +1131,11 @@ export default function Profile() {
     staleTime: 15000,
   });
 
-  const { data: profileHistory } = useQuery({
+  const { data: profileHistory, isLoading: loadingProfileHistory } = useQuery({
     queryKey: ["profile-history-authoritative", user?.id],
     queryFn: () => base44.gamification.profileHistory(),
-    enabled: !!user,
-    staleTime: 15000,
+    enabled: !!user && isPointsHistoryOpen,
+    staleTime: 30000,
   });
 
   const { data: mySocialState } = useQuery({
@@ -1145,18 +1145,18 @@ export default function Profile() {
     staleTime: 15000,
   });
 
-  const { data: myFollowingProfiles = [] } = useQuery({
+  const { data: myFollowingProfiles = [], isLoading: loadingFollowingProfiles } = useQuery({
     queryKey: ["social-following-list", user?.id],
     queryFn: () => base44.social.following(),
-    enabled: !!user,
-    staleTime: 15000,
+    enabled: !!user && isSocialListOpen,
+    staleTime: 30000,
   });
 
-  const { data: myFollowerProfiles = [] } = useQuery({
+  const { data: myFollowerProfiles = [], isLoading: loadingFollowerProfiles } = useQuery({
     queryKey: ["social-follower-list", user?.id],
     queryFn: () => base44.social.followers(),
-    enabled: !!user,
-    staleTime: 15000,
+    enabled: !!user && isSocialListOpen,
+    staleTime: 30000,
   });
 
   const { data: dailyCheckInState } = useQuery({
@@ -1164,13 +1164,6 @@ export default function Profile() {
     queryFn: () => base44.social.checkInState(),
     enabled: !!user,
     staleTime: 15000,
-  });
-
-  const { data: prizeGalleryItems = [], isLoading: loadingPrizeGallery } = useQuery({
-    queryKey: ["user-prize-gallery", user?.id],
-    queryFn: () => base44.entities.UserPrizeGalleryItem.filter({ user_id: user.id }, "-claimed_at", 24),
-    enabled: !!user,
-    staleTime: 30000,
   });
 
   const pointsRules = useMemo(() => ({
@@ -1602,8 +1595,7 @@ export default function Profile() {
     queryFn: () => base44.entities.ProfileNotification.filter({ user_id: user.id }, "-created_date", 50),
     enabled: Boolean(user?.id) && !isViewingPublicProfile,
     staleTime: 15000,
-    refetchInterval: 30000,
-    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: false,
   });
 
   const markProfileNotificationsReadMutation = useMutation({
@@ -2238,6 +2230,7 @@ export default function Profile() {
   );
 
   const socialListProfiles = socialListType === "following" ? followingProfiles : followerProfiles;
+  const isLoadingSocialList = socialListType === "following" ? loadingFollowingProfiles : loadingFollowerProfiles;
 
   const toggleAuthoritativePublicLike = async () => {
     if (!selectedPublicProfile?.id || !isSelectedRealProfile) return;
@@ -4209,7 +4202,12 @@ export default function Profile() {
               Histórico de Pontos
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          {loadingProfileHistory ? (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 text-center text-sm text-slate-300">
+              Carregando histórico...
+            </div>
+          ) : (
+            <div className="space-y-4">
             <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-slate-900/80 p-1">
               <button
                 type="button"
@@ -4282,7 +4280,8 @@ export default function Profile() {
                 )}
               </div>
             </div>
-          </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -4688,7 +4687,11 @@ export default function Profile() {
             </DialogTitle>
           </DialogHeader>
           <div className="hide-scrollbar max-h-[62vh] space-y-2 overflow-y-auto pr-1">
-            {socialListProfiles.length === 0 ? (
+            {isLoadingSocialList ? (
+              <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-center text-sm text-slate-300">
+                Carregando lista...
+              </div>
+            ) : socialListProfiles.length === 0 ? (
               <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-center text-sm text-slate-300">
                 {socialListType === "following"
                   ? "Você ainda não segue ninguém."

@@ -29,6 +29,8 @@ export default function InstantRaffleBox({ user }) {
       user_id: user.id 
     }),
     enabled: !!activeRaffle && !!user,
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
   });
 
   // Se houver múltiplas entradas, priorizar a que ganhou
@@ -43,10 +45,14 @@ export default function InstantRaffleBox({ user }) {
     return [myParticipationRaw[0]];
   }, [myParticipationRaw]);
 
+  const hasEnded = Boolean(activeRaffle?.winners_drawn);
+
   const { data: allParticipantsRaw = [] } = useQuery({
     queryKey: ['instant-raffle-participants', activeRaffle?.id],
     queryFn: () => base44.entities.InstantRaffleParticipant.filter({ raffle_id: activeRaffle.id }),
-    enabled: !!activeRaffle,
+    enabled: !!activeRaffle && !hasEnded,
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
   });
 
   // Filtrar participantes únicos (remover duplicatas por user_id)
@@ -60,16 +66,30 @@ export default function InstantRaffleBox({ user }) {
     return Array.from(uniqueUsers.values());
   }, [allParticipantsRaw]);
 
-  // Filtrar ganhadores únicos direto do raw para não perder nenhum ganhador
+  const { data: winnersRaw = [] } = useQuery({
+    queryKey: ['instant-raffle-winners', activeRaffle?.id],
+    queryFn: () =>
+      base44.entities.InstantRaffleParticipant.filter({
+        raffle_id: activeRaffle.id,
+        won: true,
+        validated: true,
+      }),
+    enabled: !!activeRaffle && hasEnded,
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
+  });
+
+  // Filtrar ganhadores únicos direto do source para não perder nenhum ganhador
   const winners = React.useMemo(() => {
     const uniqueWinners = new Map();
-    allParticipantsRaw.forEach(p => {
+    const source = hasEnded ? winnersRaw : allParticipantsRaw;
+    source.forEach(p => {
       if (p.won && p.validated !== false && !uniqueWinners.has(p.user_id)) {
         uniqueWinners.set(p.user_id, p);
       }
     });
     return Array.from(uniqueWinners.values());
-  }, [allParticipantsRaw]);
+  }, [allParticipantsRaw, hasEnded, winnersRaw]);
 
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -186,7 +206,6 @@ export default function InstantRaffleBox({ user }) {
   const myEntry = myParticipation?.[0];
   const hasParticipated = !!myEntry;
   const isWinner = Boolean(myEntry?.won && myEntry?.validated !== false);
-  const hasEnded = activeRaffle.winners_drawn;
   const redeemLink = buildWhatsAppLink(activeRaffle.telegram_link);
 
   // Se confirmou (ganhou e recebeu ou perdeu e fechou), some o box

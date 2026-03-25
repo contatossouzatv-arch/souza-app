@@ -57,25 +57,27 @@ export default function createEntitiesRouter(io) {
   router.get("/:entity", requireAuth, async (req, res) => {
     const { entity } = req.params;
     const { sort, limit } = req.query;
+    const parsedLimit = toLimit(limit);
     if (!canReadEntity(entity, req.auth)) {
       return denyEntityAccess(req, res, entity, "list");
     }
 
-    const rows = await listEntity(entity, sort, undefined);
+    const rows = await listEntity(entity, sort, parsedLimit);
     const scoped = scopeEntityRows(entity, req.auth, rows);
-    res.json(applyLimit(scoped, toLimit(limit)));
+    res.json(applyLimit(scoped, parsedLimit));
   });
 
   router.post("/:entity/filter", requireAuth, async (req, res) => {
     const { entity } = req.params;
     const { filters = {}, sort, limit } = req.body || {};
+    const parsedLimit = toLimit(limit);
     if (!canReadEntity(entity, req.auth)) {
       return denyEntityAccess(req, res, entity, "filter");
     }
 
-    const rows = await filterEntity(entity, filters, sort, undefined);
+    const rows = await filterEntity(entity, filters, sort, parsedLimit);
     const scoped = scopeEntityRows(entity, req.auth, rows);
-    res.json(applyLimit(scoped, toLimit(limit)));
+    res.json(applyLimit(scoped, parsedLimit));
   });
 
   router.post("/:entity", requireAuth, async (req, res) => {
