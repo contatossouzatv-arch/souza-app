@@ -15,6 +15,16 @@ import { DAILY_CHEST_ROUTE_PATH, FEATURE_FLAGS, MAIN_GAME_ROUTE_PATH } from "@/l
 import mainMenuClickSound from "../assets-para-app/Songs/Song click menu principal.mp3";
 import { isMenuSoundEnabled } from "@/lib/soundPrefs";
 
+const routePreloaders = {
+  [createPageUrl("Home")]: () => import("@/pages/Home"),
+  [createPageUrl("Dashboard")]: () => import("@/pages/Dashboard"),
+  [createPageUrl("Deposits")]: () => import("@/pages/Deposits"),
+  [createPageUrl("Profile")]: () => import("@/pages/Profile"),
+  [createPageUrl("Settings")]: () => import("@/pages/Settings"),
+  [createPageUrl("AdminPanel")]: () => import("@/pages/AdminPanel"),
+  [DAILY_CHEST_ROUTE_PATH]: () => import("@/pages/DailyChestHub"),
+};
+
 const navItems = [
   {
     label: "INICIO",
@@ -103,6 +113,28 @@ export default function Layout({ children }) {
     };
   }, []);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    const idleScheduler = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 180));
+    const idleHandle = idleScheduler(() => {
+      Object.values(routePreloaders).forEach((preload) => {
+        Promise.resolve()
+          .then(() => preload())
+          .catch(() => {});
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      if (typeof window.cancelIdleCallback === "function" && typeof idleHandle === "number") {
+        window.cancelIdleCallback(idleHandle);
+        return;
+      }
+      if (!cancelled) return;
+      window.clearTimeout(idleHandle);
+    };
+  }, []);
+
   const playMenuClickSound = () => {
     if (!isMenuSoundEnabled()) return;
     const audio = menuClickAudioRef.current;
@@ -110,6 +142,12 @@ export default function Layout({ children }) {
     audio.currentTime = 0;
     audio.play().catch(() => {});
   };
+
+  const preloadRoute = React.useCallback((path) => {
+    const preload = routePreloaders[path];
+    if (!preload) return;
+    preload().catch(() => {});
+  }, []);
 
   const handleFieldFocus = (event) => {
     const target = event.target;
@@ -188,7 +226,13 @@ export default function Layout({ children }) {
                 <Link
                   key={item.label}
                   to={item.path}
-                  onClick={playMenuClickSound}
+                  onClick={() => {
+                    preloadRoute(item.path);
+                    playMenuClickSound();
+                  }}
+                  onMouseEnter={() => preloadRoute(item.path)}
+                  onTouchStart={() => preloadRoute(item.path)}
+                  onFocus={() => preloadRoute(item.path)}
                   className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-1 py-2 text-[9px] font-semibold tracking-wide transition-all sm:text-[10px] ${
                     isActive
                       ? "bg-cyan-500/15 text-cyan-300"
