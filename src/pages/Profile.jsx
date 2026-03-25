@@ -783,7 +783,6 @@ export default function Profile() {
   const [isProfileSwitchLoading, setIsProfileSwitchLoading] = useState(false);
   const [profileSwitchProgress, setProfileSwitchProgress] = useState(0);
   const [initialProfileLoadProgress, setInitialProfileLoadProgress] = useState(12);
-  const [competitionNow, setCompetitionNow] = useState(() => Date.now());
   const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
     typeof document === "undefined" ? true : document.visibilityState === "visible"
   );
@@ -1973,13 +1972,6 @@ export default function Profile() {
       setBadgeCelebrationQueueSignal((prev) => prev + 1);
     });
   }, [activeBadgeCelebration, badgeCelebrationQueueSignal]);
-
-  useEffect(() => {
-    const timerId = window.setInterval(() => {
-      setCompetitionNow(Date.now());
-    }, 1000);
-    return () => window.clearInterval(timerId);
-  }, []);
 
   const syncGamificationViews = React.useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative", user?.id] });
