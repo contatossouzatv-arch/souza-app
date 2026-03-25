@@ -21,6 +21,7 @@ const DAILY_CHECKIN_CONFIG_KEY = "daily_checkin_config_v1";
 const GAMIFICATION_STATE_TTL_MS = 30000;
 const GAMIFICATION_RULES_TTL_MS = 30000;
 const WEEKLY_CYCLE_TTL_MS = 15000;
+const PROFILE_METRICS_TTL_MS = 15000;
 
 const DEFAULT_POINTS_RULES = {
   points_per_participation: 12,
@@ -69,6 +70,8 @@ let weeklyCycleCache = {
   value: null,
   expiresAt: 0,
 };
+let profileMetricsCache = new Map();
+let profileMetricsPromises = new Map();
 
 const DEFAULT_DAILY_CHECKIN_CONFIG = {
   enabled: false,
@@ -412,6 +415,8 @@ function invalidateGamificationStateCache() {
     value: null,
     expiresAt: 0,
   };
+  profileMetricsCache = new Map();
+  profileMetricsPromises = new Map();
 }
 
 export async function refreshGamificationState() {
@@ -1637,7 +1642,7 @@ function buildCompetitionBoard(entries, cycle, config) {
   };
 }
 
-async function buildLightweightProfileMetrics(userId) {
+async function buildLightweightProfileMetricsFresh(userId) {
   const [{ badgeRules, weeklyConfig, dailyCheckInConfig }, settingsMap] = await Promise.all([
     loadGamificationRules(),
     listAppSettingsMap(),
@@ -1824,6 +1829,44 @@ async function buildLightweightProfileMetrics(userId) {
     competitionBoard: buildCompetitionBoard(leaderboardEntries, cycle, weeklyConfig),
     currentCompetitionEntry,
   };
+}
+
+async function buildLightweightProfileMetrics(userId, options = {}) {
+  const safeUserId = String(userId || "").trim();
+  if (!safeUserId) {
+    throw new Error("Invalid user id");
+  }
+
+  const forceFresh = options?.forceFresh === true;
+  const now = Date.now();
+  const cached = profileMetricsCache.get(safeUserId);
+
+  if (!forceFresh && cached && now < cached.expiresAt) {
+    return cached.value;
+  }
+
+  if (!forceFresh && profileMetricsPromises.has(safeUserId)) {
+    return profileMetricsPromises.get(safeUserId);
+  }
+
+  const buildPromise = buildLightweightProfileMetricsFresh(safeUserId)
+    .then((payload) => {
+      profileMetricsCache.set(safeUserId, {
+        value: payload,
+        expiresAt: Date.now() + PROFILE_METRICS_TTL_MS,
+      });
+      return payload;
+    })
+    .catch((error) => {
+      profileMetricsCache.delete(safeUserId);
+      throw error;
+    })
+    .finally(() => {
+      profileMetricsPromises.delete(safeUserId);
+    });
+
+  profileMetricsPromises.set(safeUserId, buildPromise);
+  return buildPromise;
 }
 
 function normalizeChestRewardDraft(entry = {}) {
@@ -2432,7 +2475,9 @@ router.get("/profile/metrics", requireAuth, async (req, res) => {
     if (shouldForceRefresh) {
       await refreshGamificationState();
     }
-    const payload = await buildLightweightProfileMetrics(req.auth.sub);
+    const payload = await buildLightweightProfileMetrics(req.auth.sub, {
+      forceFresh: shouldForceRefresh,
+    });
     return res.json(payload);
   } catch (error) {
     console.error("Failed to load lightweight profile metrics", {

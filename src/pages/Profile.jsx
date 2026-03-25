@@ -1252,10 +1252,16 @@ export default function Profile() {
         queryClient.invalidateQueries({ queryKey: ["social-my-state", user.id] }),
         queryClient.invalidateQueries({ queryKey: ["daily-checkin-state", user.id] }),
       ]);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Falha ao atualizar perfil",
+        description: error?.message || "Nao foi possivel atualizar os dados do perfil agora.",
+      });
     } finally {
       setIsRefreshingCompetitionData(false);
     }
-  }, [queryClient, user?.id]);
+  }, [queryClient, toast, user?.id]);
 
   const { data: profileHistory, isLoading: loadingProfileHistory } = useQuery({
     queryKey: ["profile-history-authoritative", user?.id],
@@ -1267,7 +1273,7 @@ export default function Profile() {
   const { data: mySocialState } = useQuery({
     queryKey: ["social-my-state", user?.id],
     queryFn: () => base44.social.state("me"),
-    enabled: !!user && loadNonCriticalProfileData,
+    enabled: canLoadDeferredProfileQueries,
     staleTime: 15000,
     retry: false,
   });
@@ -1289,7 +1295,7 @@ export default function Profile() {
   const { data: dailyCheckInState } = useQuery({
     queryKey: ["daily-checkin-state", user?.id],
     queryFn: () => base44.social.checkInState(),
-    enabled: !!user && loadNonCriticalProfileData,
+    enabled: canLoadDeferredProfileQueries,
     staleTime: 15000,
     retry: false,
   });
@@ -1323,6 +1329,11 @@ export default function Profile() {
   const hasProfileGamification = Boolean(profileGamification);
   const isProfileGamificationPending = !hasProfileGamification && (loadingProfileGamification || fetchingProfileGamification);
   const isProfileGamificationUnavailable = !hasProfileGamification && isProfileGamificationError;
+  const canLoadDeferredProfileQueries =
+    Boolean(user) &&
+    loadNonCriticalProfileData &&
+    hasProfileGamification &&
+    !isProfileGamificationUnavailable;
 
   const initialProfileLoadTarget = useMemo(() => {
     const steps = [
@@ -1653,7 +1664,7 @@ export default function Profile() {
     queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
       queryKey: ["public-profile-summary", profile.id, "engaged-card"],
       queryFn: () => base44.gamification.publicProfileSummary(profile.id),
-      enabled: !!user && loadNonCriticalProfileData && !!profile?.id,
+      enabled: canLoadDeferredProfileQueries && !!profile?.id,
       staleTime: 30000,
       refetchOnWindowFocus: false,
       retry: false,
@@ -1666,7 +1677,7 @@ export default function Profile() {
         const items = await base44.entities.User.filter({ id: profile.id }, undefined, 1);
         return Array.isArray(items) ? items[0] || null : null;
       },
-      enabled: !!user && loadNonCriticalProfileData && !!profile?.id,
+      enabled: canLoadDeferredProfileQueries && !!profile?.id,
       staleTime: 30000,
       refetchOnWindowFocus: false,
       retry: false,
@@ -1677,8 +1688,7 @@ export default function Profile() {
       queryKey: ["social-target-state", user?.id, profile.id, "engaged-card"],
       queryFn: () => base44.social.state(profile.id),
       enabled:
-        !!user &&
-        loadNonCriticalProfileData &&
+        canLoadDeferredProfileQueries &&
         !!profile?.id &&
         String(profile.id || "") !== String(user?.id || ""),
       staleTime: 15000,
@@ -2211,8 +2221,9 @@ export default function Profile() {
       });
       return base44.social.state(selectedPublicProfile.id);
     },
-    enabled: !!user && !!selectedPublicProfile?.id && isSelectedRealProfile,
+    enabled: canLoadDeferredProfileQueries && !!selectedPublicProfile?.id && isSelectedRealProfile,
     staleTime: 15000,
+    retry: false,
   });
 
   const { data: selectedPublicProfileSummary } = useQuery({
@@ -2224,9 +2235,10 @@ export default function Profile() {
       });
       return base44.gamification.publicProfileSummary(selectedPublicProfile.id);
     },
-    enabled: !!user && !!selectedPublicProfile?.id && isSelectedRealProfile,
+    enabled: canLoadDeferredProfileQueries && !!selectedPublicProfile?.id && isSelectedRealProfile,
     staleTime: 30000,
     refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const randomizedOtherProfiles = useMemo(() => {
