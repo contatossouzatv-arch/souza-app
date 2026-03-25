@@ -128,6 +128,7 @@ const BADGE_ICON_MAP = {
   heart: Heart,
 };
 const BADGE_CELEBRATION_STORAGE_PREFIX = "profile_badge_celebration_seen_v1_";
+const PROFILE_GESTURE_DRAG_ENABLED = false;
 
 function getSpecialBadgeVisual(achievement) {
   const normalizedLabel = String(achievement?.label || "").toLowerCase();
@@ -1475,6 +1476,7 @@ export default function Profile() {
   }, [checkInProgressDays, isCheckInCalendarOpen]);
 
   const handleCheckInCarouselPointerDown = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = checkInCarouselRef.current;
     if (!container) return;
     checkInCarouselDragRef.current = {
@@ -1488,6 +1490,7 @@ export default function Profile() {
   };
 
   const handleCheckInCarouselPointerMove = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = checkInCarouselRef.current;
     const state = checkInCarouselDragRef.current;
     if (!container || !state.isDragging) return;
@@ -1499,6 +1502,7 @@ export default function Profile() {
   };
 
   const handleCheckInCarouselPointerUpOrCancel = () => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = checkInCarouselRef.current;
     const state = checkInCarouselDragRef.current;
     if (container && state.pointerId !== null) {
@@ -1518,6 +1522,7 @@ export default function Profile() {
   };
 
   const handleCheckInCarouselClickCapture = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     if (checkInCarouselDragRef.current.moved) {
       event.preventDefault();
       event.stopPropagation();
@@ -1525,6 +1530,7 @@ export default function Profile() {
   };
 
   const handleCheckInCarouselWheel = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = checkInCarouselRef.current;
     if (!container) return;
     if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
@@ -2353,6 +2359,7 @@ export default function Profile() {
   );
 
   const handleSimPointerDown = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = simulatedStripRef.current;
     if (!container) return;
     if (event.button !== 0) return;
@@ -2369,6 +2376,7 @@ export default function Profile() {
   };
 
   const handleSimPointerMove = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = simulatedStripRef.current;
     const state = simulatedDragRef.current;
     if (!container || !state.isDragging) return;
@@ -2382,6 +2390,7 @@ export default function Profile() {
   };
 
   const handleSimPointerUpOrCancel = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = simulatedStripRef.current;
     if (container?.hasPointerCapture?.(event.pointerId)) {
       container.releasePointerCapture(event.pointerId);
@@ -2390,6 +2399,7 @@ export default function Profile() {
   };
 
   const handleSimClickCapture = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     if (simulatedDragRef.current.moved) {
       event.preventDefault();
       event.stopPropagation();
@@ -2398,6 +2408,7 @@ export default function Profile() {
   };
 
   const handleSimWheel = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = simulatedStripRef.current;
     if (!container) return;
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
@@ -2407,6 +2418,7 @@ export default function Profile() {
   };
 
   const handlePublicOtherPointerDown = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = publicOtherStripRef.current;
     if (!container) return;
     if (event.button !== 0) return;
@@ -2423,6 +2435,7 @@ export default function Profile() {
   };
 
   const handlePublicOtherPointerMove = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = publicOtherStripRef.current;
     const state = publicOtherDragRef.current;
     if (!container || !state.isDragging) return;
@@ -2436,6 +2449,7 @@ export default function Profile() {
   };
 
   const handlePublicOtherPointerUpOrCancel = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = publicOtherStripRef.current;
     if (container?.hasPointerCapture?.(event.pointerId)) {
       container.releasePointerCapture(event.pointerId);
@@ -2444,6 +2458,7 @@ export default function Profile() {
   };
 
   const handlePublicOtherClickCapture = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     if (publicOtherDragRef.current.moved) {
       event.preventDefault();
       event.stopPropagation();
@@ -2452,6 +2467,7 @@ export default function Profile() {
   };
 
   const handlePublicOtherWheel = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = publicOtherStripRef.current;
     if (!container) return;
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
@@ -2461,6 +2477,7 @@ export default function Profile() {
   };
 
   const handleBadgePointerDown = (event, containerRef, dragRef) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = containerRef.current;
     if (!container) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
@@ -2483,6 +2500,7 @@ export default function Profile() {
   };
 
   const handleBadgePointerMove = (event, containerRef, dragRef) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = containerRef.current;
     const state = dragRef.current;
     if (!container || !state.isDragging) return;
@@ -2500,6 +2518,7 @@ export default function Profile() {
   };
 
   const handleBadgePointerUpOrCancel = (event, containerRef, dragRef) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = containerRef.current;
     if (container?.hasPointerCapture?.(event.pointerId)) {
       container.releasePointerCapture(event.pointerId);
@@ -2508,6 +2527,7 @@ export default function Profile() {
   };
 
   const handleBadgeClickCapture = (event, dragRef) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     if (dragRef.current.moved) {
       event.preventDefault();
       event.stopPropagation();
@@ -2516,6 +2536,7 @@ export default function Profile() {
   };
 
   const handleBadgeWheel = (event, containerRef) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = containerRef.current;
     if (!container) return;
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
@@ -2539,6 +2560,7 @@ export default function Profile() {
   const handlePrivateBadgeWheel = (event) => handleBadgeWheel(event, privateBadgeStripRef);
 
   const handleCompetitionRankingPointerDown = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = competitionRankingRef.current;
     if (!container) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
@@ -2556,6 +2578,7 @@ export default function Profile() {
   };
 
   const handleCompetitionRankingPointerMove = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = competitionRankingRef.current;
     const state = competitionRankingDragRef.current;
     if (!container || !state.isDragging) return;
@@ -2570,6 +2593,7 @@ export default function Profile() {
   };
 
   const handleCompetitionRankingPointerUpOrCancel = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     const container = competitionRankingRef.current;
     if (container?.hasPointerCapture?.(event.pointerId)) {
       container.releasePointerCapture(event.pointerId);
@@ -2578,6 +2602,7 @@ export default function Profile() {
   };
 
   const handleCompetitionRankingClickCapture = (event) => {
+    if (!PROFILE_GESTURE_DRAG_ENABLED) return;
     if (competitionRankingDragRef.current.moved) {
       event.preventDefault();
       event.stopPropagation();
