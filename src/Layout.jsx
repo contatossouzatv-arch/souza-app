@@ -2,7 +2,6 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Newspaper, Trophy, Wallet, User, Settings } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
 import DataRefresher from "./components/DataRefresher";
 import NotificationListener from "./components/NotificationListener";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -197,17 +196,7 @@ export default function Layout({ children }) {
             showDailyChestEntry ? "pt-28" : "pt-4"
             } ${isAdminPanel ? "px-3 sm:px-4" : "mx-auto max-w-md px-3 sm:px-4"}`}
           >
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, y: 10, scale: 0.99 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -6, scale: 0.995 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-            >
-              {children}
-            </motion.div>
-          </AnimatePresence>
+          {children}
 
           {!isAdminPanel ? (
             <div className="mt-6">

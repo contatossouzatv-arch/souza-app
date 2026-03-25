@@ -784,6 +784,7 @@ export default function Profile() {
   const [isProfileSwitchLoading, setIsProfileSwitchLoading] = useState(false);
   const [profileSwitchProgress, setProfileSwitchProgress] = useState(0);
   const [initialProfileLoadProgress, setInitialProfileLoadProgress] = useState(12);
+  const [competitionRemainingMsLive, setCompetitionRemainingMsLive] = useState(0);
   const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
     typeof document === "undefined" ? true : document.visibilityState === "visible"
   );
@@ -1393,7 +1394,7 @@ export default function Profile() {
     position: 0,
     weekly_points: 0,
   };
-  const competitionTimeLeft = formatTimeLeft(competitionBoard.cycle.remainingMs);
+  const competitionTimeLeft = formatTimeLeft(competitionRemainingMsLive);
   const competitionInstructions = String(competitionBoard.config.instructions || "")
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -1444,6 +1445,24 @@ export default function Profile() {
       };
     });
   }, [dailyCheckInState?.checkedIn, dailyCheckInState?.nextDay, dailyCheckInState?.rewards, dailyCheckInState?.streakDay]);
+
+  useEffect(() => {
+    const endsAtRaw = competitionBoard?.cycle?.ends_at;
+    const endsAtMs = new Date(endsAtRaw || 0).getTime();
+
+    if (!Number.isFinite(endsAtMs) || endsAtMs <= 0) {
+      setCompetitionRemainingMsLive(Math.max(0, Number(competitionBoard?.cycle?.remainingMs || 0)));
+      return undefined;
+    }
+
+    const updateRemaining = () => {
+      setCompetitionRemainingMsLive(Math.max(0, endsAtMs - Date.now()));
+    };
+
+    updateRemaining();
+    const intervalId = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [competitionBoard?.cycle?.ends_at, competitionBoard?.cycle?.remainingMs]);
 
   useEffect(() => {
     if (!isCheckInCalendarOpen) return;
