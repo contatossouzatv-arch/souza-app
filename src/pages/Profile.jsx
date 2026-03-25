@@ -1229,6 +1229,14 @@ export default function Profile() {
   const deferredProfileGamification = React.useDeferredValue(profileGamification);
   const [isRefreshingCompetitionData, setIsRefreshingCompetitionData] = useState(false);
   const [loadNonCriticalProfileData, setLoadNonCriticalProfileData] = useState(false);
+  const hasProfileGamification = Boolean(profileGamification);
+  const isProfileGamificationPending = !hasProfileGamification && (loadingProfileGamification || fetchingProfileGamification);
+  const isProfileGamificationUnavailable = !hasProfileGamification && isProfileGamificationError;
+  const canLoadDeferredProfileQueries =
+    Boolean(user) &&
+    loadNonCriticalProfileData &&
+    hasProfileGamification &&
+    !isProfileGamificationUnavailable;
 
   useEffect(() => {
     setLoadNonCriticalProfileData(false);
@@ -1326,15 +1334,6 @@ export default function Profile() {
   const isLoading =
     isLoadingAuth ||
     !user;
-  const hasProfileGamification = Boolean(profileGamification);
-  const isProfileGamificationPending = !hasProfileGamification && (loadingProfileGamification || fetchingProfileGamification);
-  const isProfileGamificationUnavailable = !hasProfileGamification && isProfileGamificationError;
-  const canLoadDeferredProfileQueries =
-    Boolean(user) &&
-    loadNonCriticalProfileData &&
-    hasProfileGamification &&
-    !isProfileGamificationUnavailable;
-
   const initialProfileLoadTarget = useMemo(() => {
     const steps = [
       !isLoadingAuth,
