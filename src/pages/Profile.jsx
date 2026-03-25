@@ -782,6 +782,7 @@ export default function Profile() {
   const [isCheckInCalendarOpen, setIsCheckInCalendarOpen] = useState(false);
   const [isProfileSwitchLoading, setIsProfileSwitchLoading] = useState(false);
   const [profileSwitchProgress, setProfileSwitchProgress] = useState(0);
+  const [initialProfileLoadProgress, setInitialProfileLoadProgress] = useState(12);
   const [competitionNow, setCompetitionNow] = useState(() => Date.now());
   const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
     typeof document === "undefined" ? true : document.visibilityState === "visible"
@@ -1193,6 +1194,45 @@ export default function Profile() {
     isLoadingAuth ||
     !user ||
     loadingProfileGamification;
+
+  const initialProfileLoadTarget = useMemo(() => {
+    const steps = [
+      !isLoadingAuth,
+      Boolean(user),
+      !loadingProfileGamification,
+    ];
+    const completed = steps.filter(Boolean).length;
+    return Math.round((completed / steps.length) * 100);
+  }, [isLoadingAuth, loadingProfileGamification, user]);
+
+  const initialProfileLoadLabel = useMemo(() => {
+    if (isLoadingAuth) return "Validando acesso";
+    if (!user) return "Carregando dados do perfil";
+    if (loadingProfileGamification) return "Preparando ranking e metricas";
+    return "Finalizando perfil";
+  }, [isLoadingAuth, loadingProfileGamification, user]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setInitialProfileLoadProgress(100);
+      return;
+    }
+
+    setInitialProfileLoadProgress((prev) => {
+      const safePrev = Math.max(12, prev || 12);
+      if (initialProfileLoadTarget <= safePrev) return safePrev;
+      const nextStep = Math.max(2, (initialProfileLoadTarget - safePrev) * 0.35);
+      return Math.min(initialProfileLoadTarget, safePrev + nextStep);
+    });
+  }, [initialProfileLoadTarget, isLoading]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    const timeoutId = window.setTimeout(() => {
+      setInitialProfileLoadProgress(12);
+    }, 240);
+    return () => window.clearTimeout(timeoutId);
+  }, [isLoading]);
 
   const metrics = useMemo(
     () =>
@@ -3265,7 +3305,28 @@ export default function Profile() {
   };
 
   if (isLoading) {
-    return <TechLoader />;
+    return (
+      <div className="relative min-h-screen overflow-hidden bg-slate-950">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.16),_transparent_42%),radial-gradient(circle_at_bottom,_rgba(34,197,94,0.14),_transparent_35%)]" />
+        <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-6">
+          <TechLoader />
+          <div className="mt-6 w-[min(88vw,24rem)] rounded-2xl border border-cyan-300/25 bg-white/10 px-4 py-3 shadow-[0_18px_48px_rgba(15,23,42,0.42)] backdrop-blur-md">
+            <div className="mb-1 flex items-center justify-between">
+              <p className="text-[11px] font-black uppercase tracking-wide text-cyan-100">Carregando perfil</p>
+              <p className="text-[11px] font-bold text-cyan-200">{Math.round(initialProfileLoadProgress)}%</p>
+            </div>
+            <p className="mb-3 text-xs text-cyan-50/80">{initialProfileLoadLabel}</p>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-800/90">
+              <motion.div
+                className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-emerald-400"
+                animate={{ width: `${Math.round(initialProfileLoadProgress)}%` }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const profileSwitchLoaderOverlay = (
