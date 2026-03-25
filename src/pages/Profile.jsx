@@ -128,7 +128,7 @@ const BADGE_ICON_MAP = {
   heart: Heart,
 };
 const BADGE_CELEBRATION_STORAGE_PREFIX = "profile_badge_celebration_seen_v1_";
-const PROFILE_GESTURE_DRAG_ENABLED = false;
+const PROFILE_GESTURE_DRAG_ENABLED = true;
 
 function getSpecialBadgeVisual(achievement) {
   const normalizedLabel = String(achievement?.label || "").toLowerCase();
@@ -3129,8 +3129,10 @@ export default function Profile() {
       3: top3BorderAnimated,
     };
     const formatCompetitionRewardLabel = (position) => {
+      const safePosition = Number(position || 0);
+      if (safePosition <= 0 || safePosition > winnersCount) return "";
       const rewardConfig =
-        (competitionBoard.config.positions || []).find((item) => Number(item?.position || 0) === Number(position || 0)) || {
+        (competitionBoard.config.positions || []).find((item) => Number(item?.position || 0) === safePosition) || {
           reward_type: competitionBoard.config.fallback_reward_type,
           reward_value: competitionBoard.config.fallback_reward_value,
         };

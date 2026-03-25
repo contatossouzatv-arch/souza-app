@@ -1562,6 +1562,186 @@ function buildCompetitionBoard(entries, cycle, config) {
   };
 }
 
+async function buildLightweightProfileMetrics(userId) {
+  const [{ badgeRules, weeklyConfig, dailyCheckInConfig }, settingsMap] = await Promise.all([
+    loadGamificationRules(),
+    listAppSettingsMap(),
+  ]);
+  const cycle = await ensureActiveWeeklyCycle(weeklyConfig);
+
+  const [balanceRows, profileRow, depositsAgg, participationsAgg, socialAgg, leaderboardRows] = await Promise.all([
+    pool.query(
+      `SELECT metric_key, cycle_key, amount
+         FROM user_metric_balances
+        WHERE user_id = $1`,
+      [userId]
+    ),
+    Promise.all([
+      pool.query(
+        `SELECT COUNT(*)::int AS total_wins
+           FROM entity_records
+          WHERE entity_name = 'UserPrizeGalleryItem'
+            AND COALESCE(data->>'user_id', '') = $1`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT
+            COALESCE(SUM(CASE WHEN COALESCE(data->>'status', '') = 'approved' THEN NULLIF(data->>'amount', '')::numeric ELSE 0 END), 0) AS total_approved,
+            COUNT(*) FILTER (WHERE COALESCE(data->>'status', '') = 'approved')::int AS deposit_count,
+            COALESCE(SUM(
+              CASE
+                WHEN COALESCE(data->>'status', '') <> 'approved' THEN 0
+                WHEN jsonb_typeof(data->'ticket_numbers') = 'array' THEN jsonb_array_length(data->'ticket_numbers')
+                WHEN COALESCE(data->>'tickets_count', '') ~ '^[0-9]+$' THEN (data->>'tickets_count')::int
+                ELSE 0
+              END
+            ), 0)::int AS total_tickets
+          FROM entity_records
+         WHERE entity_name = 'Deposit'
+           AND COALESCE(data->>'user_id', '') = $1`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT
+            (SELECT COUNT(*)::int FROM entity_records WHERE entity_name = 'LiveDrawParticipant' AND COALESCE(data->>'user_id', '') = $1) AS live_participations,
+            (SELECT COUNT(*)::int FROM entity_records WHERE entity_name = 'GameCallParticipant' AND COALESCE(data->>'user_id', '') = $1) AS game_participations,
+            (SELECT COUNT(*)::int FROM entity_records WHERE entity_name = 'InstantRaffleParticipant' AND COALESCE(data->>'user_id', '') = $1) AS instant_participations,
+            (SELECT COUNT(*)::int FROM entity_records WHERE entity_name = 'DailyChestXpGrant' AND COALESCE(data->>'user_id', '') = $1) AS chest_rewards`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT
+            (SELECT COUNT(*)::int FROM daily_checkins WHERE user_id = $1) AS total_checkins,
+            (SELECT COUNT(*)::int FROM user_follows WHERE target_user_id = $1 AND active = true) AS total_followers,
+            (SELECT COUNT(*)::int FROM user_follows WHERE follower_user_id = $1 AND active = true) AS following_count,
+            (SELECT COUNT(*)::int FROM profile_likes WHERE target_user_id = $1 AND active = true) AS total_likes`,
+        [userId]
+      ),
+    ]),
+    pool.query(
+      `WITH weekly AS (
+         SELECT user_id, amount
+           FROM user_metric_balances
+          WHERE metric_key = 'weekly_points'
+            AND cycle_key = $1
+            AND amount > 0
+       ),
+       engagement AS (
+         SELECT user_id, amount
+           FROM user_metric_balances
+          WHERE metric_key = 'engagement_points'
+            AND cycle_key = ''
+       ),
+       ranked AS (
+         SELECT
+           w.user_id,
+           w.amount AS weekly_points,
+           COALESCE(e.amount, 0) AS engagement_points,
+           ROW_NUMBER() OVER (ORDER BY w.amount DESC, COALESCE(e.amount, 0) DESC, u.nick ASC, u.id ASC) AS position,
+           u.nick,
+           u.full_name,
+           u.profile_avatar_id,
+           u.profile_image_mode,
+           CASE
+             WHEN LOWER(COALESCE(u.profile_image_mode, 'avatar')) = 'photo'
+              AND LOWER(COALESCE(u.profile_image_status, 'none')) = 'approved'
+             THEN COALESCE(u.profile_image_url, '')
+             ELSE ''
+           END AS profile_image_url
+         FROM weekly w
+         JOIN users u ON u.id = w.user_id
+         LEFT JOIN engagement e ON e.user_id = w.user_id
+       )
+       SELECT *
+         FROM ranked
+        WHERE position <= 20 OR user_id = $2
+        ORDER BY position ASC`,
+      [String(cycle?.cycle_key || ""), userId]
+    ),
+  ]);
+
+  const pointsRules = {
+    ...DEFAULT_POINTS_RULES,
+    ...parseJsonValue(settingsMap.get(POINTS_RULES_KEY)?.value, DEFAULT_POINTS_RULES),
+  };
+
+  const balanceMap = new Map(
+    balanceRows.rows.map((row) => [`${row.metric_key}::${row.cycle_key || ""}`, Number(row.amount || 0)])
+  );
+  const winsRow = profileRow[0].rows[0] || {};
+  const depositRow = profileRow[1].rows[0] || {};
+  const participationRow = profileRow[2].rows[0] || {};
+  const socialRow = profileRow[3].rows[0] || {};
+
+  const weeklyCycleKey = String(cycle?.cycle_key || "");
+  const leaderboardEntries = leaderboardRows.rows.map((row) => ({
+    user_id: row.user_id,
+    nick: String(row.nick || row.full_name || "Usuario"),
+    profile_avatar_id: String(row.profile_avatar_id || ""),
+    profile_image_mode: String(row.profile_image_mode || "avatar"),
+    profile_image_url: String(row.profile_image_url || ""),
+    weekly_points: Number(row.weekly_points || 0),
+    engagement_points: Number(row.engagement_points || 0),
+    position: Number(row.position || 0),
+    points: Number(row.weekly_points || 0),
+    stats: { approvedAmount: 0 },
+  }));
+  const currentCompetitionEntry =
+    leaderboardEntries.find((entry) => entry.user_id === userId) || {
+      user_id: userId,
+      position: 0,
+      weekly_points: 0,
+      points: 0,
+    };
+
+  const metrics = {
+    position: Number(currentCompetitionEntry.position || 0),
+    totalApproved: Number(depositRow.total_approved || 0),
+    totalTickets: Number(depositRow.total_tickets || 0),
+    totalParticipations:
+      Number(participationRow.live_participations || 0) +
+      Number(participationRow.game_participations || 0) +
+      Number(participationRow.instant_participations || 0),
+    totalWins: Number(winsRow.total_wins || 0),
+    liveParticipations: Number(participationRow.live_participations || 0),
+    totalFollowers: Number(socialRow.total_followers || 0),
+    totalLikes: Number(socialRow.total_likes || 0),
+    totalCheckins: Number(socialRow.total_checkins || 0),
+    followingCount: Number(socialRow.following_count || 0),
+    points: Number(balanceMap.get("engagement_points::") || 0),
+    progress: Math.min(
+      100,
+      Math.round(
+        ((Number(participationRow.live_participations || 0) +
+          Number(participationRow.game_participations || 0) +
+          Number(participationRow.instant_participations || 0)) /
+          Math.max(1, Number(pointsRules.progress_target_participations || 25))) *
+          100
+      )
+    ),
+    xpTotal: Number(balanceMap.get("xp_total::") || 0),
+    xp_total: Number(balanceMap.get("xp_total::") || 0),
+    weeklyPoints: Number(balanceMap.get(`weekly_points::${weeklyCycleKey}`) || 0),
+    weekly_points: Number(balanceMap.get(`weekly_points::${weeklyCycleKey}`) || 0),
+    chestRewards: Number(participationRow.chest_rewards || 0),
+    prizeCounts: Number(winsRow.total_wins || 0),
+  };
+
+  const achievements = computeAchievements(metrics, badgeRules);
+  const progressBadge = buildProgressBadge(metrics, pointsRules);
+
+  return {
+    metrics,
+    pointsRules,
+    badgeRules,
+    dailyCheckInConfig,
+    achievements,
+    progressBadges: [progressBadge],
+    competitionBoard: buildCompetitionBoard(leaderboardEntries, cycle, weeklyConfig),
+    currentCompetitionEntry,
+  };
+}
+
 function normalizeChestRewardDraft(entry = {}) {
   const allowedRewardTypes = new Set(["xp_total", "weekly_points", "engagement_points", "tickets_active", "points_balance"]);
   const rewardTypeRaw = String(entry.reward_type || "").trim().toLowerCase();
@@ -2163,44 +2343,8 @@ function formatUserAdminSummary(user) {
 }
 
 router.get("/profile/metrics", requireAuth, async (req, res) => {
-  const state = await buildGamificationState();
-  const metrics = state.snapshots[req.auth.sub] || createUserSnapshot({ id: req.auth.sub });
-  const leaderboardEntry = state.leaderboardEntries.find((entry) => entry.user_id === req.auth.sub) || {
-    user_id: req.auth.sub,
-    position: 0,
-    weekly_points: 0,
-  };
-  const mergedMetrics = {
-    position: leaderboardEntry.position || 0,
-    totalApproved: metrics.totalApproved,
-    totalTickets: metrics.totalTickets,
-    totalParticipations: metrics.totalParticipations,
-    totalWins: metrics.totalWins,
-    liveParticipations: metrics.liveParticipations,
-    totalFollowers: metrics.totalFollowers,
-    totalLikes: metrics.totalLikes,
-    totalCheckins: metrics.totalCheckins,
-    followingCount: metrics.followingCount,
-    points: metrics.engagement_points,
-    progress: Math.min(100, Math.round((metrics.totalParticipations / Math.max(1, Number(state.pointsRules.progress_target_participations || 25))) * 100)),
-    xpTotal: metrics.xp_total,
-    weeklyPoints: metrics.weekly_points,
-    chestRewards: metrics.chestRewards,
-    prizeCounts: metrics.prizeCounts,
-  };
-  const achievements = computeAchievements(mergedMetrics, state.badgeRules);
-  const progressBadge = buildProgressBadge(mergedMetrics, state.pointsRules);
-
-  res.json({
-    metrics: mergedMetrics,
-    pointsRules: state.pointsRules,
-    badgeRules: state.badgeRules,
-    dailyCheckInConfig: state.dailyCheckInConfig,
-    achievements,
-    progressBadges: [progressBadge],
-    competitionBoard: buildCompetitionBoard(state.leaderboardEntries, state.cycle, state.weeklyConfig),
-    currentCompetitionEntry: leaderboardEntry,
-  });
+  const payload = await buildLightweightProfileMetrics(req.auth.sub);
+  res.json(payload);
 });
 
 router.get("/profile/history", requireAuth, async (req, res) => {
