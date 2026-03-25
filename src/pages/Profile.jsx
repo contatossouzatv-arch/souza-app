@@ -129,8 +129,8 @@ const BADGE_ICON_MAP = {
 };
 const BADGE_CELEBRATION_STORAGE_PREFIX = "profile_badge_celebration_seen_v1_";
 const PROFILE_GESTURE_DRAG_ENABLED = true;
-const PROFILE_AUTOPLAY_MEDIA_ENABLED = false;
-const PROFILE_DEBUG_ENABLED = true;
+const PROFILE_AUTOPLAY_MEDIA_ENABLED = true;
+const PROFILE_DEBUG_ENABLED = false;
 
 function profileDebugLog(label, payload = undefined) {
   if (!PROFILE_DEBUG_ENABLED || typeof console === "undefined") return;
@@ -452,8 +452,10 @@ const SmartVideo = React.memo(function SmartVideo({
       ref={videoRef}
       src={src}
       muted={muted}
+      autoPlay={PROFILE_AUTOPLAY_MEDIA_ENABLED && active}
       loop={loop}
       playsInline={playsInline}
+      disablePictureInPicture
       preload={PROFILE_AUTOPLAY_MEDIA_ENABLED ? preload : "metadata"}
       aria-hidden={ariaHidden}
       className={className}
@@ -2302,8 +2304,49 @@ export default function Profile() {
 
   const dailyCheckInMutation = useMutation({
     mutationFn: () => base44.social.dailyCheckIn(),
-    onSuccess: (response) => {
+    onSuccess: async (response) => {
+      queryClient.setQueryData(["daily-checkin-state", user?.id], (previous) => {
+        const baseState = previous && typeof previous === "object" ? previous : {};
+        const todayDayKey = String(response?.dayKey || baseState.dayKey || "");
+        const previousRecentDays = Array.isArray(baseState.recentDays) ? baseState.recentDays : [];
+        const nextCheckedAt = response?.checkedAt || baseState.checkedAt || new Date().toISOString();
+        let hasTodayEntry = false;
+        const nextRecentDays = previousRecentDays.map((entry) => {
+          if (String(entry?.dayKey || "") !== todayDayKey) return entry;
+          hasTodayEntry = true;
+          return {
+            ...entry,
+            checkedIn: true,
+            checkedAt: nextCheckedAt,
+            isToday: true,
+          };
+        });
+        if (todayDayKey && !hasTodayEntry) {
+          nextRecentDays.push({
+            dayKey: todayDayKey,
+            checkedIn: true,
+            checkedAt: nextCheckedAt,
+            isToday: true,
+          });
+        }
+
+        return {
+          ...baseState,
+          dayKey: todayDayKey || baseState.dayKey || "",
+          checkedIn: true,
+          checkedAt: nextCheckedAt,
+          totalCheckins: Number(baseState.totalCheckins || 0) + (response?.alreadyCheckedIn ? 0 : 1),
+          streakDay: Number(baseState.streakDay || 0),
+          nextDay: Math.min(7, Math.max(1, Number(baseState.nextDay || 1))),
+          recentDays: nextRecentDays,
+        };
+      });
       syncGamificationViews();
+      await Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ["daily-checkin-state", user?.id] }),
+        queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative", user?.id] }),
+        queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative", user?.id] }),
+      ]);
       toast({
         title: response?.alreadyCheckedIn ? "Check-in já registrado" : "Check-in diário confirmado",
         description: response?.alreadyCheckedIn
@@ -4984,13 +5027,25 @@ export default function Profile() {
               <p className="text-xs text-slate-400">
                 Toque no quadrado de hoje para coletar e confirmar sua presença.
               </p>
-              <Button
-                type="button"
-                onClick={() => setIsCheckInCalendarOpen(false)}
-                className="rounded-2xl bg-emerald-500 px-5 text-slate-950 hover:bg-emerald-400"
-              >
-                {dailyCheckInState?.checkedIn ? "Concluir" : "Fechar"}
-              </Button>
+              <div className="flex items-center gap-2">
+                {!dailyCheckInState?.checkedIn ? (
+                  <Button
+                    type="button"
+                    onClick={handleDailyCheckInCollect}
+                    disabled={dailyCheckInMutation.isPending}
+                    className="rounded-2xl bg-cyan-400 px-5 text-slate-950 hover:bg-cyan-300 disabled:opacity-60"
+                  >
+                    {dailyCheckInMutation.isPending ? "Coletando..." : "Coletar agora"}
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  onClick={() => setIsCheckInCalendarOpen(false)}
+                  className="rounded-2xl bg-emerald-500 px-5 text-slate-950 hover:bg-emerald-400"
+                >
+                  {dailyCheckInState?.checkedIn ? "Concluir" : "Fechar"}
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>
