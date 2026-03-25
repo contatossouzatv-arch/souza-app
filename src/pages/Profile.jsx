@@ -1788,6 +1788,31 @@ export default function Profile() {
         likes: Number(entry.totalLikes || 0),
       };
     }
+    if (selectedPublicProfileId && selectedPublicUserById) {
+      return {
+        id: selectedPublicUserById.id,
+        nick: selectedPublicUserById.nick || "Usuário",
+        handle:
+          selectedPublicUserById.handle ||
+          String(selectedPublicUserById.nick || "usuario")
+            .toLowerCase()
+            .replace(/\s+/g, "."),
+        avatarSrc: getProfileAvatarSrc(selectedPublicUserById, avatarSrcById, defaultAvatar) || defaultAvatar,
+        avatar_emoji: String(selectedPublicUserById.avatar_emoji || ""),
+        points: 0,
+        xpTotal: Math.max(0, Number(selectedPublicUserById.xp_total ?? selectedPublicUserById.xpTotal ?? 0)),
+        xp_total: Math.max(0, Number(selectedPublicUserById.xp_total ?? selectedPublicUserById.xpTotal ?? 0)),
+        tickets: 0,
+        participations: 0,
+        position: 0,
+        totalWins: 0,
+        totalApproved: 0,
+        liveParticipations: 0,
+        following: Number(selectedPublicUserById.following || 0),
+        followers: Number(selectedPublicUserById.followers || 0),
+        likes: Number(selectedPublicUserById.likes || 0),
+      };
+    }
     const baseProfile = selectedPublicProfileHandle
       ? simulatedProfiles.find((profile) => profile.handle === selectedPublicProfileHandle)
       : simulatedProfiles.find((profile) => profile.id === selectedPublicProfileId);
@@ -1807,6 +1832,7 @@ export default function Profile() {
     avatarOptions,
     realProfilesById,
     selectedPublicUserById,
+    avatarSrcById,
   ]);
 
   const isSelectedRealProfile = Boolean(selectedPublicProfile?.id);
@@ -2242,10 +2268,57 @@ export default function Profile() {
     queryClient.invalidateQueries({ queryKey: ["social-following-list", user?.id] });
     queryClient.invalidateQueries({ queryKey: ["social-follower-list", user?.id] });
     queryClient.invalidateQueries({ queryKey: ["daily-checkin-state", user?.id] });
+    queryClient.invalidateQueries({ queryKey: ["inicio-recent-profiles"] });
+    queryClient.invalidateQueries({ queryKey: ["profiles-gallery"] });
+    queryClient.invalidateQueries({ queryKey: ["profile-discover-profiles", user?.id] });
     if (selectedPublicProfile?.id) {
       queryClient.invalidateQueries({ queryKey: ["social-target-state", user?.id, selectedPublicProfile.id] });
     }
   }, [queryClient, selectedPublicProfile?.id, user?.id]);
+
+  const patchProfileCollections = React.useCallback(
+    (targetUserId, patch) => {
+      if (!targetUserId) return;
+      const applyPatch = (profile) => {
+        if (!profile || String(profile.id || "") !== String(targetUserId)) return profile;
+        return {
+          ...profile,
+          ...(typeof patch === "function" ? patch(profile) : patch),
+        };
+      };
+
+      queryClient.setQueryData(["profile-discover-profiles", user?.id], (current) => {
+        if (!current || !Array.isArray(current.items)) return current;
+        return {
+          ...current,
+          items: current.items.map(applyPatch),
+        };
+      });
+
+      queryClient.setQueryData(["inicio-recent-profiles"], (current) => {
+        if (!current || !Array.isArray(current.items)) return current;
+        return {
+          ...current,
+          items: current.items.map(applyPatch),
+        };
+      });
+
+      queryClient.setQueryData(["profiles-gallery"], (current) => {
+        if (!current || !Array.isArray(current.pages)) return current;
+        return {
+          ...current,
+          pages: current.pages.map((page) => {
+            if (!page || !Array.isArray(page.items)) return page;
+            return {
+              ...page,
+              items: page.items.map(applyPatch),
+            };
+          }),
+        };
+      });
+    },
+    [queryClient, user?.id]
+  );
 
   useEffect(() => {
     if (!isProfileNotificationsOpen) return;
@@ -2258,6 +2331,13 @@ export default function Profile() {
     mutationFn: ({ targetUserId, shouldFollow }) =>
       shouldFollow ? base44.social.follow(targetUserId) : base44.social.unfollow(targetUserId),
     onSuccess: (response) => {
+      const targetUserId = String(response?.state?.targetUserId || "");
+      if (targetUserId) {
+        patchProfileCollections(targetUserId, (profile) => ({
+          isFollowing: Boolean(response?.state?.isFollowing),
+          followers: Number(response?.state?.followers ?? profile?.followers ?? 0),
+        }));
+      }
       if (response?.state?.targetUserId === user?.id || response?.state?.targetUserId === "me") {
         setSocial((prev) => ({
           ...prev,
@@ -2282,6 +2362,13 @@ export default function Profile() {
     mutationFn: ({ targetUserId, shouldLike }) =>
       shouldLike ? base44.social.like(targetUserId) : base44.social.unlike(targetUserId),
     onSuccess: (response) => {
+      const targetUserId = String(response?.state?.targetUserId || "");
+      if (targetUserId) {
+        patchProfileCollections(targetUserId, (profile) => ({
+          isLiked: Boolean(response?.state?.isLiked),
+          likes: Number(response?.state?.likes ?? profile?.likes ?? 0),
+        }));
+      }
       if (response?.state?.targetUserId === user?.id || response?.state?.targetUserId === "me") {
         setSocial((prev) => ({
           ...prev,

@@ -391,6 +391,11 @@ function invalidateGamificationStateCache() {
   };
 }
 
+export async function refreshGamificationState() {
+  invalidateGamificationStateCache();
+  return buildGamificationState({ forceFresh: true });
+}
+
 function normalizeDailyCheckInConfig(raw = {}, rules = []) {
   const weeklyRule = rules.find(
     (entry) => entry?.active && String(entry.category || "") === "weekly" && String(entry.source_event || "") === "daily_checkin"
