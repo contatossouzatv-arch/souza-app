@@ -1532,6 +1532,15 @@ export default function Profile() {
       .map((userId) => {
         const realProfile = realProfilesById[userId] || {};
         const leaderboardProfile = competitionEntryByUserId[userId] || {};
+        const mergedProfile = {
+          ...leaderboardProfile,
+          ...realProfile,
+          id: userId,
+          profile_avatar_id: realProfile.profile_avatar_id || leaderboardProfile.profile_avatar_id || "",
+          profile_image_mode: realProfile.profile_image_mode || leaderboardProfile.profile_image_mode || "avatar",
+          profile_image_status: realProfile.profile_image_status || leaderboardProfile.profile_image_status || "",
+          profile_image_url: realProfile.profile_image_url || leaderboardProfile.profile_image_url || "",
+        };
         const nick = String(realProfile.nick || leaderboardProfile.nick || realProfile.full_name || "Usuário").trim() || "Usuário";
         const handle =
           String(realProfile.handle || "").trim() ||
@@ -1540,9 +1549,9 @@ export default function Profile() {
             .replace(/\s+/g, ".")
             .replace(/[^a-z0-9._]/g, "") ||
           `usuario.${String(userId).slice(0, 6)}`;
-        const avatarMatch = avatarSrcById[realProfile.profile_avatar_id] || "";
+        const avatarMatch = avatarSrcById[mergedProfile.profile_avatar_id] || "";
         const avatarSrc =
-          getProfileAvatarSrc(realProfile, avatarSrcById, avatarMatch || defaultAvatar) ||
+          getProfileAvatarSrc(mergedProfile, avatarSrcById, avatarMatch || defaultAvatar) ||
           avatarMatch ||
           defaultAvatar;
         const xpTotal = Math.max(
