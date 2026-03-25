@@ -1869,6 +1869,63 @@ async function buildLightweightProfileMetrics(userId, options = {}) {
   return buildPromise;
 }
 
+function buildFallbackProfileMetricsFromState(userId, state) {
+  const safeUserId = String(userId || "").trim();
+  const snapshot = state?.snapshots?.[safeUserId] || createUserSnapshot({ id: safeUserId });
+  const currentCompetitionEntry =
+    (state?.leaderboardEntries || []).find((entry) => String(entry?.user_id || "") === safeUserId) || {
+      user_id: safeUserId,
+      position: 0,
+      weekly_points: 0,
+      points: 0,
+    };
+  const pointsRules = {
+    ...DEFAULT_POINTS_RULES,
+    ...(state?.pointsRules || {}),
+  };
+  const metrics = {
+    position: Number(currentCompetitionEntry.position || 0),
+    totalApproved: Number(snapshot.totalApproved || 0),
+    totalTickets: Number(snapshot.totalTickets || 0),
+    totalParticipations: Number(snapshot.totalParticipations || 0),
+    totalWins: Number(snapshot.totalWins || 0),
+    liveParticipations: Number(snapshot.liveParticipations || 0),
+    totalFollowers: Number(snapshot.totalFollowers || 0),
+    totalLikes: Number(snapshot.totalLikes || 0),
+    totalCheckins: Number(snapshot.totalCheckins || 0),
+    followingCount: Number(snapshot.followingCount || 0),
+    points: Number(snapshot.engagement_points || 0),
+    progress: Math.min(
+      100,
+      Math.round(
+        (Number(snapshot.totalParticipations || 0) / Math.max(1, Number(pointsRules.progress_target_participations || 25))) * 100
+      )
+    ),
+    xpTotal: Number(snapshot.xp_total || 0),
+    xp_total: Number(snapshot.xp_total || 0),
+    weeklyPoints: Number(snapshot.weekly_points || 0),
+    weekly_points: Number(snapshot.weekly_points || 0),
+    chestRewards: Number(snapshot.chestRewards || 0),
+    prizeCounts: Number(snapshot.prizeCounts || snapshot.totalWins || 0),
+  };
+  const badgeRules = Array.isArray(state?.badgeRules) ? state.badgeRules : DEFAULT_BADGE_RULES;
+  return {
+    metrics,
+    pointsRules,
+    badgeRules,
+    dailyCheckInConfig: state?.dailyCheckInConfig || DEFAULT_DAILY_CHECKIN_CONFIG,
+    achievements: computeAchievements(metrics, badgeRules),
+    progressBadges: [buildProgressBadge(metrics, pointsRules)],
+    competitionBoard: buildCompetitionBoard(
+      Array.isArray(state?.leaderboardEntries) ? state.leaderboardEntries : [],
+      state?.cycle || { starts_at: new Date().toISOString(), ends_at: new Date().toISOString() },
+      state?.weeklyConfig || DEFAULT_WEEKLY_CONFIG
+    ),
+    currentCompetitionEntry,
+    _degraded: true,
+  };
+}
+
 function normalizeChestRewardDraft(entry = {}) {
   const allowedRewardTypes = new Set(["xp_total", "weekly_points", "engagement_points", "tickets_active", "points_balance"]);
   const rewardTypeRaw = String(entry.reward_type || "").trim().toLowerCase();
@@ -2470,22 +2527,39 @@ function formatUserAdminSummary(user) {
 }
 
 router.get("/profile/metrics", requireAuth, async (req, res) => {
+  const userId = req.auth?.sub || "";
+  const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
   try {
-    const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
     if (shouldForceRefresh) {
       await refreshGamificationState();
     }
-    const payload = await buildLightweightProfileMetrics(req.auth.sub, {
+    const payload = await buildLightweightProfileMetrics(userId, {
       forceFresh: shouldForceRefresh,
     });
     return res.json(payload);
   } catch (error) {
     console.error("Failed to load lightweight profile metrics", {
-      userId: req.auth?.sub || "",
+      userId,
       message: error?.message || String(error),
       stack: error?.stack || "",
     });
-    return res.status(500).json({ error: "Nao foi possivel carregar os dados do perfil agora." });
+    const staleCached = profileMetricsCache.get(String(userId || "").trim())?.value || null;
+    if (staleCached) {
+      console.warn("Serving stale cached profile metrics", { userId });
+      return res.json({ ...staleCached, _degraded: true });
+    }
+    try {
+      const state = await buildGamificationState();
+      const fallbackPayload = buildFallbackProfileMetricsFromState(userId, state);
+      console.warn("Serving fallback profile metrics from gamification state", { userId });
+      return res.json(fallbackPayload);
+    } catch (fallbackError) {
+      console.error("Failed to build fallback profile metrics", {
+        userId,
+        message: fallbackError?.message || String(fallbackError),
+      });
+      return res.status(500).json({ error: "Nao foi possivel carregar os dados do perfil agora." });
+    }
   }
 });
 
