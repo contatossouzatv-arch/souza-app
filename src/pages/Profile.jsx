@@ -3100,6 +3100,24 @@ export default function Profile() {
       2: top2BorderAnimated,
       3: top3BorderAnimated,
     };
+    const formatCompetitionRewardLabel = (position) => {
+      const rewardConfig =
+        (competitionBoard.config.positions || []).find((item) => Number(item?.position || 0) === Number(position || 0)) || {
+          reward_type: competitionBoard.config.fallback_reward_type,
+          reward_value: competitionBoard.config.fallback_reward_value,
+        };
+      const rewardType = String(rewardConfig?.reward_type || "").trim().toLowerCase();
+      const rewardValue = Math.max(0, Number(rewardConfig?.reward_value || 0));
+      if (rewardValue <= 0) return "";
+      if (rewardType === "cash_prize" || rewardType === "points_balance") {
+        return new Intl.NumberFormat("pt-BR", {
+          style: "currency",
+          currency: competitionBoard.config.reward_currency || "BRL",
+          minimumFractionDigits: 2,
+        }).format(rewardValue);
+      }
+      return `${rewardValue.toLocaleString("pt-BR")}`;
+    };
     const isVideoFrameAsset = (src) => /\.(webm|mp4)(\?.*)?$/i.test(String(src || ""));
     const renderFrameOverlay = (src, className) => {
       if (!src) return null;
@@ -3225,7 +3243,10 @@ export default function Profile() {
                       <p className="truncate text-xs font-bold text-white">{item.nick}</p>
                     </div>
                     <div className="absolute right-12 top-1/2 w-[78px] -translate-y-1/2 text-center">
-                      <p className="text-[11px] font-black text-cyan-200">{Number(item.weekly_points ?? item.points ?? 0).toLocaleString("pt-BR")} pts</p>
+                      <p className="text-[11px] font-black text-cyan-200">
+                        {Number(item.weekly_points ?? item.points ?? 0).toLocaleString("pt-BR")} pts
+                        {formatCompetitionRewardLabel(item.winnerPosition) ? ` / ${formatCompetitionRewardLabel(item.winnerPosition)}` : ""}
+                      </p>
                       <p className="text-[10px] font-semibold text-emerald-300">#{item.winnerPosition}</p>
                     </div>
                   </button>
@@ -3317,6 +3338,7 @@ export default function Profile() {
                         <div className="ml-auto pl-2 text-right">
                           <p className="text-[11px] font-black text-cyan-200">
                             {Number(item.weekly_points ?? item.points ?? 0).toLocaleString("pt-BR")} pts
+                            {formatCompetitionRewardLabel(item.position) ? ` / ${formatCompetitionRewardLabel(item.position)}` : ""}
                           </p>
                         </div>
                       </button>
@@ -3337,7 +3359,10 @@ export default function Profile() {
                       </div>
                       <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
                         <p className="truncate text-xs font-bold text-white">Sua colocação: #{entry.position} {entry.nick || "Você"}</p>
-                        <p className="shrink-0 text-[11px] font-black text-cyan-200">{safeEntryPoints.toLocaleString("pt-BR")} pts</p>
+                        <p className="shrink-0 text-[11px] font-black text-cyan-200">
+                          {safeEntryPoints.toLocaleString("pt-BR")} pts
+                          {formatCompetitionRewardLabel(entry.position) ? ` / ${formatCompetitionRewardLabel(entry.position)}` : ""}
+                        </p>
                       </div>
                     </button>
                   ) : null}
