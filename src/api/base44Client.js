@@ -1134,8 +1134,11 @@ export const base44 = {
   },
 
   gamification: {
-    async profileMetrics() {
-      return request("/api/profile/metrics");
+    async profileMetrics(options = {}) {
+      const params = new URLSearchParams();
+      if (options?.force) params.set("force", "true");
+      const suffix = params.toString() ? `?${params.toString()}` : "";
+      return request(`/api/profile/metrics${suffix}`);
     },
 
     async publicProfileSummary(userId) {

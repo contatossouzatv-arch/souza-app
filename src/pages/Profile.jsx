@@ -1217,6 +1217,17 @@ export default function Profile() {
   });
   const deferredProfileGamification = React.useDeferredValue(profileGamification);
 
+  const refreshProfileCompetitionData = React.useCallback(async () => {
+    if (!user?.id) return;
+    const freshGamification = await base44.gamification.profileMetrics({ force: true });
+    queryClient.setQueryData(["profile-gamification-authoritative", user.id], freshGamification);
+    await Promise.allSettled([
+      queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative", user.id] }),
+      queryClient.invalidateQueries({ queryKey: ["social-my-state", user.id] }),
+      queryClient.invalidateQueries({ queryKey: ["daily-checkin-state", user.id] }),
+    ]);
+  }, [queryClient, user?.id]);
+
   const { data: profileHistory, isLoading: loadingProfileHistory } = useQuery({
     queryKey: ["profile-history-authoritative", user?.id],
     queryFn: () => base44.gamification.profileHistory(),
@@ -2332,6 +2343,12 @@ export default function Profile() {
       shouldFollow ? base44.social.follow(targetUserId) : base44.social.unfollow(targetUserId),
     onSuccess: (response) => {
       const targetUserId = String(response?.state?.targetUserId || "");
+      if (targetUserId && user?.id) {
+        queryClient.setQueryData(["social-target-state", user.id, targetUserId], (previous) => ({
+          ...(previous && typeof previous === "object" ? previous : {}),
+          ...(response?.state || {}),
+        }));
+      }
       if (targetUserId) {
         patchProfileCollections(targetUserId, (profile) => ({
           isFollowing: Boolean(response?.state?.isFollowing),
@@ -2363,6 +2380,12 @@ export default function Profile() {
       shouldLike ? base44.social.like(targetUserId) : base44.social.unlike(targetUserId),
     onSuccess: (response) => {
       const targetUserId = String(response?.state?.targetUserId || "");
+      if (targetUserId && user?.id) {
+        queryClient.setQueryData(["social-target-state", user.id, targetUserId], (previous) => ({
+          ...(previous && typeof previous === "object" ? previous : {}),
+          ...(response?.state || {}),
+        }));
+      }
       if (targetUserId) {
         patchProfileCollections(targetUserId, (profile) => ({
           isLiked: Boolean(response?.state?.isLiked),
@@ -3629,7 +3652,7 @@ export default function Profile() {
                 </div>
                 <Button
                   type="button"
-                  onClick={() => refetchProfileGamification()}
+                  onClick={() => refreshProfileCompetitionData()}
                   disabled={fetchingProfileGamification}
                   className="h-8 rounded-full border border-cyan-400/45 bg-cyan-500/10 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-100 hover:bg-cyan-500/20 disabled:cursor-wait disabled:opacity-70"
                 >
@@ -3776,7 +3799,7 @@ export default function Profile() {
         </p>
         <Button
           type="button"
-          onClick={() => refetchProfileGamification()}
+          onClick={() => refreshProfileCompetitionData()}
           className="mt-3 h-9 rounded-xl bg-amber-400 px-4 text-slate-950 hover:bg-amber-300"
         >
           Atualizar dados

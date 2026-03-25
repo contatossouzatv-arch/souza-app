@@ -2366,6 +2366,10 @@ function formatUserAdminSummary(user) {
 
 router.get("/profile/metrics", requireAuth, async (req, res) => {
   try {
+    const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
+    if (shouldForceRefresh) {
+      await refreshGamificationState();
+    }
     const payload = await buildLightweightProfileMetrics(req.auth.sub);
     return res.json(payload);
   } catch (error) {
