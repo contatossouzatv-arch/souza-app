@@ -8,6 +8,7 @@ const LOGIN_2FA_PENDING_KEY = "souza_login_2fa_pending_v1";
 const AUTH_REQUIRED_EVENT = "souza:auth-required";
 const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
 const AUTH_REQUEST_TIMEOUT_MS = 8000;
+const AUTH_RECOVERABLE_RETRY_DELAY_MS = 1200;
 
 function logAuthClient(message, details) {
   console.info(`[auth-client] ${message}`, details || {});
@@ -270,6 +271,12 @@ function shouldHandleUnauthorized(path, status) {
 
 function isRecoverableAuthError(error) {
   return error?.name === "TimeoutError" || !Number.isFinite(Number(error?.status || NaN));
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 function notifyUnauthorized(path, error) {
@@ -537,11 +544,27 @@ export const base44 = {
         return mePromise;
       }
 
-      mePromise = request("/api/auth/me")
-        .then((user) => {
+      mePromise = (async () => {
+        try {
+          const user = await request("/api/auth/me");
           cacheAuthenticatedUser(user);
           return user;
-        })
+        } catch (error) {
+          if (!isRecoverableAuthError(error)) {
+            throw error;
+          }
+
+          logAuthClient("me retry scheduled", {
+            delayMs: AUTH_RECOVERABLE_RETRY_DELAY_MS,
+            message: error?.message || "Recoverable auth error",
+          });
+          await delay(AUTH_RECOVERABLE_RETRY_DELAY_MS);
+
+          const user = await request("/api/auth/me");
+          cacheAuthenticatedUser(user);
+          return user;
+        }
+      })()
         .finally(() => {
           mePromise = null;
         });
