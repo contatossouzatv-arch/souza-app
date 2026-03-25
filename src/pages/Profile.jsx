@@ -1508,6 +1508,123 @@ export default function Profile() {
       }));
   }, [competitionEntryByUserId, simulatedBaseProfiles]);
 
+  const engagedProfiles = useMemo(() => {
+    const candidateIds = new Set();
+
+    (competitionBoard.entries || []).forEach((entry) => {
+      const userId = String(entry?.user_id || "").trim();
+      if (userId) candidateIds.add(userId);
+    });
+    (discoverProfilesData?.items || []).forEach((profile) => {
+      const userId = String(profile?.id || "").trim();
+      if (userId) candidateIds.add(userId);
+    });
+    (myFollowingProfiles || []).forEach((profile) => {
+      const userId = String(profile?.id || "").trim();
+      if (userId) candidateIds.add(userId);
+    });
+    (myFollowerProfiles || []).forEach((profile) => {
+      const userId = String(profile?.id || "").trim();
+      if (userId) candidateIds.add(userId);
+    });
+
+    return Array.from(candidateIds)
+      .map((userId) => {
+        const realProfile = realProfilesById[userId] || {};
+        const leaderboardProfile = competitionEntryByUserId[userId] || {};
+        const nick = String(realProfile.nick || leaderboardProfile.nick || realProfile.full_name || "Usuário").trim() || "Usuário";
+        const handle =
+          String(realProfile.handle || "").trim() ||
+          String(nick || "usuario")
+            .toLowerCase()
+            .replace(/\s+/g, ".")
+            .replace(/[^a-z0-9._]/g, "") ||
+          `usuario.${String(userId).slice(0, 6)}`;
+        const avatarMatch = avatarSrcById[realProfile.profile_avatar_id] || "";
+        const avatarSrc =
+          getProfileAvatarSrc(realProfile, avatarSrcById, avatarMatch || defaultAvatar) ||
+          avatarMatch ||
+          defaultAvatar;
+        const xpTotal = Math.max(
+          0,
+          Number(leaderboardProfile.xp_total || leaderboardProfile.xpTotal || realProfile.xp_total || realProfile.xpTotal || 0)
+        );
+        const level = getLevelProgress(xpTotal).level;
+        const weeklyPoints = Math.max(0, Number(leaderboardProfile.weekly_points || leaderboardProfile.points || 0));
+        const weeklyPosition = Math.max(0, Number(leaderboardProfile.position || 0));
+        const totalWins = Math.max(0, Number(leaderboardProfile.totalWins || realProfile.totalWins || 0));
+        const participations = Math.max(
+          0,
+          Number(
+            leaderboardProfile.totalParticipations ||
+              realProfile.participations ||
+              (Number(leaderboardProfile.liveParticipations || 0) +
+                Number(leaderboardProfile.gameParticipations || 0) +
+                Number(leaderboardProfile.instantParticipations || 0))
+          )
+        );
+        const followers = Math.max(0, Number(realProfile.followers || leaderboardProfile.totalFollowers || 0));
+        const likes = Math.max(0, Number(realProfile.likes || leaderboardProfile.totalLikes || 0));
+        const engagementPoints = Math.max(0, Number(leaderboardProfile.engagement_points || 0));
+        const participationStrength =
+          participations * 1000000 +
+          level * 100000 +
+          totalWins * 10000 +
+          weeklyPoints * 100 +
+          followers * 10 +
+          Math.max(0, 500 - weeklyPosition) +
+          likes;
+
+        return {
+          id: userId,
+          nick,
+          handle,
+          avatarSrc,
+          avatar_emoji: String(realProfile.avatar_emoji || ""),
+          followers,
+          likes,
+          isFollowing: Boolean(realProfile.isFollowing),
+          isLiked: Boolean(realProfile.isLiked),
+          level,
+          xpTotal,
+          points: weeklyPoints,
+          weeklyPosition,
+          totalWins,
+          participations,
+          engagementPoints,
+          participationStrength,
+        };
+      })
+      .sort((a, b) => {
+        if (b.participations !== a.participations) return b.participations - a.participations;
+        if (b.level !== a.level) return b.level - a.level;
+        if (b.totalWins !== a.totalWins) return b.totalWins - a.totalWins;
+        if (b.points !== a.points) return b.points - a.points;
+        if (a.weeklyPosition !== b.weeklyPosition) {
+          if (!a.weeklyPosition) return 1;
+          if (!b.weeklyPosition) return -1;
+          return a.weeklyPosition - b.weeklyPosition;
+        }
+        if (b.followers !== a.followers) return b.followers - a.followers;
+        if (b.xpTotal !== a.xpTotal) return b.xpTotal - a.xpTotal;
+        if (b.participationStrength !== a.participationStrength) return b.participationStrength - a.participationStrength;
+        if (b.engagementPoints !== a.engagementPoints) return b.engagementPoints - a.engagementPoints;
+        return b.likes - a.likes;
+      })
+      .map((profile, index) => ({
+        ...profile,
+        position: index + 1,
+      }));
+  }, [
+    avatarSrcById,
+    competitionBoard.entries,
+    competitionEntryByUserId,
+    discoverProfilesData?.items,
+    myFollowerProfiles,
+    myFollowingProfiles,
+    realProfilesById,
+  ]);
+
   useEffect(() => {
     if (!simulatedProfiles.length) return;
     const followingIds = new Set((myFollowingProfiles || []).map((profile) => String(profile?.id || "")));
@@ -4605,7 +4722,7 @@ export default function Profile() {
             className="hide-scrollbar touch-pan-x flex gap-3 overflow-x-auto pb-1 select-none"
             style={{ WebkitOverflowScrolling: "touch" }}
           >
-            {simulatedProfiles.slice(0, 5).map((profile, index) => {
+            {engagedProfiles.slice(0, 5).map((profile, index) => {
               const state = simState[profile.id] || {
                 isFollowing: false,
                 isLiked: false,
@@ -4633,7 +4750,7 @@ export default function Profile() {
                     <div className="relative h-11 w-11 shrink-0">
                       <button
                         type="button"
-                        onClick={() => openPublicProfilePage(profile.id)}
+                        onClick={() => openPublicProfileByUserId(profile.id)}
                         className={`h-11 w-11 overflow-hidden rounded-full transition ${
                           isPodium ? "border border-transparent" : "border border-cyan-500/40 hover:border-cyan-300/70"
                         }`}
@@ -4665,14 +4782,14 @@ export default function Profile() {
                     <div className="min-w-0">
                       <button
                         type="button"
-                        onClick={() => openPublicProfilePage(profile.id)}
+                        onClick={() => openPublicProfileByUserId(profile.id)}
                         className="block w-full truncate text-left text-sm font-bold leading-tight text-white transition hover:text-cyan-200"
                       >
                         {profile.nick}
                       </button>
                       <button
                         type="button"
-                        onClick={() => openPublicProfilePage(profile.id)}
+                        onClick={() => openPublicProfileByUserId(profile.id)}
                         className="mt-0 block w-full truncate text-left text-xs leading-tight text-cyan-300 transition hover:text-cyan-200"
                       >
                         @{profile.handle}
