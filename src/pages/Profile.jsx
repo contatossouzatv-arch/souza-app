@@ -1197,22 +1197,25 @@ export default function Profile() {
 
   const isLoading =
     isLoadingAuth ||
-    !user;
+    !user ||
+    (loadingProfileGamification && !profileGamification);
 
   const initialProfileLoadTarget = useMemo(() => {
     const steps = [
       !isLoadingAuth,
       Boolean(user),
+      Boolean(profileGamification),
     ];
     const completed = steps.filter(Boolean).length;
     return Math.round((completed / steps.length) * 100);
-  }, [isLoadingAuth, user]);
+  }, [isLoadingAuth, profileGamification, user]);
 
   const initialProfileLoadLabel = useMemo(() => {
     if (isLoadingAuth) return "Validando acesso";
     if (!user) return "Carregando dados do perfil";
+    if (!profileGamification) return "Preparando ranking, pontos e métricas";
     return "Finalizando perfil";
-  }, [isLoadingAuth, user]);
+  }, [isLoadingAuth, profileGamification, user]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -1317,11 +1320,11 @@ export default function Profile() {
     return simulatedBaseProfiles
       .map((profile) => {
         const leaderboardProfile = competitionEntryByUserId[profile.id] || {};
-        const xpTotal = Math.max(0, Number(leaderboardProfile.xp_total || 0));
+        const xpTotal = Math.max(0, Number(leaderboardProfile.xp_total || leaderboardProfile.xpTotal || profile.xpTotal || profile.xp_total || 0));
         const level = getLevelProgress(xpTotal).level;
-        const engagementPoints = Math.max(0, Number(leaderboardProfile.engagement_points || 0));
+        const engagementPoints = Math.max(0, Number(leaderboardProfile.engagement_points || profile.engagementPoints || profile.engagement_points || 0));
         const followers = Math.max(0, Number(profile.followers || leaderboardProfile.totalFollowers || 0));
-        const weeklyPosition = Math.max(0, Number(leaderboardProfile.position || profile.position || 0));
+        const weeklyPosition = Math.max(0, Number(leaderboardProfile.position || 0));
         const engagementScore = followers + xpTotal + engagementPoints;
         return {
           ...profile,

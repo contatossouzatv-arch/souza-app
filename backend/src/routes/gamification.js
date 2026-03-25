@@ -17,7 +17,7 @@ const POINTS_RULES_KEY = "achievement_points_rules_v1";
 const PROFILE_COMPETITION_KEY = "profile_competition_rules_v1";
 const WEEKLY_TOP_CONFIG_KEY = "weekly_top_config_v2";
 const DAILY_CHECKIN_CONFIG_KEY = "daily_checkin_config_v1";
-const GAMIFICATION_STATE_TTL_MS = 1500;
+const GAMIFICATION_STATE_TTL_MS = 30000;
 
 const DEFAULT_POINTS_RULES = {
   points_per_participation: 12,
