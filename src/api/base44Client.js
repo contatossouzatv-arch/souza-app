@@ -7,7 +7,7 @@ const REFRESH_TOKEN_KEY = "souza_local_refresh_token";
 const LOGIN_2FA_PENDING_KEY = "souza_login_2fa_pending_v1";
 const AUTH_REQUIRED_EVENT = "souza:auth-required";
 const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
-const AUTH_REQUEST_TIMEOUT_MS = 8000;
+const AUTH_REQUEST_TIMEOUT_MS = 15000;
 const AUTH_RECOVERABLE_RETRY_DELAY_MS = 1200;
 
 function logAuthClient(message, details) {
