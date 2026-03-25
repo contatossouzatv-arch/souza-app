@@ -41,16 +41,26 @@ function WinnerAvatar({ winner }) {
 
 export default function WinnersHistoryBox() {
   const [selectedDay, setSelectedDay] = React.useState(null);
+  const [showOlderDays, setShowOlderDays] = React.useState(false);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["prizes-winners-history"],
-    queryFn: () => base44.gamification.winnersHistory(),
+  const { data: recentData, isLoading: isLoadingRecent } = useQuery({
+    queryKey: ["prizes-winners-history", "recent"],
+    queryFn: () => base44.gamification.winnersHistory({ limitDays: 1 }),
     staleTime: 30000,
   });
 
-  const days = data?.days || [];
+  const { data: olderData, isLoading: isLoadingOlder } = useQuery({
+    queryKey: ["prizes-winners-history", "older"],
+    queryFn: () => base44.gamification.winnersHistory({ skipDays: 1 }),
+    staleTime: 30000,
+    enabled: showOlderDays,
+  });
 
-  if (isLoading) {
+  const recentDay = recentData?.days?.[0] || null;
+  const olderDays = olderData?.days || [];
+  const totalDays = (recentDay ? 1 : 0) + olderDays.length;
+
+  if (isLoadingRecent) {
     return (
       <Card className="border-slate-800 bg-slate-900/70 p-5">
         <p className="text-sm text-slate-300">Carregando historico de ganhadores...</p>
@@ -73,46 +83,103 @@ export default function WinnersHistoryBox() {
           </div>
           <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-right">
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-200">Dias registrados</p>
-            <p className="text-xl font-black text-white">{days.length}</p>
+            <p className="text-xl font-black text-white">{totalDays}</p>
           </div>
         </div>
 
-        {days.length === 0 ? (
+        {!recentDay ? (
           <div className="mt-5 rounded-3xl border border-dashed border-slate-700 bg-slate-950/70 px-4 py-8 text-center">
             <Sparkles className="mx-auto h-8 w-8 text-slate-500" />
             <p className="mt-3 text-sm font-semibold text-slate-300">Nenhum sorteio realizado ainda</p>
             <p className="mt-1 text-xs text-slate-500">Quando houver vencedores validados, as datas aparecem aqui automaticamente.</p>
           </div>
         ) : (
-          <div className="mt-5 grid grid-cols-1 gap-3 lg:gap-4">
-            {days.map((day) => (
-              <motion.button
-                key={day.day_key}
-                whileHover={{ y: -3, scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setSelectedDay(day)}
-                className="group min-h-[170px] min-w-0 w-full overflow-hidden rounded-[1.8rem] border border-amber-400/15 bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-slate-900 px-4 py-4 text-left transition hover:border-amber-300/40 md:min-h-[186px] md:px-5 md:py-5 lg:min-h-[210px] lg:px-6 lg:py-6 xl:min-h-[220px] xl:px-7"
-              >
-                <div className="flex h-full flex-col justify-between gap-4">
-                  <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="shrink-0 rounded-2xl bg-white/10 p-2 text-amber-200">
-                      <CalendarDays className="h-5 w-5" />
-                    </div>
-                    <div className="ml-auto min-w-[150px] rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-right xl:min-w-[170px]">
-                      <p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Sorteios do dia</p>
-                      <p className="mt-1 text-sm font-black text-white md:text-base">{day.total_draws || 0}</p>
-                    </div>
+          <div className="mt-5 space-y-4">
+            <motion.button
+              whileHover={{ y: -3, scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setSelectedDay(recentDay)}
+              className="group min-h-[170px] min-w-0 w-full overflow-hidden rounded-[1.8rem] border border-amber-300/35 bg-gradient-to-br from-amber-500/20 via-orange-500/15 to-slate-900 px-4 py-4 text-left transition hover:border-amber-200/60 md:min-h-[186px] md:px-5 md:py-5 lg:min-h-[210px] lg:px-6 lg:py-6 xl:min-h-[220px] xl:px-7"
+            >
+              <div className="flex h-full flex-col justify-between gap-4">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="shrink-0 rounded-2xl bg-white/10 p-2 text-amber-200">
+                    <CalendarDays className="h-5 w-5" />
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-200/80">SORTEIO DIA</p>
-                    <p className="mt-2 break-words text-xl font-black leading-tight text-white md:text-[1.45rem] lg:text-[1.7rem]">{day.date_label}</p>
-                    <p className="mt-3 break-words text-sm leading-6 text-slate-400 lg:text-[15px]">
-                      {day.total_winners || 0} ganhador{day.total_winners === 1 ? "" : "es"} confirmado{day.total_winners === 1 ? "" : "s"}
-                    </p>
+                  <div className="ml-auto min-w-[150px] rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-right xl:min-w-[170px]">
+                    <p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-300">Sorteios mais recentes</p>
+                    <p className="mt-1 text-sm font-black text-white md:text-base">{recentDay.total_draws || 0}</p>
                   </div>
                 </div>
-              </motion.button>
-            ))}
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-100/90">ULTIMO DIA REGISTRADO</p>
+                  <p className="mt-2 break-words text-xl font-black leading-tight text-white md:text-[1.45rem] lg:text-[1.7rem]">{recentDay.date_label}</p>
+                  <p className="mt-3 break-words text-sm leading-6 text-slate-300 lg:text-[15px]">
+                    {recentDay.total_winners || 0} ganhador{recentDay.total_winners === 1 ? "" : "es"} confirmado{recentDay.total_winners === 1 ? "" : "s"}
+                  </p>
+                </div>
+              </div>
+            </motion.button>
+
+            <div className="rounded-[1.6rem] border border-slate-800 bg-slate-950/60 p-3 sm:p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-300">Datas antigas</p>
+                  <p className="mt-1 text-sm text-slate-500">As outras datas ficam ocultas e so carregam quando voce abrir.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowOlderDays((current) => !current)}
+                  className="rounded-2xl border-slate-700 bg-slate-900 text-white hover:bg-slate-800"
+                >
+                  {showOlderDays ? "Ocultar datas antigas" : "Ver datas antigas"}
+                </Button>
+              </div>
+
+              {showOlderDays ? (
+                <div className="mt-4 grid grid-cols-1 gap-3 lg:gap-4">
+                  {isLoadingOlder ? (
+                    <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-950/70 px-4 py-8 text-center">
+                      <p className="text-sm text-slate-300">Carregando datas antigas...</p>
+                    </div>
+                  ) : olderDays.length === 0 ? (
+                    <div className="rounded-3xl border border-dashed border-slate-700 bg-slate-950/70 px-4 py-8 text-center">
+                      <p className="text-sm text-slate-300">Nao existem datas antigas registradas.</p>
+                    </div>
+                  ) : (
+                    olderDays.map((day) => (
+                      <motion.button
+                        key={day.day_key}
+                        whileHover={{ y: -3, scale: 1.01 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setSelectedDay(day)}
+                        className="group min-h-[170px] min-w-0 w-full overflow-hidden rounded-[1.8rem] border border-amber-400/15 bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-slate-900 px-4 py-4 text-left transition hover:border-amber-300/40 md:min-h-[186px] md:px-5 md:py-5 lg:min-h-[210px] lg:px-6 lg:py-6 xl:min-h-[220px] xl:px-7"
+                      >
+                        <div className="flex h-full flex-col justify-between gap-4">
+                          <div className="flex min-w-0 items-start justify-between gap-3">
+                            <div className="shrink-0 rounded-2xl bg-white/10 p-2 text-amber-200">
+                              <CalendarDays className="h-5 w-5" />
+                            </div>
+                            <div className="ml-auto min-w-[150px] rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-right xl:min-w-[170px]">
+                              <p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">Sorteios do dia</p>
+                              <p className="mt-1 text-sm font-black text-white md:text-base">{day.total_draws || 0}</p>
+                            </div>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-200/80">SORTEIO DIA</p>
+                            <p className="mt-2 break-words text-xl font-black leading-tight text-white md:text-[1.45rem] lg:text-[1.7rem]">{day.date_label}</p>
+                            <p className="mt-3 break-words text-sm leading-6 text-slate-400 lg:text-[15px]">
+                              {day.total_winners || 0} ganhador{day.total_winners === 1 ? "" : "es"} confirmado{day.total_winners === 1 ? "" : "s"}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.button>
+                    ))
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
         )}
       </Card>

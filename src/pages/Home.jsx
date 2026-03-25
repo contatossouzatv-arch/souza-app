@@ -60,6 +60,12 @@ export default function Home() {
     staleTime: 60000,
   });
 
+  const { data: creatorUsers = [] } = useQuery({
+    queryKey: ["inicio-creator-users"],
+    queryFn: () => base44.entities.User.filter({ role: "admin" }, "created_date", 5),
+    staleTime: 60000,
+  });
+
   const { data: recentProfilesData } = useQuery({
     queryKey: ["inicio-recent-profiles"],
     queryFn: () => base44.social.discover({ limit: 10, offset: 0 }),
@@ -79,7 +85,7 @@ export default function Home() {
   }, [users]);
 
   const creatorProfile = useMemo(() => {
-    const admin = users.find((item) => String(item.role || "").toLowerCase() === "admin");
+    const admin = creatorUsers[0] || null;
     if (!admin) return null;
     const creatorPhoto =
       admin.profile_image_mode === "photo" &&
@@ -94,7 +100,7 @@ export default function Home() {
       avatarEmoji: admin.avatar_emoji || "S",
       avatarUrl: creatorPhoto || getProfileAvatarSrc(admin, avatarById, defaultAvatar) || defaultAvatar,
     };
-  }, [users]);
+  }, [creatorUsers, users]);
 
   const recentProfiles = useMemo(() => {
     return (recentProfilesData?.items || []).map((profile) => {
@@ -150,6 +156,10 @@ export default function Home() {
     const noticeFeed = publishedPosts.map((post) => ({
       type: "notice",
       id: `notice-${post.id}`,
+      authorId: creatorProfile?.id || "",
+      authorName: creatorProfile?.name || "Souza",
+      authorNick: creatorProfile?.nick || "souza",
+      authorAvatarUrl: creatorProfile?.avatarUrl || defaultAvatar,
       title: post.title || "Aviso",
       message: post.message || "",
       createdAt: post.sent_at || post.created_date,
@@ -157,7 +167,7 @@ export default function Home() {
     }));
 
     return [...winnerFeed, ...noticeFeed].sort((a, b) => b.createdAtTs - a.createdAtTs);
-  }, [winnerPosts, publishedPosts]);
+  }, [winnerPosts, publishedPosts, creatorProfile]);
 
   useEffect(() => {
     setVisibleCount(FEED_PAGE_SIZE);
@@ -484,11 +494,36 @@ export default function Home() {
                   highlightPostId === item.id ? "ring-2 ring-cyan-400/80" : ""
                 }`}
               >
-                <div className="mb-2 flex items-start justify-between gap-3">
-                  <h3 className="text-base font-bold text-white">{item.title || "Aviso"}</h3>
-                  <span className="text-xs text-slate-500">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <button type="button" onClick={() => openPublicProfile(item.authorId)} className="rounded-full">
+                      <img
+                        src={item.authorAvatarUrl || defaultAvatar}
+                        alt={item.authorName}
+                        className="h-11 w-11 rounded-full border border-cyan-300/50 object-cover transition hover:opacity-90"
+                        onError={(event) => {
+                          event.currentTarget.src = defaultAvatar;
+                        }}
+                      />
+                    </button>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-white">{item.authorName}</p>
+                      <button
+                        type="button"
+                        onClick={() => openPublicProfile(item.authorId)}
+                        className="truncate text-xs text-cyan-200/80 transition hover:text-cyan-100 hover:underline"
+                      >
+                        {item.authorNick ? `@${item.authorNick}` : "@souza"}
+                      </button>
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-xs text-slate-500">
                     {item.createdAt ? format(new Date(item.createdAt), "dd/MM HH:mm") : "Agora"}
                   </span>
+                </div>
+
+                <div className="mb-2">
+                  <h3 className="text-base font-bold text-white">{item.title || "Aviso"}</h3>
                 </div>
 
                 <RichTextMessage

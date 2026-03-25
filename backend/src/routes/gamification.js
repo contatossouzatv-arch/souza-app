@@ -2492,15 +2492,25 @@ router.get("/profile/prize-gallery", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
+router.get("/prizes/winners-history", requireAuth, async (req, res) => {
+  const parsedLimitDays = Number.parseInt(String(req.query?.limitDays || "").trim(), 10);
+  const parsedSkipDays = Number.parseInt(String(req.query?.skipDays || "").trim(), 10);
+  const limitDays = Number.isFinite(parsedLimitDays) && parsedLimitDays > 0 ? parsedLimitDays : null;
+  const skipDays = Number.isFinite(parsedSkipDays) && parsedSkipDays > 0 ? parsedSkipDays : 0;
+  const isRecentOnlyRequest = skipDays === 0 && limitDays === 1;
+  const auditsFetchLimit = isRecentOnlyRequest ? 250 : 1000;
+  const prizeFetchLimit = isRecentOnlyRequest ? 250 : 1000;
+  const raffleFetchLimit = isRecentOnlyRequest ? 120 : 300;
+  const userFetchLimit = isRecentOnlyRequest ? 400 : 1000;
+
   const [audits, users, settings, instantRaffles, liveRaffles, gameCallRaffles, prizeItems] = await Promise.all([
-    listEntity("DrawWinnerAudit", "-drawn_at", 1000),
-    listEntity("User", "-created_date", 1000),
+    listEntity("DrawWinnerAudit", "-drawn_at", auditsFetchLimit),
+    listEntity("User", "-created_date", userFetchLimit),
     listAppSettingsMap(),
-    listEntity("InstantRaffle", "-created_date", 300),
-    listEntity("LiveDrawRaffle", "-created_date", 300),
-    listEntity("GameCallRaffle", "-created_date", 300),
-    listEntity("UserPrizeGalleryItem", "-claimed_at", 1000),
+    listEntity("InstantRaffle", "-created_date", raffleFetchLimit),
+    listEntity("LiveDrawRaffle", "-created_date", raffleFetchLimit),
+    listEntity("GameCallRaffle", "-created_date", raffleFetchLimit),
+    listEntity("UserPrizeGalleryItem", "-claimed_at", prizeFetchLimit),
   ]);
 
   const validatedAudits = audits.filter((audit) => String(audit?.status || "").toLowerCase() === "validated");
@@ -2608,7 +2618,7 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
     dayBucket.total_winners += 1;
   });
 
-  const days = Array.from(groupedDays.values())
+  const allDays = Array.from(groupedDays.values())
     .sort((a, b) => new Date(b.raw_date || 0).getTime() - new Date(a.raw_date || 0).getTime())
     .map((day) => ({
       day_key: day.day_key,
@@ -2620,6 +2630,8 @@ router.get("/prizes/winners-history", requireAuth, async (_req, res) => {
         winners: draw.winners.sort((a, b) => new Date(b.drawn_at || 0).getTime() - new Date(a.drawn_at || 0).getTime()),
       })),
     }));
+
+  const days = allDays.slice(skipDays, limitDays ? skipDays + limitDays : undefined);
 
   res.json({ days });
 });

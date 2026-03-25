@@ -1157,8 +1157,12 @@ export const base44 = {
       return request("/api/profile/history");
     },
 
-    async winnersHistory() {
-      return request("/api/prizes/winners-history");
+    async winnersHistory(options = {}) {
+      const params = new URLSearchParams();
+      if (options.limitDays != null) params.set("limitDays", String(options.limitDays));
+      if (options.skipDays != null) params.set("skipDays", String(options.skipDays));
+      const query = params.toString();
+      return request(query ? `/api/prizes/winners-history?${query}` : "/api/prizes/winners-history");
     },
 
     async feedWins() {
