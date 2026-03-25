@@ -174,7 +174,7 @@ export default function Layout({ children }) {
   };
 
   return (
-    <ErrorBoundary>
+    <ErrorBoundary resetKey={`${location.pathname}${location.search}`}>
       <DataRefresher />
       <NotificationListener />
       {enableBlockingOverlays && user ? (
