@@ -941,8 +941,36 @@ export default function Profile() {
   );
 
   useEffect(() => {
-    if (authUser && authUser !== user) setUser(authUser);
-  }, [authUser, user]);
+    if (!authUser) {
+      setUser((prev) => (prev === null ? prev : null));
+      return;
+    }
+
+    setUser((prev) => {
+      if (!prev) return authUser;
+
+      const hasMeaningfulChange =
+        prev.id !== authUser.id ||
+        prev.nick !== authUser.nick ||
+        prev.phone !== authUser.phone ||
+        prev.profile_avatar_id !== authUser.profile_avatar_id ||
+        prev.profile_image_mode !== authUser.profile_image_mode ||
+        prev.profile_image_status !== authUser.profile_image_status ||
+        prev.profile_image_url !== authUser.profile_image_url ||
+        prev.profile_image_uploaded_at !== authUser.profile_image_uploaded_at;
+
+      return hasMeaningfulChange ? authUser : prev;
+    });
+  }, [
+    authUser?.id,
+    authUser?.nick,
+    authUser?.phone,
+    authUser?.profile_avatar_id,
+    authUser?.profile_image_mode,
+    authUser?.profile_image_status,
+    authUser?.profile_image_url,
+    authUser?.profile_image_uploaded_at,
+  ]);
 
   useEffect(() => {
     let revokedUrl = "";
@@ -1313,12 +1341,27 @@ export default function Profile() {
 
   useEffect(() => {
     if (!user?.id || !hasProfileGamification) return;
-    setSocial({
-      followers: Number(mySocialState?.followers ?? metrics.totalFollowers ?? 0),
-      following: Number(mySocialState?.following ?? metrics.followingCount ?? 0),
-      likes: Number(mySocialState?.likes ?? metrics.totalLikes ?? 0),
-      isFollowing: false,
-      isLiked: false,
+    const nextFollowers = Number(mySocialState?.followers ?? metrics.totalFollowers ?? 0);
+    const nextFollowing = Number(mySocialState?.following ?? metrics.followingCount ?? 0);
+    const nextLikes = Number(mySocialState?.likes ?? metrics.totalLikes ?? 0);
+
+    setSocial((prev) => {
+      if (
+        prev.followers === nextFollowers &&
+        prev.following === nextFollowing &&
+        prev.likes === nextLikes &&
+        prev.isFollowing === false &&
+        prev.isLiked === false
+      ) {
+        return prev;
+      }
+      return {
+        followers: nextFollowers,
+        following: nextFollowing,
+        likes: nextLikes,
+        isFollowing: false,
+        isLiked: false,
+      };
     });
   }, [hasProfileGamification, metrics.followingCount, metrics.totalFollowers, metrics.totalLikes, mySocialState, user?.id]);
 
@@ -1419,17 +1462,30 @@ export default function Profile() {
     if (!simulatedProfiles.length) return;
     const followingIds = new Set((myFollowingProfiles || []).map((profile) => String(profile?.id || "")));
     setSimState((prev) => {
+      let changed = false;
       const next = { ...prev };
       simulatedProfiles.forEach((profile) => {
-        next[profile.id] = {
-          ...(next[profile.id] || {}),
-          isFollowing: Boolean(profile.isFollowing) || followingIds.has(String(profile.id || "")),
+        const profileId = String(profile.id || "");
+        const current = next[profileId] || {};
+        const computed = {
+          ...current,
+          isFollowing: Boolean(profile.isFollowing) || followingIds.has(profileId),
           isLiked: Boolean(profile.isLiked),
           followers: Number(profile.followers || 0),
           likes: Number(profile.likes || 0),
         };
+
+        if (
+          current.isFollowing !== computed.isFollowing ||
+          current.isLiked !== computed.isLiked ||
+          current.followers !== computed.followers ||
+          current.likes !== computed.likes
+        ) {
+          next[profileId] = computed;
+          changed = true;
+        }
       });
-      return next;
+      return changed ? next : prev;
     });
   }, [myFollowingProfiles, simulatedProfiles]);
 
