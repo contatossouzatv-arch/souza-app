@@ -342,6 +342,70 @@ async function auditEvent(req, type, userId = null, metadata = {}) {
   }
 }
 
+function parseCookies(rawCookie = "") {
+  const input = String(rawCookie || "").trim();
+  if (!input) return {};
+
+  return input.split(";").reduce((acc, chunk) => {
+    const [rawName, ...rawValue] = chunk.split("=");
+    const name = String(rawName || "").trim();
+    if (!name) return acc;
+    acc[name] = decodeURIComponent(rawValue.join("=").trim());
+    return acc;
+  }, {});
+}
+
+function buildCookieOptions(maxAgeMs) {
+  const sameSite = ["lax", "strict", "none"].includes(env.authCookieSameSite)
+    ? env.authCookieSameSite
+    : "lax";
+  const options = {
+    httpOnly: env.authCookieHttpOnly,
+    secure: env.authCookieSecure,
+    sameSite,
+    path: env.authCookiePath || "/",
+    maxAge: maxAgeMs,
+  };
+
+  if (env.authCookieDomain) {
+    options.domain = env.authCookieDomain;
+  }
+
+  return options;
+}
+
+function setSessionCookies(res, session) {
+  const accessMaxAgeMs = Math.max(1, Number(env.accessTokenTtlMin || 15)) * 60 * 1000;
+  const refreshMaxAgeMs = Math.max(1, Number(env.refreshTokenTtlDays || 30)) * 24 * 60 * 60 * 1000;
+  res.cookie(env.authAccessCookieName, session.token, buildCookieOptions(accessMaxAgeMs));
+  res.cookie(env.authRefreshCookieName, session.refreshToken, buildCookieOptions(refreshMaxAgeMs));
+}
+
+function clearSessionCookies(res) {
+  const options = buildCookieOptions(0);
+  res.clearCookie(env.authAccessCookieName, options);
+  res.clearCookie(env.authRefreshCookieName, options);
+}
+
+function readRefreshToken(req) {
+  const bodyToken = String(req.body?.refreshToken || "").trim();
+  if (bodyToken) return bodyToken;
+  const cookies = parseCookies(req.headers.cookie || "");
+  return String(cookies[env.authRefreshCookieName] || "").trim();
+}
+
+function logAuthRoute(req, message, details = {}) {
+  console.info(`[auth-backend] ${message}`, {
+    path: req.originalUrl,
+    method: req.method,
+    origin: req.headers.origin || null,
+    hasCookieHeader: Boolean(req.headers.cookie),
+    hasAccessCookie: Boolean(parseCookies(req.headers.cookie || "")[env.authAccessCookieName]),
+    hasRefreshCookie: Boolean(parseCookies(req.headers.cookie || "")[env.authRefreshCookieName]),
+    ...details,
+  });
+}
+
 async function issueSession(req, user, familyId = null) {
   const refreshToken = generateRefreshToken();
   const tokenHash = hashToken(refreshToken);
@@ -393,6 +457,8 @@ router.post("/register", loginRateLimiter, async (req, res) => {
   });
 
   const session = await issueSession(req, user);
+  setSessionCookies(res, session);
+  logAuthRoute(req, "session issued", { userId: user.id, reason: "register" });
   await auditEvent(req, "USER_REGISTERED", user.id, { method: "password" });
   emitEntityChanged(req, "user", user.id, "created");
   return res.status(201).json(session);
@@ -485,6 +551,8 @@ router.post("/login", loginRateLimiter, async (req, res) => {
     success: true,
   });
   const session = await issueSession(req, activeUser);
+  setSessionCookies(res, session);
+  logAuthRoute(req, "session issued", { userId: activeUser.id, reason: "login" });
   await auditEvent(req, "USER_LOGGED_IN", activeUser.id, { method: "password" });
   return res.json(session);
 });
@@ -578,6 +646,8 @@ router.post("/google", loginRateLimiter, async (req, res) => {
       success: true,
     });
     const session = await issueSession(req, activeUser);
+    setSessionCookies(res, session);
+    logAuthRoute(req, "session issued", { userId: activeUser.id, reason: "google" });
     await auditEvent(req, "USER_LOGGED_IN", activeUser.id, { method: "google" });
     emitEntityChanged(req, "user", activeUser.id, "updated");
     return res.json(session);
@@ -604,6 +674,8 @@ router.post("/dev-login", async (req, res) => {
   });
 
   const session = await issueSession(req, user);
+  setSessionCookies(res, session);
+  logAuthRoute(req, "session issued", { userId: user.id, reason: "dev-login" });
   await auditEvent(req, "USER_LOGGED_IN", user.id, { method: "dev-login" });
   return res.json(session);
 });
@@ -823,31 +895,39 @@ router.post("/change-password", requireAuth, async (req, res) => {
 });
 
 router.post("/refresh", async (req, res) => {
-  const rawToken = String(req.body?.refreshToken || "").trim();
+  const rawToken = readRefreshToken(req);
   if (!rawToken) {
+    clearSessionCookies(res);
+    logAuthRoute(req, "refresh denied", { reason: "missing_refresh_token" });
     return res.status(401).json({ error: "Refresh token inválido" });
   }
 
   const tokenHash = hashToken(rawToken);
   const stored = await findActiveRefreshTokenByHash(tokenHash);
   if (!stored) {
+    clearSessionCookies(res);
+    logAuthRoute(req, "refresh denied", { reason: "unknown_refresh_token" });
     return res.status(401).json({ error: "Refresh token inválido" });
   }
 
   const user = await findUserById(stored.user_id);
   if (!user) {
     await revokeRefreshTokenById(stored.id);
+    clearSessionCookies(res);
+    logAuthRoute(req, "refresh denied", { reason: "missing_user", userId: stored.user_id });
     return res.status(401).json({ error: "Sessão inválida" });
   }
 
   await revokeRefreshTokenById(stored.id);
   const session = await issueSession(req, user, stored.rotate_family_id);
+  setSessionCookies(res, session);
+  logAuthRoute(req, "session refreshed", { userId: user.id });
   await auditEvent(req, "TOKEN_REFRESHED", user.id, { family: stored.rotate_family_id });
   return res.json(session);
 });
 
 router.post("/logout", async (req, res) => {
-  const rawToken = String(req.body?.refreshToken || "").trim();
+  const rawToken = readRefreshToken(req);
   if (rawToken) {
     const stored = await findActiveRefreshTokenByHash(hashToken(rawToken));
     if (stored) {
@@ -855,21 +935,35 @@ router.post("/logout", async (req, res) => {
       await auditEvent(req, "USER_LOGGED_OUT", stored.user_id);
     }
   }
+  clearSessionCookies(res);
+  logAuthRoute(req, "session cleared", { reason: "logout" });
   return res.status(204).send();
 });
 
 router.post("/logout-all", requireAuth, async (req, res) => {
   await revokeRefreshTokensByUserId(req.auth.sub);
+  clearSessionCookies(res);
+  logAuthRoute(req, "session cleared", { userId: req.auth.sub, reason: "logout-all" });
   await auditEvent(req, "USER_LOGGED_OUT_ALL", req.auth.sub);
   return res.status(204).send();
 });
 
 router.get("/me", requireAuth, async (req, res) => {
+  logAuthRoute(req, "me request", {
+    authSource: req.authSource || "unknown",
+    userId: req.auth?.sub || null,
+  });
   const user = await findUserById(req.auth.sub);
-  if (!user) return res.status(401).json({ error: "User not found" });
+  if (!user) {
+    clearSessionCookies(res);
+    logAuthRoute(req, "me denied", { reason: "missing_user", userId: req.auth.sub });
+    return res.status(401).json({ error: "User not found" });
+  }
   if (user.account_status === "deactivated") {
+    logAuthRoute(req, "me blocked", { reason: "deactivated", userId: req.auth.sub });
     return res.status(403).json({ error: "Conta desativada. Faca login novamente para reativar." });
   }
+  logAuthRoute(req, "me success", { userId: req.auth.sub });
   return res.json(user);
 });
 

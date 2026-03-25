@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 
 const AuthContext = createContext();
+const AUTH_REQUIRED_EVENT = 'souza:auth-required';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -12,26 +13,46 @@ export const AuthProvider = ({ children }) => {
   const [appPublicSettings] = useState(null);
 
   useEffect(() => {
+    console.info('[auth-bootstrap] mount');
     checkAppState();
+
+    const handleAuthRequired = (event) => {
+      console.warn('[auth-bootstrap] auth-required event received', event?.detail || {});
+      setUser(null);
+      setIsAuthenticated(false);
+      setAuthError({
+        type: 'auth_required',
+        message: event?.detail?.message || 'Authentication required',
+      });
+      setIsLoadingAuth(false);
+    };
+
+    window.addEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
+    return () => {
+      window.removeEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
+    };
   }, []);
 
   const checkAppState = async () => {
+    console.info('[auth-bootstrap] checkAppState:start', {
+      hasToken: base44.auth.hasToken(),
+    });
     setIsLoadingAuth(true);
     setAuthError(null);
 
-    if (!base44.auth.hasToken()) {
-      setUser(null);
-      setIsAuthenticated(false);
-      setAuthError({ type: 'auth_required', message: 'Authentication required' });
-      setIsLoadingAuth(false);
-      return;
-    }
-
     try {
       const currentUser = await base44.auth.me();
+      console.info('[auth-bootstrap] checkAppState:authenticated', {
+        userId: currentUser?.id || null,
+      });
       setUser(currentUser);
       setIsAuthenticated(true);
     } catch (error) {
+      console.warn('[auth-bootstrap] checkAppState:unauthenticated', {
+        status: error?.status || null,
+        message: error?.message || 'Authentication required',
+      });
+      base44.auth.clearClientAuthState('bootstrap_unauthorized');
       setUser(null);
       setIsAuthenticated(false);
       setAuthError({
@@ -39,6 +60,7 @@ export const AuthProvider = ({ children }) => {
         message: error?.message || 'Authentication required',
       });
     } finally {
+      console.info('[auth-bootstrap] checkAppState:finish');
       setIsLoadingAuth(false);
     }
   };

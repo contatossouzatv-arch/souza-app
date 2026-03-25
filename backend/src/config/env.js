@@ -5,6 +5,13 @@ dotenv.config();
 const nodeEnv = process.env.NODE_ENV || "development";
 const isProd = nodeEnv === "production";
 const rawOrigin = process.env.ORIGIN || "*";
+const productionAllowedOrigins = ["https://souzatv.app", "https://www.souzatv.app"];
+const developmentAllowedOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+];
 
 function readEnv(name, fallback = "") {
   const value = process.env[name];
@@ -66,35 +73,28 @@ export const env = {
   adminNick: readEnv("ADMIN_NICK", "admin"),
   profileImageRequireReview: String(process.env.PROFILE_IMAGE_REQUIRE_REVIEW || "true") === "true",
   profileImageMaxSizeMb: Number(process.env.PROFILE_IMAGE_MAX_SIZE_MB || 5),
+  authAccessCookieName: readEnv("AUTH_ACCESS_COOKIE_NAME", "souza_access_token"),
+  authRefreshCookieName: readEnv("AUTH_REFRESH_COOKIE_NAME", "souza_refresh_token"),
+  authCookieDomain: readEnv("AUTH_COOKIE_DOMAIN", ""),
+  authCookiePath: readEnv("AUTH_COOKIE_PATH", "/"),
+  authCookieSameSite: readEnv("AUTH_COOKIE_SAMESITE", "lax").toLowerCase(),
+  authCookieSecure: readEnv("AUTH_COOKIE_SECURE", isProd ? "true" : "false") === "true",
+  authCookieHttpOnly: readEnv("AUTH_COOKIE_HTTPONLY", "true") !== "false",
 };
 
-const defaultAllowedOrigins = [
-  "https://souzatv.app",
-  "https://www.souzatv.app",
-];
-
 const normalizedOriginSet = new Set(
-  [...env.origins, ...defaultAllowedOrigins]
+  [...env.origins, ...(isProd ? productionAllowedOrigins : developmentAllowedOrigins)]
     .map((value) => String(value || "").trim())
     .filter(Boolean)
 );
 
 export function isAllowedOrigin(origin) {
   if (!origin) return true;
-  if (env.origin === "*") return true;
+  if (env.origin === "*" && !isProd) return true;
 
   const value = String(origin || "").trim();
   if (!value) return true;
   if (normalizedOriginSet.has(value)) return true;
-
-  try {
-    const parsed = new URL(value);
-    if (parsed.protocol !== "https:") return false;
-    if (parsed.hostname === "souzatv.app" || parsed.hostname === "www.souzatv.app") return true;
-    if (parsed.hostname.endsWith(".vercel.app")) return true;
-  } catch {
-    return false;
-  }
 
   return false;
 }
@@ -105,6 +105,10 @@ if (!env.databaseUrl) {
 
 assertProductionEnv(env.origin !== "*", "ORIGIN cannot be '*' in production");
 assertProductionEnv(env.origins.length > 0, "ORIGIN must list at least one allowed origin in production");
+assertProductionEnv(
+  env.origins.every((origin) => productionAllowedOrigins.includes(origin)),
+  "ORIGIN in production must contain only https://souzatv.app and https://www.souzatv.app"
+);
 assertProductionEnv(Boolean(env.jwtSecret), "JWT_SECRET is required in production");
 assertProductionEnv(isStrongSecret(env.jwtSecret), "JWT_SECRET must have at least 32 characters in production");
 assertProductionEnv(Boolean(env.jwtAccessSecret), "JWT_ACCESS_SECRET is required in production");
@@ -112,6 +116,16 @@ assertProductionEnv(isStrongSecret(env.jwtAccessSecret), "JWT_ACCESS_SECRET must
 assertProductionEnv(Boolean(env.jwtRefreshSecret), "JWT_REFRESH_SECRET is required in production");
 assertProductionEnv(isStrongSecret(env.jwtRefreshSecret), "JWT_REFRESH_SECRET must have at least 32 characters in production");
 assertProductionEnv(Boolean(String(env.appBaseUrl || "").trim()), "APP_BASE_URL is required in production");
+assertProductionEnv(
+  String(env.appBaseUrl || "").startsWith("https://"),
+  "APP_BASE_URL must use https in production"
+);
+assertProductionEnv(env.authCookieSecure, "AUTH_COOKIE_SECURE must be true in production");
+assertProductionEnv(env.authCookieHttpOnly, "AUTH_COOKIE_HTTPONLY must be true in production");
+assertProductionEnv(
+  ["lax", "strict", "none"].includes(env.authCookieSameSite),
+  "AUTH_COOKIE_SAMESITE must be lax, strict or none in production"
+);
 assertProductionEnv(
   env.mailMode !== "resend" || Boolean(env.resendApiKey),
   "RESEND_API_KEY is required when MAIL_MODE=resend in production"

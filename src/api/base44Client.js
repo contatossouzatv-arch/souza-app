@@ -1,6 +1,41 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:3011").replace(/\/$/, "");
+import { resolveApiBaseUrl } from "@/lib/apiBaseUrl";
+import { queryClientInstance } from "@/lib/query-client";
+
+const API_BASE_URL = resolveApiBaseUrl();
 const TOKEN_KEY = "souza_local_token";
 const REFRESH_TOKEN_KEY = "souza_local_refresh_token";
+const LOGIN_2FA_PENDING_KEY = "souza_login_2fa_pending_v1";
+const AUTH_REQUIRED_EVENT = "souza:auth-required";
+const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
+const AUTH_REQUEST_TIMEOUT_MS = 8000;
+
+function logAuthClient(message, details) {
+  console.info(`[auth-client] ${message}`, details || {});
+}
+
+function shouldLogRequest(path = "", status = null) {
+  const normalizedPath = String(path || "").trim();
+  if (normalizedPath === "/api/auth/me" || normalizedPath === "/api/auth/refresh") return true;
+  if (normalizedPath.startsWith("/api/auth/")) return Number(status) >= 500;
+  return Number(status) >= 500;
+}
+
+function logRequestResult(message, details) {
+  console.info(`[api-client] ${message}`, details || {});
+}
+
+function isAbortError(error) {
+  return error?.name === "AbortError";
+}
+
+function resolveTimeoutMs(path = "", timeoutMs) {
+  if (Number.isFinite(timeoutMs) && timeoutMs > 0) return timeoutMs;
+  const normalizedPath = String(path || "").trim();
+  if (normalizedPath === "/api/auth/me" || normalizedPath === "/api/auth/refresh") {
+    return AUTH_REQUEST_TIMEOUT_MS;
+  }
+  return DEFAULT_REQUEST_TIMEOUT_MS;
+}
 
 function isLocalHost(hostname = "") {
   const value = String(hostname || "").toLowerCase();
@@ -35,8 +70,49 @@ function setRefreshToken(token) {
   }
 }
 
+function clearClientAuthState(reason = "unknown") {
+  setToken(null);
+  setRefreshToken(null);
+  try {
+    window.sessionStorage.removeItem(LOGIN_2FA_PENDING_KEY);
+  } catch {
+    // ignore sessionStorage errors
+  }
+  try {
+    queryClientInstance.clear();
+  } catch {
+    // ignore cache clear errors
+  }
+  logAuthClient("cleared local auth state", { reason });
+}
+
 function buildUrl(path) {
   return `${API_BASE_URL}${path}`;
+}
+
+async function fetchWithTimeout(path, options = {}) {
+  const { __timeoutMs, ...fetchOptions } = options;
+  const timeoutMs = resolveTimeoutMs(path, __timeoutMs);
+  const controller = new AbortController();
+  const timerId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(buildUrl(path), {
+      ...fetchOptions,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      const timeoutError = new Error(`Request timeout after ${timeoutMs}ms`);
+      timeoutError.name = "TimeoutError";
+      timeoutError.code = "ETIMEDOUT";
+      timeoutError.status = 0;
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timerId);
+  }
 }
 
 function createRequestId(prefix = "req") {
@@ -119,22 +195,20 @@ let refreshPromise = null;
 
 async function tryRefreshSession() {
   const refreshToken = getRefreshToken();
-  if (!refreshToken) return false;
-
   if (refreshPromise) {
     return refreshPromise;
   }
 
   refreshPromise = (async () => {
     try {
-      const response = await fetch(buildUrl("/api/auth/refresh"), {
+      const response = await fetchWithTimeout("/api/auth/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken }),
+        credentials: "include",
+        body: JSON.stringify(refreshToken ? { refreshToken } : {}),
       });
       if (!response.ok) {
-        setToken(null);
-        setRefreshToken(null);
+        clearClientAuthState("refresh_failed");
         return false;
       }
       const data = await response.json();
@@ -142,6 +216,7 @@ async function tryRefreshSession() {
       setRefreshToken(data?.refreshToken || null);
       return Boolean(data?.token);
     } catch {
+      clearClientAuthState("refresh_failed");
       return false;
     } finally {
       refreshPromise = null;
@@ -151,57 +226,159 @@ async function tryRefreshSession() {
   return refreshPromise;
 }
 
+function isAuthPath(path = "") {
+  return String(path || "").startsWith("/api/auth/");
+}
+
+function shouldHandleUnauthorized(path, status) {
+  if (Number(status) !== 401 || !isAuthPath(path)) return false;
+  const normalizedPath = String(path || "").trim();
+  const publicAuthEndpoints = new Set([
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/google",
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
+    "/api/auth/2fa/diagnose",
+    "/api/auth/2fa/setup",
+    "/api/auth/2fa/enable",
+    "/api/auth/2fa/disable",
+  ]);
+  return !publicAuthEndpoints.has(normalizedPath);
+}
+
+function notifyUnauthorized(path, error) {
+  clearClientAuthState(`401:${path}`);
+  const detail = {
+    path,
+    status: Number(error?.status || 401),
+    message: String(error?.message || "Authentication required"),
+  };
+  logAuthClient("dispatching auth-required", detail);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT, { detail }));
+  }
+}
+
 async function request(path, options = {}) {
-  const headers = { ...(options.headers || {}) };
+  const startedAt = performance.now();
+  const { __skipAuthRefresh, __timeoutMs, ...fetchOptions } = options;
+  const headers = { ...(fetchOptions.headers || {}) };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  let response = await fetch(buildUrl(path), {
-    ...options,
-    headers,
-  });
+  let response;
+  try {
+    response = await fetchWithTimeout(path, {
+      ...fetchOptions,
+      headers,
+      credentials: "include",
+    });
+  } catch (error) {
+    const elapsedMs = Math.round(performance.now() - startedAt);
+    logRequestResult("network failure", {
+      path,
+      elapsedMs,
+      apiBaseUrl: API_BASE_URL,
+      hasToken: hasToken(),
+      isTimeout: error?.name === "TimeoutError",
+      message: error?.message || "Network error",
+    });
+    throw error;
+  }
 
   const skipRefresh =
-    Boolean(options.__skipAuthRefresh) || path === "/api/auth/refresh" || path === "/api/auth/login";
+    Boolean(__skipAuthRefresh) ||
+    path === "/api/auth/refresh" ||
+    path === "/api/auth/login" ||
+    path === "/api/auth/logout";
 
-  if (response.status === 401 && !skipRefresh && hasToken() && getRefreshToken()) {
+  if (response.status === 401 && !skipRefresh) {
     const refreshed = await tryRefreshSession();
     if (refreshed) {
-      const retryHeaders = { ...(options.headers || {}) };
+      const retryHeaders = { ...(fetchOptions.headers || {}) };
       const retryToken = getToken();
       if (retryToken) retryHeaders.Authorization = `Bearer ${retryToken}`;
-      response = await fetch(buildUrl(path), {
-        ...options,
+      response = await fetchWithTimeout(path, {
+        ...fetchOptions,
         headers: retryHeaders,
+        credentials: "include",
+        __timeoutMs,
       });
     }
   }
-
-  return parseResponse(response);
+  try {
+    const data = await parseResponse(response);
+    if (shouldLogRequest(path, response.status)) {
+      logRequestResult("response", {
+        path,
+        status: response.status,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        apiBaseUrl: API_BASE_URL,
+        hasToken: hasToken(),
+      });
+    }
+    return data;
+  } catch (error) {
+    if (shouldLogRequest(path, error?.status)) {
+      logRequestResult("response error", {
+        path,
+        status: Number(error?.status || 0),
+        elapsedMs: Math.round(performance.now() - startedAt),
+        apiBaseUrl: API_BASE_URL,
+        hasToken: hasToken(),
+        message: error?.message || "Request failed",
+      });
+    }
+    if (shouldHandleUnauthorized(path, error?.status)) {
+      notifyUnauthorized(path, error);
+    }
+    throw error;
+  }
 }
 
 async function requestBlob(path, options = {}) {
-  const headers = { ...(options.headers || {}) };
+  const startedAt = performance.now();
+  const { __skipAuthRefresh, __timeoutMs, ...fetchOptions } = options;
+  const headers = { ...(fetchOptions.headers || {}) };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  let response = await fetch(buildUrl(path), {
-    ...options,
-    headers,
-  });
+  let response;
+  try {
+    response = await fetchWithTimeout(path, {
+      ...fetchOptions,
+      headers,
+      credentials: "include",
+    });
+  } catch (error) {
+    logRequestResult("blob network failure", {
+      path,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      apiBaseUrl: API_BASE_URL,
+      isTimeout: error?.name === "TimeoutError",
+      message: error?.message || "Network error",
+    });
+    throw error;
+  }
 
   const skipRefresh =
-    Boolean(options.__skipAuthRefresh) || path === "/api/auth/refresh" || path === "/api/auth/login";
+    Boolean(__skipAuthRefresh) ||
+    path === "/api/auth/refresh" ||
+    path === "/api/auth/login" ||
+    path === "/api/auth/logout";
 
-  if (response.status === 401 && !skipRefresh && hasToken() && getRefreshToken()) {
+  if (response.status === 401 && !skipRefresh) {
     const refreshed = await tryRefreshSession();
     if (refreshed) {
-      const retryHeaders = { ...(options.headers || {}) };
+      const retryHeaders = { ...(fetchOptions.headers || {}) };
       const retryToken = getToken();
       if (retryToken) retryHeaders.Authorization = `Bearer ${retryToken}`;
-      response = await fetch(buildUrl(path), {
-        ...options,
+      response = await fetchWithTimeout(path, {
+        ...fetchOptions,
         headers: retryHeaders,
+        credentials: "include",
+        __timeoutMs,
       });
     }
   }
@@ -216,7 +393,28 @@ async function requestBlob(path, options = {}) {
     }
     const error = new Error(message);
     error.status = response.status;
+    if (shouldLogRequest(path, error?.status)) {
+      logRequestResult("blob response error", {
+        path,
+        status: Number(error?.status || 0),
+        elapsedMs: Math.round(performance.now() - startedAt),
+        apiBaseUrl: API_BASE_URL,
+        message: error?.message || "Request failed",
+      });
+    }
+    if (shouldHandleUnauthorized(path, error?.status)) {
+      notifyUnauthorized(path, error);
+    }
     throw error;
+  }
+
+  if (shouldLogRequest(path, response.status)) {
+    logRequestResult("blob response", {
+      path,
+      status: response.status,
+      elapsedMs: Math.round(performance.now() - startedAt),
+      apiBaseUrl: API_BASE_URL,
+    });
   }
 
   return response.blob();
@@ -300,6 +498,8 @@ async function deleteFile({ fileUrl, path } = {}) {
 export const base44 = {
   auth: {
     hasToken,
+
+    clearClientAuthState,
 
     async me() {
       return request("/api/auth/me");
@@ -430,12 +630,16 @@ export const base44 = {
     },
 
     async logoutAll() {
-      return request("/api/auth/logout-all", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-        __skipAuthRefresh: true,
-      });
+      try {
+        return await request("/api/auth/logout-all", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+          __skipAuthRefresh: true,
+        });
+      } finally {
+        clearClientAuthState("logout_all");
+      }
     },
 
     async forgotPassword(email) {
@@ -502,11 +706,20 @@ export const base44 = {
         fetch(buildUrl("/api/auth/logout"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          keepalive: true,
           body: JSON.stringify({ refreshToken }),
         }).catch(() => {});
+      } else {
+        fetch(buildUrl("/api/auth/logout"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          keepalive: true,
+          body: JSON.stringify({}),
+        }).catch(() => {});
       }
-      setToken(null);
-      setRefreshToken(null);
+      clearClientAuthState("logout");
       if (redirectUrl) {
         window.location.href = redirectUrl;
       } else {

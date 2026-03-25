@@ -27,6 +27,7 @@ function buildCors() {
   return cors({
     origin(origin, callback) {
       if (isAllowedOrigin(origin)) return callback(null, true);
+      console.warn("[cors] blocked origin", { origin: origin || null });
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
@@ -39,8 +40,6 @@ function buildRateLimiter({ windowMs, limit, prefix = "ratelimit:" } = {}) {
   const isProd = env.nodeEnv === "production";
 
   if (!isProd) {
-    // Local development has heavy polling in dashboard/admin.
-    // Disable rate limiting locally to avoid blocking core flows.
     return (_req, _res, next) => next();
   }
 
@@ -73,17 +72,60 @@ function buildRateLimiter({ windowMs, limit, prefix = "ratelimit:" } = {}) {
 export function createApp(io) {
   const app = express();
   app.locals.io = io;
+  app.locals.startedAt = new Date().toISOString();
 
   app.set("trust proxy", 1);
   app.use(
     helmet({
-      // Permite carregar imagens/arquivos estáticos do backend em outra origem
-      // (ex.: front em :5173 consumindo uploads em :3011).
       crossOriginResourcePolicy: { policy: "cross-origin" },
+      frameguard: { action: "deny" },
+      hsts:
+        env.nodeEnv === "production"
+          ? {
+              maxAge: 31536000,
+              includeSubDomains: true,
+              preload: true,
+            }
+          : false,
+      referrerPolicy: { policy: "strict-origin-when-cross-origin" },
     })
   );
   app.use(buildCors());
   app.options(/.*/, buildCors());
+  app.use((req, res, next) => {
+    req._startedAtMs = Date.now();
+
+    if (
+      req.path === "/health" ||
+      req.path === "/api/auth/me" ||
+      req.path === "/api/auth/refresh" ||
+      req.path === "/api/auth/login"
+    ) {
+      console.info("[http] request:start", {
+        method: req.method,
+        path: req.originalUrl,
+        origin: req.headers.origin || null,
+        host: req.headers.host || null,
+        hasCookieHeader: Boolean(req.headers.cookie),
+        hasAuthorizationHeader: Boolean(req.headers.authorization),
+        userAgent: String(req.headers["user-agent"] || "").slice(0, 160),
+      });
+
+      res.on("finish", () => {
+        console.info("[http] request:finish", {
+          method: req.method,
+          path: req.originalUrl,
+          status: res.statusCode,
+          durationMs: Date.now() - req._startedAtMs,
+          origin: req.headers.origin || null,
+          hasCookieHeader: Boolean(req.headers.cookie),
+          hasAuthorizationHeader: Boolean(req.headers.authorization),
+        });
+      });
+    }
+
+    next();
+  });
   app.use(express.json({ limit: "3mb" }));
   app.use(express.urlencoded({ extended: true }));
 
@@ -113,10 +155,13 @@ export function createApp(io) {
   });
 
   app.get("/health", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     res.json({
       ok: true,
       service: "app-souza-cass-backend",
       timestamp: new Date().toISOString(),
+      startedAt: app.locals.startedAt,
+      uptimeSec: Math.round(process.uptime()),
       redis: Boolean(env.redisUrl),
     });
   });
@@ -155,12 +200,21 @@ export function createApp(io) {
     res.status(204).send();
   });
 
-  app.use((error, _req, res, _next) => {
+  app.use((error, req, res, _next) => {
     if (error?.message === "Not allowed by CORS") {
       return res.status(403).json({ error: error.message });
     }
 
-    console.error(error);
+    console.error("[http] request:error", {
+      method: req.method,
+      path: req.originalUrl,
+      status: Number(error?.status || 500),
+      durationMs: Date.now() - Number(req._startedAtMs || Date.now()),
+      origin: req.headers.origin || null,
+      hasCookieHeader: Boolean(req.headers.cookie),
+      hasAuthorizationHeader: Boolean(req.headers.authorization),
+      message: error?.message || "Internal server error",
+    });
     const status = Number(error?.status || 500);
     return res.status(status).json({ error: error?.message || "Internal server error" });
   });

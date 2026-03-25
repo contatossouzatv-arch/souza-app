@@ -113,14 +113,21 @@ const AuthenticatedApp = () => {
 
   useEffect(() => {
     let cancelled = false;
+    console.info("[app-boot] warmup:start");
     setIsBootReady(false);
     setHasBootMinDurationElapsed(false);
     setBootProgress(8);
     warmAppShell().finally(() => {
-      if (!cancelled) setIsBootReady(true);
+      if (!cancelled) {
+        console.info("[app-boot] warmup:ready");
+        setIsBootReady(true);
+      }
     });
     const timerId = window.setTimeout(() => {
-      if (!cancelled) setHasBootMinDurationElapsed(true);
+      if (!cancelled) {
+        console.info("[app-boot] min-duration:elapsed");
+        setHasBootMinDurationElapsed(true);
+      }
     }, 120);
     return () => {
       cancelled = true;
@@ -136,6 +143,27 @@ const AuthenticatedApp = () => {
     if (!isLoadingPublicSettings && !isLoadingAuth && isBootReady && hasBootMinDurationElapsed) target = 100;
     return target;
   }, [hasBootMinDurationElapsed, isBootReady, isLoadingAuth, isLoadingPublicSettings]);
+
+  useEffect(() => {
+    console.info("[app-boot] state", {
+      isLoadingAuth,
+      isLoadingPublicSettings,
+      isBootReady,
+      hasBootMinDurationElapsed,
+      isAuthenticated,
+      authErrorType: authError?.type || null,
+      path: `${location.pathname}${location.search}`,
+    });
+  }, [
+    authError?.type,
+    hasBootMinDurationElapsed,
+    isAuthenticated,
+    isBootReady,
+    isLoadingAuth,
+    isLoadingPublicSettings,
+    location.pathname,
+    location.search,
+  ]);
 
   const bootStatus = useMemo(() => {
     if (isLoadingPublicSettings) return "Sincronizando configurações públicas";

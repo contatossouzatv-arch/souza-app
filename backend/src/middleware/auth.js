@@ -1,15 +1,40 @@
 import { parseToken } from "../auth.js";
+import { env } from "../config/env.js";
+
+function parseCookies(rawCookie = "") {
+  const input = String(rawCookie || "").trim();
+  if (!input) return {};
+
+  return input.split(";").reduce((acc, chunk) => {
+    const [rawName, ...rawValue] = chunk.split("=");
+    const name = String(rawName || "").trim();
+    if (!name) return acc;
+    acc[name] = decodeURIComponent(rawValue.join("=").trim());
+    return acc;
+  }, {});
+}
 
 export function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization || "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const cookies = parseCookies(req.headers.cookie || "");
+  const cookieToken = cookies[env.authAccessCookieName] || null;
+  const token = bearerToken || cookieToken;
   const payload = parseToken(token);
 
   if (!payload?.sub) {
+    console.warn("[auth-backend] requireAuth denied", {
+      path: req.originalUrl,
+      method: req.method,
+      hasAuthorizationHeader: Boolean(bearerToken),
+      hasCookieHeader: Boolean(req.headers.cookie),
+      hasAccessCookie: Boolean(cookieToken),
+    });
     return res.status(401).json({ error: "Authentication required" });
   }
 
   req.auth = payload;
+  req.authSource = bearerToken ? "bearer" : "cookie";
   next();
 }
 

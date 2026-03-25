@@ -26,6 +26,42 @@ function recoverFromDynamicImportFailure() {
 }
 
 if (typeof window !== 'undefined') {
+  window.addEventListener(
+    'error',
+    (event) => {
+      const target = event?.target;
+      if (!(target instanceof HTMLElement)) return;
+
+      const candidateUrl =
+        target instanceof HTMLMediaElement
+          ? target.currentSrc || target.src
+          : target instanceof HTMLSourceElement
+          ? target.src
+          : target instanceof HTMLScriptElement
+          ? target.src
+          : target instanceof HTMLLinkElement
+          ? target.href
+          : target instanceof HTMLImageElement
+          ? target.currentSrc || target.src
+          : '';
+
+      const url = String(candidateUrl || '').trim();
+      if (!url) return;
+
+      console.error('[asset-monitor] resource load error', {
+        tagName: target.tagName,
+        url,
+        currentTime:
+          target instanceof HTMLMediaElement ? Number(target.currentTime || 0) : null,
+        readyState:
+          target instanceof HTMLMediaElement ? Number(target.readyState || 0) : null,
+        networkState:
+          target instanceof HTMLMediaElement ? Number(target.networkState || 0) : null,
+      });
+    },
+    true
+  );
+
   window.addEventListener('vite:preloadError', (event) => {
     event.preventDefault();
     recoverFromDynamicImportFailure();

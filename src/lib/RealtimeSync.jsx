@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import { useQueryClient } from "@tanstack/react-query";
+import { resolveApiBaseUrl } from "@/lib/apiBaseUrl";
 import { useAuth } from "@/lib/AuthContext";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:3011").replace(/\/$/, "");
+const API_BASE_URL = resolveApiBaseUrl();
 
 function addKeys(target, keys = []) {
   keys.forEach((key) => {
@@ -89,8 +90,9 @@ export default function RealtimeSync() {
 
         socket = io(API_BASE_URL, {
           transports: ["websocket", "polling"],
+          withCredentials: true,
           reconnection: true,
-          reconnectionAttempts: Infinity,
+          reconnectionAttempts: 20,
           reconnectionDelay: 500,
           reconnectionDelayMax: 3000,
           timeout: 5000,
