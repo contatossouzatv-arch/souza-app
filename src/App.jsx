@@ -10,7 +10,7 @@ import RealtimeSync from '@/lib/RealtimeSync'
 import MetricGainNotifier from '@/components/MetricGainNotifier'
 import { DAILY_CHEST_ROUTE_PATH, FEATURE_FLAGS, isMainGamePage, MAIN_GAME_ROUTE_PATH } from '@/lib/featureFlags';
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
@@ -106,6 +106,7 @@ const needsOnboarding = (user) =>
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, user } = useAuth();
+  const location = useLocation();
   const [isBootReady, setIsBootReady] = useState(false);
   const [hasBootMinDurationElapsed, setHasBootMinDurationElapsed] = useState(false);
   const [bootProgress, setBootProgress] = useState(8);
@@ -166,6 +167,10 @@ const AuthenticatedApp = () => {
 
   return (
     <Suspense fallback={<RouteLoader />}>
+      {/*
+        Force page remounts on URL changes, including Profile query-string changes.
+        This prevents stale heavy state from the Profile page from surviving route swaps.
+      */}
       <Routes>
       <Route path="/termos-de-uso" element={<TermsOfUse />} />
       <Route path="/politica-de-privacidade" element={<PrivacyPolicy />} />
@@ -212,7 +217,7 @@ const AuthenticatedApp = () => {
               <Navigate to="/onboarding" replace />
             ) : (
               <LayoutWrapper currentPageName={mainPageKey}>
-                <MainPage />
+                <MainPage key={`${location.pathname}${location.search}`} />
               </LayoutWrapper>
             )
           ) : (
@@ -265,10 +270,10 @@ const AuthenticatedApp = () => {
                 <Navigate to="/onboarding" replace />
               ) : (
                 FULLSCREEN_PAGES.has(path) ? (
-                  <Page />
+                  <Page key={`${location.pathname}${location.search}`} />
                 ) : (
                   <LayoutWrapper currentPageName={path}>
-                    <Page />
+                    <Page key={`${location.pathname}${location.search}`} />
                   </LayoutWrapper>
                 )
               )

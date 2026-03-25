@@ -25,9 +25,9 @@ const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
-const DialogContent = React.forwardRef(({ className, children, hideClose = false, overlayClassName, ...props }, ref) => (
+const DialogContent = React.forwardRef(({ className, children, hideClose = false, hideOverlay = false, overlayClassName, ...props }, ref) => (
   <DialogPortal>
-    <DialogOverlay className={overlayClassName} />
+    {hideOverlay ? null : <DialogOverlay className={overlayClassName} />}
     <DialogPrimitive.Content
       ref={ref}
       aria-describedby={props["aria-describedby"] ?? undefined}

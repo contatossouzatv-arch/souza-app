@@ -4834,6 +4834,7 @@ export default function Profile() {
 
       <Dialog modal={false} open={Boolean(activeBadgeCelebration)} onOpenChange={(open) => !open && setActiveBadgeCelebration(null)}>
         <DialogContent
+          hideOverlay
           hideClose
           className="w-screen max-w-none border-0 bg-transparent p-0 text-white shadow-none outline-none ring-0"
         >
