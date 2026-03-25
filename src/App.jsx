@@ -101,11 +101,33 @@ const AppBootLoader = ({ progress, status }) => (
   </div>
 );
 
+const AppUnavailableState = ({ message, onRetry }) => (
+  <div className="fixed inset-0 z-[200] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.2),transparent_34%),linear-gradient(180deg,#020617_0%,#071120_42%,#020617_100%)] text-white">
+    <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(16,185,129,0.14),transparent_24%),radial-gradient(circle_at_80%_22%,rgba(56,189,248,0.16),transparent_22%)]" />
+    <div className="relative flex h-full items-center justify-center px-6">
+      <div className="w-full max-w-sm rounded-[2rem] border border-white/10 bg-slate-950/55 px-6 py-7 shadow-[0_24px_80px_rgba(2,6,23,0.42)] backdrop-blur-xl">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-200/90">Souza Cass</p>
+        <h1 className="mt-3 text-2xl font-black text-white">Servidor indisponivel</h1>
+        <p className="mt-2 text-sm text-slate-200/88">
+          {message || "Nao foi possivel carregar o app agora. Tente novamente em instantes."}
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-xl bg-cyan-400 font-semibold text-slate-950 transition hover:bg-cyan-300"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 const needsOnboarding = (user) =>
   !user?.onboarding_completed || !user?.terms_accepted || !user?.privacy_accepted;
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, user } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, user, checkAppState } = useAuth();
   const location = useLocation();
   const [isBootReady, setIsBootReady] = useState(false);
   const [hasBootMinDurationElapsed, setHasBootMinDurationElapsed] = useState(false);
@@ -187,6 +209,10 @@ const AuthenticatedApp = () => {
 
   if (isLoadingPublicSettings || isLoadingAuth || !isBootReady || !hasBootMinDurationElapsed) {
     return <AppBootLoader progress={bootProgress} status={bootStatus} />;
+  }
+
+  if (authError?.type === 'auth_unreachable') {
+    return <AppUnavailableState message={authError?.message} onRetry={checkAppState} />;
   }
 
   if (authError?.type === 'user_not_registered') {

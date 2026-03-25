@@ -228,7 +228,9 @@ async function tryRefreshSession() {
         body: JSON.stringify(refreshToken ? { refreshToken } : {}),
       });
       if (!response.ok) {
-        clearClientAuthState("refresh_failed");
+        if (response.status === 401) {
+          clearClientAuthState("refresh_failed");
+        }
         return false;
       }
       const data = await response.json();
@@ -236,7 +238,6 @@ async function tryRefreshSession() {
       setRefreshToken(data?.refreshToken || null);
       return Boolean(data?.token);
     } catch {
-      clearClientAuthState("refresh_failed");
       return false;
     } finally {
       refreshPromise = null;
@@ -265,6 +266,10 @@ function shouldHandleUnauthorized(path, status) {
     "/api/auth/2fa/disable",
   ]);
   return !publicAuthEndpoints.has(normalizedPath);
+}
+
+function isRecoverableAuthError(error) {
+  return error?.name === "TimeoutError" || !Number.isFinite(Number(error?.status || NaN));
 }
 
 function notifyUnauthorized(path, error) {
@@ -521,6 +526,8 @@ export const base44 = {
     hasToken,
 
     clearClientAuthState,
+
+    isRecoverableAuthError,
 
     async me() {
       if (meCache.value && Date.now() < meCache.expiresAt) {

@@ -48,17 +48,26 @@ export const AuthProvider = ({ children }) => {
       setUser(currentUser);
       setIsAuthenticated(true);
     } catch (error) {
-      console.warn('[auth-bootstrap] checkAppState:unauthenticated', {
+      const isRecoverable = base44.auth.isRecoverableAuthError(error);
+      console.warn('[auth-bootstrap] checkAppState:failed', {
         status: error?.status || null,
         message: error?.message || 'Authentication required',
+        isRecoverable,
       });
-      base44.auth.clearClientAuthState('bootstrap_unauthorized');
-      setUser(null);
-      setIsAuthenticated(false);
-      setAuthError({
-        type: 'auth_required',
-        message: error?.message || 'Authentication required',
-      });
+      if (isRecoverable) {
+        setAuthError({
+          type: 'auth_unreachable',
+          message: 'Nao foi possivel validar sua sessao agora. Tente novamente em instantes.',
+        });
+      } else {
+        base44.auth.clearClientAuthState('bootstrap_unauthorized');
+        setUser(null);
+        setIsAuthenticated(false);
+        setAuthError({
+          type: 'auth_required',
+          message: error?.message || 'Authentication required',
+        });
+      }
     } finally {
       console.info('[auth-bootstrap] checkAppState:finish');
       setIsLoadingAuth(false);
