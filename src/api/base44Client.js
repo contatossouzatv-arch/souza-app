@@ -71,6 +71,7 @@ function setRefreshToken(token) {
 }
 
 function clearClientAuthState(reason = "unknown") {
+  clearMeCache();
   setToken(null);
   setRefreshToken(null);
   try {
@@ -192,6 +193,25 @@ async function parseResponse(response) {
 }
 
 let refreshPromise = null;
+let mePromise = null;
+let meCache = {
+  value: null,
+  expiresAt: 0,
+};
+
+function cacheAuthenticatedUser(user) {
+  meCache = {
+    value: user || null,
+    expiresAt: Date.now() + 15_000,
+  };
+}
+
+function clearMeCache() {
+  meCache = {
+    value: null,
+    expiresAt: 0,
+  };
+}
 
 async function tryRefreshSession() {
   const refreshToken = getRefreshToken();
@@ -248,6 +268,7 @@ function shouldHandleUnauthorized(path, status) {
 }
 
 function notifyUnauthorized(path, error) {
+  clearMeCache();
   clearClientAuthState(`401:${path}`);
   const detail = {
     path,
@@ -502,7 +523,23 @@ export const base44 = {
     clearClientAuthState,
 
     async me() {
-      return request("/api/auth/me");
+      if (meCache.value && Date.now() < meCache.expiresAt) {
+        return meCache.value;
+      }
+      if (mePromise) {
+        return mePromise;
+      }
+
+      mePromise = request("/api/auth/me")
+        .then((user) => {
+          cacheAuthenticatedUser(user);
+          return user;
+        })
+        .finally(() => {
+          mePromise = null;
+        });
+
+      return mePromise;
     },
 
     async login({ email, password, otp }) {
@@ -513,6 +550,7 @@ export const base44 = {
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
+      clearMeCache();
       return data;
     },
 
@@ -524,6 +562,7 @@ export const base44 = {
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
+      clearMeCache();
       return data;
     },
 
@@ -535,6 +574,7 @@ export const base44 = {
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
+      clearMeCache();
       return data;
     },
 
@@ -626,6 +666,7 @@ export const base44 = {
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
+      clearMeCache();
       return data;
     },
 
@@ -638,6 +679,7 @@ export const base44 = {
           __skipAuthRefresh: true,
         });
       } finally {
+        clearMeCache();
         clearClientAuthState("logout_all");
       }
     },
@@ -720,6 +762,7 @@ export const base44 = {
         }).catch(() => {});
       }
       clearClientAuthState("logout");
+      clearMeCache();
       if (redirectUrl) {
         window.location.href = redirectUrl;
       } else {
@@ -739,6 +782,7 @@ export const base44 = {
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
+      clearMeCache();
       return data;
     },
   },
