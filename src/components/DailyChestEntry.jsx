@@ -17,7 +17,8 @@ export default function DailyChestEntry({ onPress }) {
     queryKey: ["daily-chest-entry-state"],
     queryFn: () => base44.dailyChest.getState(),
     staleTime: 15_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   React.useEffect(() => {

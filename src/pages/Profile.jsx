@@ -129,6 +129,7 @@ const BADGE_ICON_MAP = {
 };
 const BADGE_CELEBRATION_STORAGE_PREFIX = "profile_badge_celebration_seen_v1_";
 const PROFILE_GESTURE_DRAG_ENABLED = true;
+const PROFILE_AUTOPLAY_MEDIA_ENABLED = false;
 
 function getSpecialBadgeVisual(achievement) {
   const normalizedLabel = String(achievement?.label || "").toLowerCase();
@@ -406,6 +407,7 @@ const SmartVideo = React.memo(function SmartVideo({
   }, []);
 
   React.useEffect(() => {
+    if (!PROFILE_AUTOPLAY_MEDIA_ENABLED) return;
     const node = videoRef.current;
     if (!node || typeof IntersectionObserver === "undefined") return undefined;
     const observer = new IntersectionObserver(
@@ -424,7 +426,7 @@ const SmartVideo = React.memo(function SmartVideo({
   React.useEffect(() => {
     const node = videoRef.current;
     if (!node) return;
-    const shouldPlay = active && isVisible && isPageVisible;
+    const shouldPlay = PROFILE_AUTOPLAY_MEDIA_ENABLED && active && isVisible && isPageVisible;
     if (shouldPlay) {
       const playPromise = node.play();
       if (playPromise && typeof playPromise.catch === "function") {
@@ -442,7 +444,7 @@ const SmartVideo = React.memo(function SmartVideo({
       muted={muted}
       loop={loop}
       playsInline={playsInline}
-      preload={preload}
+      preload={PROFILE_AUTOPLAY_MEDIA_ENABLED ? preload : "metadata"}
       aria-hidden={ariaHidden}
       className={className}
     />
@@ -1710,6 +1712,14 @@ export default function Profile() {
     queryFn: () => base44.social.state(selectedPublicProfile.id),
     enabled: !!user && !!selectedPublicProfile?.id && isSelectedRealProfile,
     staleTime: 15000,
+  });
+
+  const { data: selectedPublicProfileSummary } = useQuery({
+    queryKey: ["public-profile-summary", selectedPublicProfile?.id],
+    queryFn: () => base44.gamification.publicProfileSummary(selectedPublicProfile.id),
+    enabled: !!user && !!selectedPublicProfile?.id && isSelectedRealProfile,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
   });
 
   const randomizedOtherProfiles = useMemo(() => {
@@ -3540,12 +3550,19 @@ export default function Profile() {
       : null;
     const publicMetrics = selectedPublicProfile
       ? {
-          totalTickets: activeCycle ? (selectedPublicProfile.tickets ?? selectedPublicProfile.points ?? 0) : 0,
-          points: selectedPublicProfile.points,
-          xpTotal: Number(selectedPublicProfile.xpTotal ?? selectedPublicProfile.xp_total ?? 0),
-          position: activeCycle ? selectedPublicProfile.position : 0,
-          totalWins: selectedPublicProfile.totalWins,
-          totalApproved: selectedPublicProfile.totalApproved,
+          totalTickets: Number(selectedPublicProfileSummary?.metrics?.totalTickets ?? selectedPublicProfile.tickets ?? 0),
+          points: Number(
+            selectedPublicProfileSummary?.currentCompetitionEntry?.weekly_points ??
+            selectedPublicProfileSummary?.metrics?.weeklyPoints ??
+            selectedPublicProfile.points ??
+            0
+          ),
+          xpTotal: Number(selectedPublicProfileSummary?.metrics?.xpTotal ?? selectedPublicProfile.xpTotal ?? selectedPublicProfile.xp_total ?? 0),
+          position: activeCycle
+            ? Number(selectedPublicProfileSummary?.currentCompetitionEntry?.position ?? selectedPublicProfile.position ?? 0)
+            : 0,
+          totalWins: Number(selectedPublicProfileSummary?.metrics?.totalWins ?? selectedPublicProfile.totalWins ?? 0),
+          totalApproved: Number(selectedPublicProfileSummary?.metrics?.totalApproved ?? selectedPublicProfile.totalApproved ?? 0),
           totalParticipations: selectedPublicProfile.participations,
           liveParticipations: selectedPublicProfile.liveParticipations || 0,
           totalFollowers: Number(publicState?.followers ?? selectedPublicProfile.followers ?? 0),
@@ -3572,6 +3589,7 @@ export default function Profile() {
     const publicSuperFanProgress = publicProgressBadges[0]?.progress ?? 0;
     const publicLevelProgress = getLevelProgress(publicMetrics?.xpTotal || 0);
     const publicCompetitionEntry =
+      selectedPublicProfileSummary?.currentCompetitionEntry ||
       (selectedPublicProfile?.id && competitionEntryByUserId[selectedPublicProfile.id]) ||
       {
         points: publicMetrics?.points || 0,

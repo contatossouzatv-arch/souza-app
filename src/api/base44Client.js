@@ -1138,6 +1138,10 @@ export const base44 = {
       return request("/api/profile/metrics");
     },
 
+    async publicProfileSummary(userId) {
+      return request(`/api/profile/public/${encodeURIComponent(userId)}/summary`);
+    },
+
     async prizeGallery({ userId = "", limit = 3, offset = 0 } = {}) {
       const params = new URLSearchParams();
       params.set("limit", String(limit));

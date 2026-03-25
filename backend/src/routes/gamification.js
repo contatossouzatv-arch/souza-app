@@ -2373,6 +2373,29 @@ router.get("/profile/metrics", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/profile/public/:userId/summary", requireAuth, async (req, res) => {
+  try {
+    const targetUserId = String(req.params.userId || "").trim();
+    if (!targetUserId) {
+      return res.status(400).json({ error: "Usuario invalido." });
+    }
+
+    const payload = await buildLightweightProfileMetrics(targetUserId);
+    return res.json({
+      metrics: payload.metrics || {},
+      currentCompetitionEntry: payload.currentCompetitionEntry || null,
+    });
+  } catch (error) {
+    console.error("Failed to load public profile summary", {
+      targetUserId: req.params?.userId || "",
+      viewerUserId: req.auth?.sub || "",
+      message: error?.message || String(error),
+      stack: error?.stack || "",
+    });
+    return res.status(500).json({ error: "Nao foi possivel carregar o resumo publico agora." });
+  }
+});
+
 router.get("/profile/history", requireAuth, async (req, res) => {
   const userId = req.auth.sub;
   const [ledger, balances, prizes] = await Promise.all([
