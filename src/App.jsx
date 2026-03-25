@@ -39,11 +39,44 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
   : <>{children}</>;
 
-const RouteLoader = () => (
-  <div className="fixed inset-0 flex items-center justify-center">
-    <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
-  </div>
-);
+const RouteLoader = () => {
+  const [progress, setProgress] = useState(14);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 92) return prev;
+        const step = Math.max(1, Math.ceil((92 - prev) * 0.22));
+        return Math.min(92, prev + step);
+      });
+    }, 90);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-[160] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_34%),linear-gradient(180deg,#020617_0%,#071120_42%,#020617_100%)] text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(16,185,129,0.14),transparent_24%),radial-gradient(circle_at_80%_22%,rgba(56,189,248,0.16),transparent_22%)]" />
+      <div className="relative flex h-full items-center justify-center px-6">
+        <div className="w-full max-w-sm rounded-[2rem] border border-white/10 bg-slate-950/55 px-6 py-7 shadow-[0_24px_80px_rgba(2,6,23,0.42)] backdrop-blur-xl">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-200/90">Souza Cass</p>
+          <h1 className="mt-3 text-2xl font-black text-white">Abrindo a pagina</h1>
+          <p className="mt-2 text-sm text-slate-200/88">Carregando a tela selecionada e preparando os componentes.</p>
+          <div className="mt-6 h-3 overflow-hidden rounded-full bg-slate-800/80">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-300 to-sky-300 transition-[width] duration-200 ease-out"
+              style={{ width: `${Math.max(8, Math.min(100, progress))}%` }}
+            />
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-300">
+            <span>Sincronizando rota e conteudo</span>
+            <span className="font-bold text-cyan-200">{Math.round(progress)}%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const AppBootLoader = ({ progress, status }) => (
   <div className="fixed inset-0 z-[200] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.2),transparent_34%),linear-gradient(180deg,#020617_0%,#071120_42%,#020617_100%)] text-white">
