@@ -1633,11 +1633,23 @@ export default function Profile() {
       refetchOnWindowFocus: false,
     })),
   });
+  const engagedProfileSocialQueries = useQueries({
+    queries: engagedProfiles.slice(0, 8).map((profile) => ({
+      queryKey: ["social-target-state", user?.id, profile.id, "engaged-card"],
+      queryFn: () => base44.social.state(profile.id),
+      enabled: !!user && !!profile?.id && String(profile.id || "") !== String(user?.id || ""),
+      staleTime: 15000,
+      refetchOnWindowFocus: false,
+    })),
+  });
   const engagedProfilesWithSummary = useMemo(() => {
     const summaryMap = new Map();
+    const socialMap = new Map();
     engagedProfiles.slice(0, 8).forEach((profile, index) => {
       const payload = engagedProfileSummaryQueries[index]?.data || null;
       if (payload) summaryMap.set(profile.id, payload);
+      const socialPayload = engagedProfileSocialQueries[index]?.data || null;
+      if (socialPayload) socialMap.set(profile.id, socialPayload);
     });
 
     return engagedProfiles
@@ -1645,14 +1657,15 @@ export default function Profile() {
         const summary = summaryMap.get(profile.id) || null;
         const summaryMetrics = summary?.metrics || {};
         const summaryEntry = summary?.currentCompetitionEntry || {};
+        const socialState = socialMap.get(profile.id) || null;
         const xpTotal = Math.max(0, Number(summaryMetrics.xpTotal ?? summaryMetrics.xp_total ?? profile.xpTotal ?? 0));
         const level = getLevelProgress(xpTotal).level;
         const points = Math.max(0, Number(summaryEntry.weekly_points ?? profile.points ?? 0));
         const weeklyPosition = Math.max(0, Number(summaryEntry.position ?? profile.weeklyPosition ?? 0));
         const totalWins = Math.max(0, Number(summaryMetrics.totalWins ?? profile.totalWins ?? 0));
         const participations = Math.max(0, Number(summaryMetrics.totalParticipations ?? profile.participations ?? 0));
-        const followers = Math.max(0, Number(summaryMetrics.totalFollowers ?? profile.followers ?? 0));
-        const likes = Math.max(0, Number(summaryMetrics.totalLikes ?? profile.likes ?? 0));
+        const followers = Math.max(0, Number(socialState?.followers ?? summaryMetrics.totalFollowers ?? profile.followers ?? 0));
+        const likes = Math.max(0, Number(socialState?.likes ?? summaryMetrics.totalLikes ?? profile.likes ?? 0));
         const engagementPoints = Math.max(0, Number(summaryMetrics.points ?? profile.engagementPoints ?? 0));
         const participationStrength =
           participations * 1000000 +
@@ -1673,6 +1686,8 @@ export default function Profile() {
           participations,
           followers,
           likes,
+          isFollowing: Boolean(socialState?.isFollowing ?? profile.isFollowing),
+          isLiked: Boolean(socialState?.isLiked ?? profile.isLiked),
           engagementPoints,
           participationStrength,
         };
@@ -1697,7 +1712,7 @@ export default function Profile() {
         ...profile,
         position: index + 1,
       }));
-  }, [engagedProfileSummaryQueries, engagedProfiles]);
+  }, [engagedProfileSocialQueries, engagedProfileSummaryQueries, engagedProfiles]);
 
   useEffect(() => {
     if (!simulatedProfiles.length) return;
@@ -4798,8 +4813,8 @@ export default function Profile() {
           >
             {engagedProfilesWithSummary.slice(0, 5).map((profile, index) => {
               const state = simState[profile.id] || {
-                isFollowing: false,
-                isLiked: false,
+                isFollowing: Boolean(profile.isFollowing),
+                isLiked: Boolean(profile.isLiked),
                 followers: profile.followers,
                 likes: profile.likes,
               };
