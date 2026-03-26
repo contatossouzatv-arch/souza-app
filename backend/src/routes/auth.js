@@ -388,17 +388,45 @@ function buildCookieOptions(maxAgeMs) {
   return options;
 }
 
+function isInvalidCookieDomainError(error) {
+  return String(error?.message || "").toLowerCase().includes("option domain is invalid");
+}
+
+function withoutCookieDomain(options) {
+  if (!options || !Object.prototype.hasOwnProperty.call(options, "domain")) return options;
+  const next = { ...options };
+  delete next.domain;
+  return next;
+}
+
 function setSessionCookies(res, session) {
   const accessMaxAgeMs = Math.max(1, Number(env.accessTokenTtlMin || 15)) * 60 * 1000;
   const refreshMaxAgeMs = Math.max(1, Number(env.refreshTokenTtlDays || 30)) * 24 * 60 * 60 * 1000;
-  res.cookie(env.authAccessCookieName, session.token, buildCookieOptions(accessMaxAgeMs));
-  res.cookie(env.authRefreshCookieName, session.refreshToken, buildCookieOptions(refreshMaxAgeMs));
+  const accessOptions = buildCookieOptions(accessMaxAgeMs);
+  const refreshOptions = buildCookieOptions(refreshMaxAgeMs);
+  try {
+    res.cookie(env.authAccessCookieName, session.token, accessOptions);
+    res.cookie(env.authRefreshCookieName, session.refreshToken, refreshOptions);
+  } catch (error) {
+    if (!isInvalidCookieDomainError(error)) throw error;
+    console.warn("[auth-cookie] invalid domain while setting cookies, retrying without domain");
+    res.cookie(env.authAccessCookieName, session.token, withoutCookieDomain(accessOptions));
+    res.cookie(env.authRefreshCookieName, session.refreshToken, withoutCookieDomain(refreshOptions));
+  }
 }
 
 function clearSessionCookies(res) {
   const options = buildCookieOptions(0);
-  res.clearCookie(env.authAccessCookieName, options);
-  res.clearCookie(env.authRefreshCookieName, options);
+  try {
+    res.clearCookie(env.authAccessCookieName, options);
+    res.clearCookie(env.authRefreshCookieName, options);
+  } catch (error) {
+    if (!isInvalidCookieDomainError(error)) throw error;
+    console.warn("[auth-cookie] invalid domain while clearing cookies, retrying without domain");
+    const fallbackOptions = withoutCookieDomain(options);
+    res.clearCookie(env.authAccessCookieName, fallbackOptions);
+    res.clearCookie(env.authRefreshCookieName, fallbackOptions);
+  }
 }
 
 function readRefreshToken(req) {
