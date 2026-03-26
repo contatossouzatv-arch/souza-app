@@ -38,7 +38,20 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     console.info('[auth-bootstrap] mount');
-    checkAppState();
+    const hasToken = base44.auth.hasToken();
+    const cachedUser = hasToken ? readLastKnownUser() : null;
+
+    if (cachedUser?.id) {
+      console.info('[auth-bootstrap] mount:using-cached-user', {
+        userId: cachedUser.id,
+      });
+      setUser(cachedUser);
+      setIsAuthenticated(true);
+      setIsLoadingAuth(false);
+      checkAppState({ background: true });
+    } else {
+      checkAppState();
+    }
 
     const handleAuthRequired = (event) => {
       console.warn('[auth-bootstrap] auth-required event received', event?.detail || {});
@@ -58,11 +71,14 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  const checkAppState = async () => {
+  const checkAppState = async ({ background = false } = {}) => {
     console.info('[auth-bootstrap] checkAppState:start', {
       hasToken: base44.auth.hasToken(),
+      background,
     });
-    setIsLoadingAuth(true);
+    if (!background) {
+      setIsLoadingAuth(true);
+    }
     setAuthError(null);
 
     try {
@@ -108,7 +124,9 @@ export const AuthProvider = ({ children }) => {
       }
     } finally {
       console.info('[auth-bootstrap] checkAppState:finish');
-      setIsLoadingAuth(false);
+      if (!background) {
+        setIsLoadingAuth(false);
+      }
     }
   };
 
