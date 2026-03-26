@@ -12,6 +12,8 @@ import { isInteractionSoundEnabled } from "@/lib/soundPrefs";
 import depositSuccessSound from "../../assets-para-app/moeda effect song deposit.mp3";
 import { useAppSettings } from "@/hooks/useAppSettings";
 
+const safeFind = (list, predicate) => (Array.isArray(list) ? list.find(predicate) : undefined);
+
 export default function DepositProgress({ totalApproved, pendingAmount, user, onDepositSubmit, promoEndDate, activeCycle }) {
   const queryClient = useQueryClient();
   const [submissionStatus, setSubmissionStatus] = useState("idle");
@@ -36,6 +38,7 @@ export default function DepositProgress({ totalApproved, pendingAmount, user, on
   }, []);
 
   const { data: settings = [] } = useAppSettings();
+  const safeSettings = Array.isArray(settings) ? settings : [];
 
   const { data: activePlatforms = [] } = useQuery({
     queryKey: ["active-platforms"],
@@ -58,12 +61,12 @@ export default function DepositProgress({ totalApproved, pendingAmount, user, on
     staleTime: 30000,
   });
 
-  const depositsEnabled = settings.find((s) => s.key === "deposits_enabled")?.value === "true";
-  const cashbackActive = settings.find((s) => s.key === "cashback_active")?.value === "true";
+  const depositsEnabled = safeFind(safeSettings, (s) => s.key === "deposits_enabled")?.value === "true";
+  const cashbackActive = safeFind(safeSettings, (s) => s.key === "cashback_active")?.value === "true";
   const depositCheckOptions = React.useMemo(() => {
     const map = new Map();
 
-    settings.forEach((entry) => {
+    safeSettings.forEach((entry) => {
       const key = String(entry?.key || "").trim();
       let match = key.match(/^deposit_check_link(?:_(\d+))?$/);
       if (match) {
@@ -90,8 +93,8 @@ export default function DepositProgress({ totalApproved, pendingAmount, user, on
         link: String(value.link || ""),
       }))
       .filter((item) => item.link);
-  }, [activePlatforms, settings]);
-  const cashbackRedeemLink = settings.find((s) => s.key === "cashback_redeem_link")?.value || "#";
+  }, [activePlatforms, safeSettings]);
+  const cashbackRedeemLink = safeFind(safeSettings, (s) => s.key === "cashback_redeem_link")?.value || "#";
   const shouldRenderCashback = cashbackActive;
 
   const firstGoalClaimed = cashbackClaims.find((c) => c.goal_type === "first_goal" && c.claimed);

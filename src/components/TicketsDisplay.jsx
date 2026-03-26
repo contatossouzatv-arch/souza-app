@@ -6,6 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { useAppSettings } from "@/hooks/useAppSettings";
 
+const safeFind = (list, predicate) => (Array.isArray(list) ? list.find(predicate) : undefined);
+
 export default function TicketsDisplay({
   deposits,
   allDeposits,
@@ -25,8 +27,9 @@ export default function TicketsDisplay({
     },
   });
 
-  const depositantDrawActive = settings.find((s) => s.key === "depositant_draw_active")?.value === "true";
-  const activeCycle = cycles.find((c) => c.active);
+  const safeSettings = Array.isArray(settings) ? settings : [];
+  const depositantDrawActive = safeFind(safeSettings, (s) => s.key === "depositant_draw_active")?.value === "true";
+  const activeCycle = safeFind(cycles, (c) => c.active);
 
   const approvedDeposits = deposits.filter(
     (d) => d.status === "approved" && (!activeCycle || d.cycle_id === activeCycle.id)

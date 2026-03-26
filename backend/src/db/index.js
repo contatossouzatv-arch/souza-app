@@ -2972,7 +2972,15 @@ export async function approveDepositRecord({ depositId, adminUserId, adminEmail,
   }
 
   if (shouldGrantDailyChestBonus && approvedDeposit) {
-    await maybeGrantDailyChestBonusForDeposit(approvedDeposit);
+    Promise.resolve()
+      .then(() => maybeGrantDailyChestBonusForDeposit(approvedDeposit))
+      .catch((error) => {
+        console.error("[deposits-db] daily chest bonus after approval failed", {
+          depositId: String(approvedDeposit?.id || depositId || ""),
+          userId: String(approvedDeposit?.user_id || ""),
+          message: error?.message || "unknown error",
+        });
+      });
   }
 
   return {

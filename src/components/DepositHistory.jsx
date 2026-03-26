@@ -20,6 +20,8 @@ function toAmount(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
+const safeFind = (list, predicate) => (Array.isArray(list) ? list.find(predicate) : undefined);
+
 export default function DepositHistory() {
   const [showOlderDeposits, setShowOlderDeposits] = useState(false);
   const { user, isLoadingAuth } = useAuth();
@@ -46,7 +48,7 @@ export default function DepositHistory() {
     staleTime: 60000,
   });
 
-  const activeCycle = cycles.find((cycle) => cycle.active);
+  const activeCycle = safeFind(cycles, (cycle) => cycle.active);
   const cycleDeposits = activeCycle ? deposits.filter((deposit) => deposit.cycle_id === activeCycle.id) : [];
 
   const getStatusIcon = (status) => {

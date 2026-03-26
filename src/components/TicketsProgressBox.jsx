@@ -16,6 +16,7 @@ import { useAppSettings } from "@/hooks/useAppSettings";
 const SUPPORTED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp|gif)$/i;
 const SUPPORTED_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
 const MAX_PROOF_IMAGE_SIZE_BYTES = 40 * 1024 * 1024;
+const safeFind = (list, predicate) => (Array.isArray(list) ? list.find(predicate) : undefined);
 
 function buildProofUploadErrorMessage(error, failedCount = 0) {
   const rawMessage = String(error?.message || "").trim();
@@ -75,6 +76,7 @@ export default function TicketsProgressBox({
   }, []);
 
   const { data: settings = [] } = useAppSettings();
+  const safeSettings = Array.isArray(settings) ? settings : [];
 
   const { data: activePlatforms = [] } = useQuery({
     queryKey: ["active-platforms"],
@@ -97,12 +99,12 @@ export default function TicketsProgressBox({
     refetchOnWindowFocus: false,
   });
 
-  const depositsEnabled = settings.find((s) => s.key === "deposits_enabled")?.value === "true";
-  const ticketsActive = settings.find((s) => s.key === "tickets_box_active")?.value === "true";
+  const depositsEnabled = safeFind(safeSettings, (s) => s.key === "deposits_enabled")?.value === "true";
+  const ticketsActive = safeFind(safeSettings, (s) => s.key === "tickets_box_active")?.value === "true";
   const depositCheckOptions = React.useMemo(() => {
     const map = new Map();
 
-    settings.forEach((entry) => {
+    safeSettings.forEach((entry) => {
       const key = String(entry?.key || "").trim();
       let match = key.match(/^deposit_check_link(?:_(\d+))?$/);
       if (match) {
@@ -129,10 +131,10 @@ export default function TicketsProgressBox({
         link: String(value.link || ""),
       }))
       .filter((item) => item.link);
-  }, [activePlatforms, settings]);
+  }, [activePlatforms, safeSettings]);
 
   const getSettingValue = (key, defaultValue) => {
-    const setting = settings.find((s) => s.key === key);
+    const setting = safeFind(safeSettings, (s) => s.key === key);
     return setting?.value || defaultValue;
   };
 
@@ -199,7 +201,7 @@ export default function TicketsProgressBox({
       return;
     }
 
-    const selected = savedPlatformOptions.find((item) => item.key === value);
+    const selected = safeFind(savedPlatformOptions, (item) => item.key === value);
     if (!selected) return;
     setPlatformName(selected.platform_name);
     setPlatformId(selected.platform_id);
