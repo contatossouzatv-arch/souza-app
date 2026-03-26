@@ -355,6 +355,19 @@ function parseCookies(rawCookie = "") {
   }, {});
 }
 
+function normalizeCookieDomain(value) {
+  const raw = String(value || "").trim().replace(/^['"]+|['"]+$/g, "");
+  if (!raw) return "";
+  if (raw.includes("://")) return "";
+  if (raw.includes("/")) return "";
+  if (raw.includes(" ")) return "";
+  if (raw.includes("*")) return "";
+  if (raw.startsWith(".")) {
+    return raw.length > 1 ? raw : "";
+  }
+  return raw;
+}
+
 function buildCookieOptions(maxAgeMs) {
   const sameSite = ["lax", "strict", "none"].includes(env.authCookieSameSite)
     ? env.authCookieSameSite
@@ -367,8 +380,9 @@ function buildCookieOptions(maxAgeMs) {
     maxAge: maxAgeMs,
   };
 
-  if (env.authCookieDomain) {
-    options.domain = env.authCookieDomain;
+  const cookieDomain = normalizeCookieDomain(env.authCookieDomain);
+  if (cookieDomain) {
+    options.domain = cookieDomain;
   }
 
   return options;
