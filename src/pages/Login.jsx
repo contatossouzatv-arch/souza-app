@@ -109,6 +109,7 @@ export default function Login() {
                   JSON.stringify({
                     provider: "google",
                     credential: response.credential,
+                    challengeToken: err?.challengeToken || err?.payload?.challengeToken || "",
                     email: "",
                     created_at: Date.now(),
                   })

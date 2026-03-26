@@ -209,15 +209,20 @@ async function parseResponse(response) {
   }
 
   let message = `HTTP ${response.status}`;
+  let payload = null;
   try {
-    const data = await response.json();
-    message = data?.error || data?.message || message;
+    payload = await response.json();
+    message = payload?.error || payload?.message || message;
   } catch {
     // ignore parse error
   }
 
   const error = new Error(message);
   error.status = response.status;
+  error.payload = payload;
+  if (payload && typeof payload === "object") {
+    Object.assign(error, payload);
+  }
   throw error;
 }
 
@@ -635,11 +640,11 @@ export const base44 = {
       return data;
     },
 
-    async loginWithGoogle(credential, otp) {
+    async loginWithGoogle(credential, otp, challengeToken) {
       const data = await request("/api/auth/google", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ credential, otp }),
+        body: JSON.stringify({ credential, otp, challengeToken }),
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);

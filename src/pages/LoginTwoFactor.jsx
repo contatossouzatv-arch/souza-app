@@ -34,7 +34,9 @@ export default function LoginTwoFactor() {
 
       const parsed = JSON.parse(raw);
       const isPasswordFlow = parsed?.provider !== "google" && parsed?.email && parsed?.password;
-      const isGoogleFlow = parsed?.provider === "google" && parsed?.credential;
+      const isGoogleFlow =
+        parsed?.provider === "google" &&
+        (parsed?.challengeToken || parsed?.credential);
 
       if (!isPasswordFlow && !isGoogleFlow) {
         window.sessionStorage.removeItem(LOGIN_2FA_PENDING_KEY);
@@ -71,7 +73,11 @@ export default function LoginTwoFactor() {
     try {
       const normalizedOtp = String(otp || "").replace(/\D/g, "").slice(0, 8);
       if (pendingLogin.provider === "google") {
-        await base44.auth.loginWithGoogle(pendingLogin.credential, normalizedOtp);
+        await base44.auth.loginWithGoogle(
+          pendingLogin.credential || "",
+          normalizedOtp,
+          pendingLogin.challengeToken || ""
+        );
       } else {
         await base44.auth.login({
           email: pendingLogin.email,
