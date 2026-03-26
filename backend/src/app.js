@@ -18,6 +18,7 @@ import pointsRoutes from "./routes/points.js";
 import uploadsRoutes from "./routes/uploads.js";
 import { appendNavigationLog } from "./db/index.js";
 import { genericUploadsDir, uploadsDir } from "./lib/paths.js";
+import { getHttpMetricsSnapshot, recordHttpMetric } from "./lib/httpMetrics.js";
 
 function buildCors() {
   if (env.origin === "*") {
@@ -77,8 +78,12 @@ function shouldLogRouteTiming(path = "") {
     "/api/auth/me",
     "/api/auth/refresh",
     "/api/profile/metrics",
+    "/api/home/summary",
+    "/api/home/feed-summary",
+    "/api/dynamics/summary",
+    "/api/ui/public-config",
     "/api/leaderboards/weekly",
-    "/api/entities/AppSettings",
+    "/api/winnings/summary",
   ].includes(normalized);
 }
 
@@ -120,11 +125,13 @@ export function createApp(io) {
       });
 
       res.on("finish", () => {
+        const durationMs = Date.now() - req._startedAtMs;
+        recordHttpMetric(req.path, res.statusCode, durationMs);
         console.info("[http] request:finish", {
           method: req.method,
           path: req.originalUrl,
           status: res.statusCode,
-          durationMs: Date.now() - req._startedAtMs,
+          durationMs,
           origin: req.headers.origin || null,
           hasCookieHeader: Boolean(req.headers.cookie),
           hasAuthorizationHeader: Boolean(req.headers.authorization),
@@ -157,6 +164,22 @@ export function createApp(io) {
     limit: Math.max(1, env.rateLimitNavigationMax),
     prefix: "ratelimit:navigation:",
   });
+  const adminRateLimiter = buildRateLimiter({
+    windowMs: 60 * 1000,
+    limit: 180,
+    prefix: "ratelimit:admin:",
+  });
+  const engagementMutationRateLimiter = buildRateLimiter({
+    windowMs: 60 * 1000,
+    limit: 120,
+    prefix: "ratelimit:engagement:",
+  });
+  const engagementMutationOnly = (req, res, next) => {
+    if (!["POST", "PATCH", "PUT", "DELETE"].includes(String(req.method || "").toUpperCase())) {
+      return next();
+    }
+    return engagementMutationRateLimiter(req, res, next);
+  };
 
   app.get("/", (_req, res) => {
     res.type("text/plain").send("API SOUZA ONLINE");
@@ -174,6 +197,18 @@ export function createApp(io) {
     });
   });
 
+  app.get("/health/metrics", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const snapshot = getHttpMetricsSnapshot();
+    res.json({
+      ok: true,
+      service: "app-souza-cass-backend",
+      timestamp: new Date().toISOString(),
+      redis: Boolean(env.redisUrl),
+      metrics: snapshot,
+    });
+  });
+
   app.use("/uploads", express.static(genericUploadsDir));
   if (path.resolve(genericUploadsDir) !== path.resolve(uploadsDir)) {
     app.use("/uploads", express.static(uploadsDir));
@@ -185,9 +220,20 @@ export function createApp(io) {
 
   app.use("/api/auth", authApiRateLimiter, authRoutes);
   app.use("/api", apiRateLimiter);
+  app.use("/api/admin", adminRateLimiter);
   app.use("/api", adminEventsRoutes);
   app.use("/api/daily-chest", dailyChestRoutes);
   app.use("/api", depositsRoutes);
+  app.use(
+    [
+      "/api/live-draws",
+      "/api/game-call",
+      "/api/instant-raffles",
+      "/api/winnings",
+      "/api/cashback",
+    ],
+    engagementMutationOnly
+  );
   app.use("/api", engagementRoutes);
   app.use("/api", gamificationRoutes);
   app.use("/api", socialRoutes);

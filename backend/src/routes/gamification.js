@@ -7,9 +7,19 @@ import {
   getAppSettingsMap,
   getEntityById,
   listEntity,
+  normalizeRecord,
+  normalizeUser,
   pool,
   updateEntity,
 } from "../db/index.js";
+import {
+  listPlatformHistory,
+  listProfileNotifications,
+  listPublicProfileBasics,
+  markProfileNotificationsRead,
+} from "../services/profileReadService.js";
+import { getCurrentPlatform, listActivePlatforms } from "../services/platformReadService.js";
+import { deleteCacheKey, getCacheJson, getOrComputeCacheJson, setCacheJson, cacheMiss } from "../lib/cache.js";
 
 const router = Router();
 
@@ -22,6 +32,10 @@ const GAMIFICATION_STATE_TTL_MS = 30000;
 const GAMIFICATION_RULES_TTL_MS = 30000;
 const WEEKLY_CYCLE_TTL_MS = 15000;
 const PROFILE_METRICS_TTL_MS = 15000;
+const WINNERS_HISTORY_TTL_MS = 30000;
+const HOME_SUMMARY_TTL_MS = 30000;
+const HOME_FEED_SUMMARY_TTL_MS = 15000;
+const PUBLIC_UI_CONFIG_TTL_MS = 30000;
 
 const DEFAULT_POINTS_RULES = {
   points_per_participation: 12,
@@ -192,6 +206,24 @@ function emitEntityChanged(req, entityName, entityId, action = "updated") {
   });
 }
 
+function getCachedMapValue(cache, key) {
+  const cached = cache.get(key);
+  if (!cached) return null;
+  if (Date.now() >= cached.expiresAt) {
+    cache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setCachedMapValue(cache, key, value, ttlMs) {
+  cache.set(key, {
+    value,
+    expiresAt: Date.now() + ttlMs,
+  });
+  return value;
+}
+
 function inferPrizeSourceTypesFromAudit(audit = {}) {
   const raffleId = String(audit?.raffle_id || "").trim().toLowerCase();
   const raffleTitle = String(audit?.raffle_title || "").trim().toLowerCase();
@@ -232,6 +264,27 @@ function isPrizeGalleryMatchForAudit(item = {}, audit = {}) {
   }
 
   return false;
+}
+
+function resolveAuditValidationCode(audit = {}, prizeItem = null) {
+  return String(
+    prizeItem?.metadata?.validation_code ||
+      prizeItem?.metadata?.grant_result?.validationCode ||
+      audit?.validation_code ||
+      audit?.opening_id ||
+      audit?.winner_id ||
+      audit?.participant_id ||
+      audit?.id ||
+      ""
+  ).trim();
+}
+
+function resolveAuditRewardType(audit = {}) {
+  const normalized = String(audit?.reward_type || "").trim().toLowerCase();
+  if (normalized === "points_balance" || normalized === "saldo" || normalized === "bonus") {
+    return "points_balance";
+  }
+  return "cash_prize";
 }
 
 async function listAppSettingsMap() {
@@ -417,6 +470,28 @@ function invalidateGamificationStateCache() {
   };
   profileMetricsCache = new Map();
   profileMetricsPromises = new Map();
+}
+
+async function loadPublicUiConfig() {
+  return getOrComputeCacheJson("ui:public-config", PUBLIC_UI_CONFIG_TTL_MS, async () => {
+    const [settings, banners, socials] = await Promise.all([
+      listEntity("AppSettings"),
+      listEntity("BannerCarousel"),
+      listEntity("SocialMedia"),
+    ]);
+
+    const payload = {
+      settings: Array.isArray(settings) ? settings : [],
+      banners: (Array.isArray(banners) ? banners : [])
+        .filter((entry) => entry?.active !== false)
+        .sort((a, b) => Number(a?.order || 0) - Number(b?.order || 0)),
+      socials: (Array.isArray(socials) ? socials : [])
+        .filter((entry) => entry?.active !== false)
+        .sort((a, b) => Number(a?.order || 0) - Number(b?.order || 0)),
+    };
+
+    return payload;
+  });
 }
 
 export async function refreshGamificationState(options = {}) {
@@ -1848,9 +1923,21 @@ async function buildLightweightProfileMetrics(userId, options = {}) {
   const forceFresh = options?.forceFresh === true;
   const now = Date.now();
   const cached = profileMetricsCache.get(safeUserId);
+  const sharedCacheKey = `gamification:profile-metrics:${safeUserId}`;
 
   if (!forceFresh && cached && now < cached.expiresAt) {
     return cached.value;
+  }
+
+  if (!forceFresh) {
+    const sharedCached = await getCacheJson(sharedCacheKey);
+    if (!cacheMiss(sharedCached)) {
+      profileMetricsCache.set(safeUserId, {
+        value: sharedCached,
+        expiresAt: Date.now() + PROFILE_METRICS_TTL_MS,
+      });
+      return sharedCached;
+    }
   }
 
   if (!forceFresh && profileMetricsPromises.has(safeUserId)) {
@@ -1858,11 +1945,12 @@ async function buildLightweightProfileMetrics(userId, options = {}) {
   }
 
   const buildPromise = buildLightweightProfileMetricsFresh(safeUserId)
-    .then((payload) => {
+    .then(async (payload) => {
       profileMetricsCache.set(safeUserId, {
         value: payload,
         expiresAt: Date.now() + PROFILE_METRICS_TTL_MS,
       });
+      await setCacheJson(sharedCacheKey, payload, PROFILE_METRICS_TTL_MS);
       return payload;
     })
     .catch((error) => {
@@ -2541,6 +2629,7 @@ router.get("/profile/metrics", requireAuth, async (req, res) => {
     if (shouldForceRefresh) {
       profileMetricsCache.delete(String(userId || "").trim());
       profileMetricsPromises.delete(String(userId || "").trim());
+      await deleteCacheKey(`gamification:profile-metrics:${String(userId || "").trim()}`);
     }
     const payload = await buildLightweightProfileMetrics(userId, {
       forceFresh: shouldForceRefresh,
@@ -2592,6 +2681,73 @@ router.get("/profile/public/:userId/summary", requireAuth, async (req, res) => {
       stack: error?.stack || "",
     });
     return res.status(500).json({ error: "Nao foi possivel carregar o resumo publico agora." });
+  }
+});
+
+router.get("/profile/public-basics", requireAuth, async (req, res) => {
+  try {
+    const items = await listPublicProfileBasics(String(req.query?.ids || "").split(","));
+    return res.json({ items });
+  } catch (error) {
+    console.error("Failed to load public profile basics", error);
+    return res.status(500).json({ error: "Nao foi possivel carregar os perfis agora." });
+  }
+});
+
+router.get("/profile/notifications", requireAuth, async (req, res) => {
+  try {
+    const userId = String(req.auth?.sub || "").trim();
+    const limit = Math.max(1, Math.min(100, Number(req.query?.limit || 50)));
+    const items = await listProfileNotifications(userId, limit);
+    return res.json({ items });
+  } catch (error) {
+    console.error("Failed to load profile notifications", error);
+    return res.status(500).json({ error: "Nao foi possivel carregar as notificacoes agora." });
+  }
+});
+
+router.post("/profile/notifications/read", requireAuth, async (req, res) => {
+  try {
+    const userId = String(req.auth?.sub || "").trim();
+    const payload = await markProfileNotificationsRead(userId, req.body?.ids);
+    return res.json(payload);
+  } catch (error) {
+    console.error("Failed to mark profile notifications as read", error);
+    return res.status(500).json({ error: "Nao foi possivel atualizar as notificacoes agora." });
+  }
+});
+
+router.get("/profile/platform-history", requireAuth, async (req, res) => {
+  try {
+    const userId = String(req.auth?.sub || "").trim();
+    const limit = Math.max(1, Math.min(200, Number(req.query?.limit || 100)));
+    const items = await listPlatformHistory(userId, limit);
+    return res.json({ items });
+  } catch (error) {
+    console.error("Failed to load platform history", error);
+    return res.status(500).json({ error: "Nao foi possivel carregar o historico de plataformas agora." });
+  }
+});
+
+router.get("/platforms/summary", requireAuth, async (_req, res) => {
+  try {
+    const [currentPlatform, activePlatforms] = await Promise.all([
+      getCurrentPlatform(),
+      listActivePlatforms(),
+    ]);
+    return res.json({ currentPlatform, activePlatforms });
+  } catch (error) {
+    console.error("Failed to load platforms summary", error);
+    return res.status(500).json({ error: "Nao foi possivel carregar as plataformas agora." });
+  }
+});
+
+router.get("/ui/public-config", requireAuth, async (_req, res) => {
+  try {
+    return res.json(await loadPublicUiConfig());
+  } catch (error) {
+    console.error("Failed to load public UI config", error);
+    return res.status(500).json({ error: "Nao foi possivel carregar a configuracao publica agora." });
   }
 });
 
@@ -2687,19 +2843,21 @@ router.get("/prizes/winners-history", requireAuth, async (req, res) => {
   const parsedSkipDays = Number.parseInt(String(req.query?.skipDays || "").trim(), 10);
   const limitDays = Number.isFinite(parsedLimitDays) && parsedLimitDays > 0 ? parsedLimitDays : null;
   const skipDays = Number.isFinite(parsedSkipDays) && parsedSkipDays > 0 ? parsedSkipDays : 0;
+  const cacheKey = `${limitDays ?? "all"}:${skipDays}`;
+  try {
+    const payload = await getOrComputeCacheJson(`gamification:winners-history:${cacheKey}`, WINNERS_HISTORY_TTL_MS, async () => {
   const isRecentOnlyRequest = skipDays === 0 && limitDays === 1;
   const auditsFetchLimit = isRecentOnlyRequest ? 250 : 1000;
   const prizeFetchLimit = isRecentOnlyRequest ? 250 : 1000;
   const raffleFetchLimit = isRecentOnlyRequest ? 120 : 300;
   const userFetchLimit = isRecentOnlyRequest ? 400 : 1000;
 
-  const [audits, users, settings, instantRaffles, liveRaffles, gameCallRaffles, prizeItems] = await Promise.all([
-    listEntity("DrawWinnerAudit", "-drawn_at", auditsFetchLimit),
-    listEntity("User", "-created_date", userFetchLimit),
-    listAppSettingsMap(),
-    listEntity("InstantRaffle", "-created_date", raffleFetchLimit),
-    listEntity("LiveDrawRaffle", "-created_date", raffleFetchLimit),
-    listEntity("GameCallRaffle", "-created_date", raffleFetchLimit),
+        const [audits, users, instantRaffles, liveRaffles, gameCallRaffles, prizeItems] = await Promise.all([
+          listEntity("DrawWinnerAudit", "-drawn_at", auditsFetchLimit),
+          listEntity("User", "-created_date", userFetchLimit),
+          listEntity("InstantRaffle", "-created_date", raffleFetchLimit),
+          listEntity("LiveDrawRaffle", "-created_date", raffleFetchLimit),
+          listEntity("GameCallRaffle", "-created_date", raffleFetchLimit),
     listEntity("UserPrizeGalleryItem", "-claimed_at", prizeFetchLimit),
   ]);
 
@@ -2822,8 +2980,72 @@ router.get("/prizes/winners-history", requireAuth, async (req, res) => {
     }));
 
   const days = allDays.slice(skipDays, limitDays ? skipDays + limitDays : undefined);
+      return { days };
+    });
+    return res.json(payload);
+  } catch (error) {
+    console.error("Failed to load winners history", error);
+    return res.status(500).json({ error: "Nao foi possivel carregar o historico de ganhadores agora." });
+  }
+});
 
-  res.json({ days });
+router.get("/home/summary", requireAuth, async (_req, res) => {
+  try {
+    const payload = await getOrComputeCacheJson("gamification:home-summary", HOME_SUMMARY_TTL_MS, async () => {
+    const [totalMembersResult, creatorResult, recentProfilesResult] = await Promise.all([
+      pool.query("SELECT COUNT(*)::int AS total FROM users"),
+      pool.query(
+        `SELECT *
+           FROM users
+          WHERE role = 'admin'
+          ORDER BY created_at ASC
+          LIMIT 1`
+      ),
+      pool.query(
+        `SELECT *
+           FROM users
+          ORDER BY created_at DESC
+          LIMIT 10`
+      ),
+    ]);
+
+    const creator = creatorResult.rows[0] ? normalizeUser(creatorResult.rows[0]) : null;
+    const recentProfiles = recentProfilesResult.rows.map((row) => normalizeUser(row));
+
+      const payload = {
+      totalMembers: Number(totalMembersResult.rows[0]?.total || 0),
+      creator: creator
+        ? {
+            id: creator.id,
+            full_name: creator.full_name,
+            nick: creator.nick,
+            avatar_emoji: creator.avatar_emoji,
+            profile_avatar_id: creator.profile_avatar_id,
+            profile_image_mode: creator.profile_image_mode,
+            profile_image_url: creator.profile_image_url,
+            profile_image_status: creator.profile_image_status,
+          }
+        : null,
+      recentProfiles: recentProfiles.map((profile) => ({
+        id: profile.id,
+        full_name: profile.full_name,
+        nick: profile.nick,
+        avatar_emoji: profile.avatar_emoji,
+        profile_avatar_id: profile.profile_avatar_id,
+        profile_image_mode: profile.profile_image_mode,
+        profile_image_url: profile.profile_image_url,
+        profile_image_status: profile.profile_image_status,
+      })),
+      };
+
+      return payload;
+    });
+
+    return res.json(payload);
+  } catch (error) {
+    console.error("Failed to load home summary", error);
+    return res.status(500).json({ error: "Nao foi possivel carregar a pagina inicial agora." });
+  }
 });
 
 router.get("/feed/wins", requireAuth, async (_req, res) => {
@@ -2872,6 +3094,128 @@ router.get("/feed/wins", requireAuth, async (_req, res) => {
       };
     }),
   });
+});
+
+router.get("/home/feed-summary", requireAuth, async (req, res) => {
+  const userId = String(req.auth?.sub || "").trim();
+  try {
+    const payload = await getOrComputeCacheJson(
+      `gamification:home-feed-summary:${userId}`,
+      HOME_FEED_SUMMARY_TTL_MS,
+      async () => {
+        const [postsResult, recentInventory, countRows, likedRows] = await Promise.all([
+          pool.query(
+            `SELECT id, data, created_at, updated_at
+               FROM entity_records
+              WHERE entity_name = 'PushNotification'
+              ORDER BY created_at DESC
+              LIMIT 30`
+          ),
+          listEntity("UserPrizeGalleryItem", "-claimed_at", 120).then((items) =>
+            items
+              .filter((item) => ["validated", "applied"].includes(String(item.claim_status || "").trim().toLowerCase()))
+              .slice(0, 40)
+          ),
+          pool.query(
+            `SELECT COALESCE(data->>'post_id', '') AS post_id, COUNT(*)::int AS like_count
+               FROM entity_records
+              WHERE entity_name = 'FeedPostLike'
+              GROUP BY COALESCE(data->>'post_id', '')`
+          ),
+          pool.query(
+            `SELECT COALESCE(data->>'post_id', '') AS post_id
+               FROM entity_records
+              WHERE entity_name = 'FeedPostLike'
+                AND COALESCE(data->>'user_id', '') = $1`,
+            [userId]
+          ),
+        ]);
+
+        const posts = postsResult.rows.map(normalizeEntityRecordRow);
+        const winnerUserIds = Array.from(new Set(recentInventory.map((item) => item.user_id).filter(Boolean)));
+        let usersById = new Map();
+        if (winnerUserIds.length > 0) {
+          const userRows = await pool.query(
+            `SELECT id, nick, full_name, avatar_emoji, profile_avatar_id, profile_image_mode, profile_image_url, profile_image_status
+               FROM users
+              WHERE id = ANY($1::uuid[])`,
+            [winnerUserIds]
+          );
+          usersById = new Map(userRows.rows.map((row) => [row.id, row]));
+        }
+
+        const counts = countRows.rows.reduce((acc, row) => {
+          const postId = String(row.post_id || "").trim();
+          if (!postId) return acc;
+          acc[postId] = Number(row.like_count || 0);
+          return acc;
+        }, {});
+
+        const likedPostIds = likedRows.rows
+          .map((row) => String(row.post_id || "").trim())
+          .filter(Boolean);
+
+        return {
+          posts,
+          winnerFeed: {
+            items: recentInventory.map((item) => {
+              const user = usersById.get(item.user_id) || null;
+              return {
+                id: item.id,
+                user_id: item.user_id,
+                user_name: user?.full_name || item.metadata?.user_name || "Participante",
+                user_nick: user?.nick || item.metadata?.user_nick || "",
+                user_avatar: user?.avatar_emoji || "",
+                profile_avatar_id: user?.profile_avatar_id || "",
+                profile_image_mode: user?.profile_image_mode || "avatar",
+                profile_image_url:
+                  String(user?.profile_image_mode || "").toLowerCase() === "photo" &&
+                  String(user?.profile_image_status || "").toLowerCase() === "approved"
+                    ? String(user?.profile_image_url || "").trim()
+                    : "",
+                source_type: item.source_type || "",
+                source_label: mapPrizeSourceLabel(item.source_type),
+                reward_label: buildPrizeRewardLabel(item),
+                reward_type: item.reward_type || "",
+                reward_amount: Number(item.reward_amount || 0),
+                reward_unit: item.reward_unit || "",
+                title: item.title || "",
+                subtitle: item.subtitle || "",
+                rarity: item.rarity || "rare",
+                claimed_at: item.claimed_at || item.created_date || item.updated_date || null,
+              };
+            }),
+          },
+          feedLikes: {
+            counts,
+            likedPostIds,
+          },
+        };
+      }
+    );
+    return res.json(payload);
+  } catch (error) {
+    console.error("Failed to load home feed summary", error);
+    return res.status(500).json({ error: "Nao foi possivel carregar o feed inicial agora." });
+  }
+});
+
+router.get("/notifications/recent", requireAuth, async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(100, Number(req.query?.limit || 50)));
+    const result = await pool.query(
+      `SELECT id, data, created_at, updated_at
+         FROM entity_records
+        WHERE entity_name = 'PushNotification'
+        ORDER BY created_at DESC
+        LIMIT $1`,
+      [limit]
+    );
+    return res.json({ items: result.rows.map(normalizeRecord) });
+  } catch (error) {
+    console.error("Failed to load recent notifications", error);
+    return res.status(500).json({ error: "Nao foi possivel carregar as notificacoes agora." });
+  }
 });
 
 router.get("/feed/likes", requireAuth, async (req, res) => {
@@ -3001,6 +3345,77 @@ router.get("/admin/users", requireAuth, requireAdmin, async (req, res) => {
 
 router.get("/admin/users/adjustments/recent", requireAuth, requireAdmin, async (_req, res) => {
   res.json({ items: await listRecentAdminAdjustments(20) });
+});
+
+router.get("/admin/audits/winners", requireAuth, requireAdmin, async (_req, res) => {
+  const [audits, users, platformHistory, prizeGalleryItems] = await Promise.all([
+    listEntity("DrawWinnerAudit", "-drawn_at", 1000),
+    listEntity("User", "-created_date", 1000),
+    listEntity("PlatformHistory", "-created_date", 1000),
+    listEntity("UserPrizeGalleryItem", "-claimed_at", 1000),
+  ]);
+
+  const usersById = new Map(users.map((user) => [String(user?.id || ""), user]));
+  const historyByUserId = new Map();
+  platformHistory.forEach((entry) => {
+    const userId = String(entry?.user_id || "").trim();
+    if (!userId) return;
+    if (!historyByUserId.has(userId)) {
+      historyByUserId.set(userId, []);
+    }
+    historyByUserId.get(userId).push(entry);
+  });
+
+  const prizeByAuditKey = new Map();
+  prizeGalleryItems.forEach((item) => {
+    const auditId = String(item?.metadata?.audit_id || "").trim();
+    if (auditId) prizeByAuditKey.set(`audit:${auditId}`, item);
+    const openingId = String(item?.source_ref_id || item?.metadata?.opening_id || "").trim();
+    if (openingId) prizeByAuditKey.set(`opening:${openingId}`, item);
+  });
+
+  const items = audits.map((audit) => {
+    const user = usersById.get(String(audit?.user_id || "")) || null;
+    const matchedPrize =
+      prizeByAuditKey.get(`audit:${String(audit?.id || "").trim()}`) ||
+      prizeByAuditKey.get(`opening:${String(audit?.opening_id || "").trim()}`) ||
+      null;
+    const platformId = audit.user_platform_id || audit.platform_id || user?.platform_id || "";
+    const userHistory = historyByUserId.get(String(audit?.user_id || "")) || [];
+    const platformName =
+      audit.platform_name ||
+      userHistory.find((entry) => String(entry?.platform_id || "").trim() === String(platformId || "").trim())?.platform_name ||
+      userHistory[0]?.platform_name ||
+      audit.platform ||
+      "NÃ£o informado";
+    const avatarUrlRaw = audit.user_profile_image_url || user?.profile_image_url || "";
+    const canUseApprovedPhoto =
+      Boolean(audit.user_profile_image_url) ||
+      (user?.profile_image_mode === "photo" &&
+        user?.profile_image_status === "approved" &&
+        user?.profile_image_url);
+
+    return {
+      ...audit,
+      user_name: audit.user_name || user?.full_name || user?.nick || "Sem nome",
+      user_nick: audit.user_nick || user?.nick || "-",
+      user_email: audit.user_email || user?.email || "",
+      user_phone: audit.user_phone || user?.phone || "",
+      user_platform_id: platformId,
+      platform_name: platformName,
+      avatar_url: canUseApprovedPhoto && avatarUrlRaw ? avatarUrlRaw : "",
+      raffle_title: audit.raffle_title || "Sorteio sem titulo",
+      game_call: audit.game_call || "",
+      status: audit.status || "validated",
+      reward_type: resolveAuditRewardType(audit),
+      validation_code: resolveAuditValidationCode(audit, matchedPrize),
+      redemption_status: audit.redemption_status || "pending",
+      redeemed_at: audit.redeemed_at || null,
+      prize_amount: Number(audit.prize_amount || 0) || 0,
+    };
+  });
+
+  res.json({ items });
 });
 
 router.delete("/admin/audits/winners/:id", requireAuth, requireAdmin, async (req, res) => {

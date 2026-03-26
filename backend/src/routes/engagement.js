@@ -9,8 +9,20 @@ import {
   joinGameCall,
   joinInstantRaffle,
   joinLiveDraw,
+  normalizeRecord,
+  pool,
   submitGameCall,
 } from "../db/index.js";
+import {
+  findActiveEntity,
+  findEntityById,
+  getGameCallSummary,
+  getInstantRaffleSummary,
+  getLiveDrawDisplaySummary,
+  getLiveDrawSummary,
+  getWinningSummary,
+  listActivePromoBoxes,
+} from "../services/raffleReadService.js";
 
 const router = Router();
 
@@ -48,6 +60,80 @@ router.post("/live-draws/:id/join", requireAuth, async (req, res) => {
   });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
+});
+
+router.get("/dynamics/summary", requireAuth, async (req, res) => {
+  const userId = req.auth.sub;
+
+  const [promoBoxes, activeInstantRaffle, activeLiveDraw, activeGameCall] = await Promise.all([
+    listActivePromoBoxes(),
+    findActiveEntity("InstantRaffle"),
+    findActiveEntity("LiveDrawRaffle"),
+    findActiveEntity("GameCallRaffle"),
+  ]);
+
+  const [instantSummary, liveDrawSummary, gameCallSummary] = await Promise.all([
+    activeInstantRaffle?.id
+      ? getInstantRaffleSummary(activeInstantRaffle.id, userId)
+      : Promise.resolve({
+          myParticipation: [],
+          participantsPreview: [],
+          participantsCount: 0,
+          winners: [],
+        }),
+    activeLiveDraw?.id
+      ? getLiveDrawSummary(activeLiveDraw.id, userId)
+      : Promise.resolve({ myParticipation: [] }),
+    activeGameCall?.id
+      ? getGameCallSummary(activeGameCall.id, userId)
+      : Promise.resolve({ myParticipation: null }),
+  ]);
+
+  res.json({
+    promoBoxes,
+    instantRaffle: {
+      raffle: activeInstantRaffle,
+      ...instantSummary,
+    },
+    liveDraw: {
+      raffle: activeLiveDraw,
+      ...liveDrawSummary,
+    },
+    gameCall: {
+      raffle: activeGameCall,
+      ...gameCallSummary,
+    },
+  });
+});
+
+router.get("/winnings/summary", requireAuth, async (req, res) => {
+  const summary = await getWinningSummary(req.auth.sub);
+  res.json(summary);
+});
+
+router.get("/live-draws/current-display", requireAuth, async (_req, res) => {
+  const raffle = await findActiveEntity("LiveDrawRaffle");
+  if (!raffle?.id) {
+    return res.json({ raffle: null, participants: [] });
+  }
+
+  const summary = await getLiveDrawDisplaySummary(raffle.id);
+  return res.json({
+    raffle,
+    participants: summary.participants || [],
+  });
+});
+
+router.get("/instant-raffles/:id/basic", requireAuth, async (req, res) => {
+  const raffleId = String(req.params.id || "").trim();
+  if (!raffleId) return res.status(400).json({ error: "ID do sorteio obrigatorio." });
+
+  const raffle = await findEntityById("InstantRaffle", raffleId);
+  if (!raffle) {
+    return res.status(404).json({ error: "Sorteio nao encontrado." });
+  }
+
+  return res.json(raffle);
 });
 
 router.post("/game-call/:id/join", requireAuth, async (req, res) => {
@@ -198,6 +284,20 @@ router.post("/cashback/claim", requireAuth, async (req, res) => {
   });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
+});
+
+router.get("/cashback/status", requireAuth, async (req, res) => {
+  const userId = String(req.auth?.sub || "").trim();
+  const result = await pool.query(
+    `SELECT id, data, created_at, updated_at
+       FROM entity_records
+      WHERE entity_name = 'CashbackClaim'
+        AND COALESCE(data->>'user_id', '') = $1
+      ORDER BY created_at DESC
+      LIMIT 50`,
+    [userId]
+  );
+  return res.json({ items: result.rows.map(normalizeRecord) });
 });
 
 export default router;

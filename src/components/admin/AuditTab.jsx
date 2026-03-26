@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
@@ -8,16 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Download, Search, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
-function resolveValidationCode(audit, prizeItem = null) {
+function resolveValidationCode(audit) {
   return String(
-    prizeItem?.metadata?.validation_code ||
-    prizeItem?.metadata?.grant_result?.validationCode ||
     audit?.validation_code ||
-    audit?.opening_id ||
-    audit?.winner_id ||
-    audit?.participant_id ||
-    audit?.id ||
-    ""
+      audit?.opening_id ||
+      audit?.winner_id ||
+      audit?.participant_id ||
+      audit?.id ||
+      ""
   ).trim();
 }
 
@@ -29,6 +27,28 @@ function resolveRewardKind(audit) {
   return "cash_prize";
 }
 
+function normalizeAudit(audit) {
+  const prizeAmountNumber = Number(audit?.prize_amount || 0);
+  return {
+    ...audit,
+    user_name: audit?.user_name || "Sem nome",
+    user_nick: audit?.user_nick || "-",
+    user_email: audit?.user_email || "",
+    user_phone: audit?.user_phone || "",
+    user_platform_id: audit?.user_platform_id || audit?.platform_id || "",
+    platform_name: audit?.platform_name || audit?.platform || "Nao informado",
+    avatar_url: audit?.avatar_url ? resolveAssetUrl(audit.avatar_url) : "",
+    raffle_title: audit?.raffle_title || "Sorteio sem titulo",
+    game_call: audit?.game_call || "",
+    status: audit?.status || "validated",
+    reward_type: resolveRewardKind(audit),
+    validation_code: resolveValidationCode(audit),
+    redemption_status: audit?.redemption_status || "pending",
+    redeemed_at: audit?.redeemed_at || null,
+    prize_amount: Number.isFinite(prizeAmountNumber) ? prizeAmountNumber : 0,
+  };
+}
+
 export default function AuditTab() {
   const [searchTerm, setSearchTerm] = useState("");
   const [redemptionCode, setRedemptionCode] = useState("");
@@ -36,99 +56,13 @@ export default function AuditTab() {
 
   const { data: audits = [] } = useQuery({
     queryKey: ["winner-audits"],
-    queryFn: () => base44.entities.DrawWinnerAudit.list("-drawn_at", 1000),
+    queryFn: async () => {
+      const response = await base44.adminAudit.listWinnerAudits();
+      return response?.items || [];
+    },
   });
 
-  const { data: users = [] } = useQuery({
-    queryKey: ["audit-users"],
-    queryFn: () => base44.entities.User.list("-created_date", 1000),
-    staleTime: 60000,
-  });
-
-  const { data: platformHistory = [] } = useQuery({
-    queryKey: ["audit-platform-history"],
-    queryFn: () => base44.entities.PlatformHistory.list("-created_date", 1000),
-    staleTime: 60000,
-  });
-  const { data: prizeGalleryItems = [] } = useQuery({
-    queryKey: ["audit-prize-gallery"],
-    queryFn: () => base44.entities.UserPrizeGalleryItem.list("-claimed_at", 1000),
-    staleTime: 60000,
-  });
-
-  const usersById = React.useMemo(() => {
-    const map = new Map();
-    users.forEach((user) => map.set(user.id, user));
-    return map;
-  }, [users]);
-
-  const historyByUserId = React.useMemo(() => {
-    const map = new Map();
-    platformHistory.forEach((entry) => {
-      if (!entry?.user_id) return;
-      if (!map.has(entry.user_id)) map.set(entry.user_id, []);
-      map.get(entry.user_id).push(entry);
-    });
-    return map;
-  }, [platformHistory]);
-
-  const resolvePlatformName = React.useCallback((audit, user, resolvedPlatformId) => {
-    if (audit.platform_name) return audit.platform_name;
-
-    const userHistory = historyByUserId.get(audit.user_id) || [];
-    if (resolvedPlatformId) {
-      const byExactId = userHistory.find((entry) => String(entry.platform_id || "").trim() === String(resolvedPlatformId).trim());
-      if (byExactId?.platform_name) return byExactId.platform_name;
-    }
-
-    if (userHistory[0]?.platform_name) return userHistory[0].platform_name;
-    if (audit.platform) return audit.platform;
-    return "Não informado";
-  }, [historyByUserId]);
-
-  const normalizedAudits = React.useMemo(() => {
-    const prizeByAuditKey = new Map();
-    prizeGalleryItems.forEach((item) => {
-      const auditId = String(item?.metadata?.audit_id || "").trim();
-      if (auditId) prizeByAuditKey.set(`audit:${auditId}`, item);
-      const openingId = String(item?.source_ref_id || item?.metadata?.opening_id || "").trim();
-      if (openingId) prizeByAuditKey.set(`opening:${openingId}`, item);
-    });
-
-    return audits.map((audit) => {
-      const user = usersById.get(audit.user_id);
-      const matchedPrize =
-        prizeByAuditKey.get(`audit:${String(audit.id || "").trim()}`) ||
-        prizeByAuditKey.get(`opening:${String(audit.opening_id || "").trim()}`) ||
-        null;
-      const platformId = audit.user_platform_id || audit.platform_id || user?.platform_id || "";
-      const platformName = resolvePlatformName(audit, user, platformId);
-      const prizeAmountNumber = Number(audit.prize_amount || 0);
-      const avatarUrlRaw = audit.user_profile_image_url || user?.profile_image_url || "";
-      const canUseApprovedPhoto =
-        Boolean(audit.user_profile_image_url) ||
-        (user?.profile_image_mode === "photo" && user?.profile_image_status === "approved" && user?.profile_image_url);
-
-      return {
-        ...audit,
-        user_name: audit.user_name || user?.full_name || user?.nick || "Sem nome",
-        user_nick: audit.user_nick || user?.nick || "-",
-        user_email: audit.user_email || user?.email || "",
-        user_phone: audit.user_phone || user?.phone || "",
-        user_platform_id: platformId,
-        platform_name: platformName,
-        avatar_url: canUseApprovedPhoto && avatarUrlRaw ? resolveAssetUrl(avatarUrlRaw) : "",
-        raffle_title: audit.raffle_title || "Sorteio sem titulo",
-        game_call: audit.game_call || "",
-        status: audit.status || "validated",
-        reward_type: resolveRewardKind(audit),
-        validation_code: resolveValidationCode(audit, matchedPrize),
-        redemption_status: audit.redemption_status || "pending",
-        redeemed_at: audit.redeemed_at || null,
-        prize_amount: Number.isFinite(prizeAmountNumber) ? prizeAmountNumber : 0,
-      };
-    });
-  }, [audits, prizeGalleryItems, usersById, resolvePlatformName]);
+  const normalizedAudits = useMemo(() => audits.map(normalizeAudit), [audits]);
 
   const deleteAuditMutation = useMutation({
     mutationFn: (auditId) => base44.adminAudit.deleteWinnerAudit(auditId),
@@ -157,12 +91,16 @@ export default function AuditTab() {
   });
 
   const handleDelete = async (audit) => {
-    if (window.confirm(`Tem certeza que deseja excluir o registro de ${audit.user_name}?\n\nSorteio: ${audit.raffle_title}\nPrêmio: R$ ${audit.prize_amount?.toFixed(2)}`)) {
+    if (
+      window.confirm(
+        `Tem certeza que deseja excluir o registro de ${audit.user_name}?\n\nSorteio: ${audit.raffle_title}\nPremio: R$ ${audit.prize_amount?.toFixed(2)}`
+      )
+    ) {
       try {
         await deleteAuditMutation.mutateAsync(audit.id);
-        alert("Registro excluído com sucesso!");
+        alert("Registro excluido com sucesso!");
       } catch (error) {
-        alert("Erro ao excluir registro: " + error.message);
+        alert(`Erro ao excluir registro: ${error?.message || "falha inesperada"}`);
       }
     }
   };
@@ -170,18 +108,21 @@ export default function AuditTab() {
   const handleConfirmRedeemed = async () => {
     const normalizedCode = String(redemptionCode || "").trim().toLowerCase();
     if (!normalizedCode) {
-      alert("Digite o código de validação.");
+      alert("Digite o codigo de validacao.");
       return;
     }
 
-    const targetAudit = normalizedAudits.find((audit) => String(audit.validation_code || "").trim().toLowerCase() === normalizedCode);
+    const targetAudit = normalizedAudits.find(
+      (audit) => String(audit.validation_code || "").trim().toLowerCase() === normalizedCode
+    );
+
     if (!targetAudit) {
-      alert("Nenhum registro encontrado para esse código.");
+      alert("Nenhum registro encontrado para esse codigo.");
       return;
     }
 
     if (String(targetAudit.redemption_status || "").toLowerCase() === "redeemed") {
-      alert("Esse prêmio já foi marcado como resgatado.");
+      alert("Esse premio ja foi marcado como resgatado.");
       return;
     }
 
@@ -190,20 +131,20 @@ export default function AuditTab() {
       setRedemptionCode("");
       alert(`Resgate confirmado para ${targetAudit.user_name}.`);
     } catch (error) {
-      alert("Erro ao confirmar resgate: " + (error?.message || "Tente novamente."));
+      alert(`Erro ao confirmar resgate: ${error?.message || "Tente novamente."}`);
     }
   };
 
   const handleManualRedeem = async (audit) => {
     if (String(audit.redemption_status || "").toLowerCase() === "redeemed") {
-      alert("Esse prêmio já foi marcado como resgatado.");
+      alert("Esse premio ja foi marcado como resgatado.");
       return;
     }
     try {
       await redeemAuditMutation.mutateAsync(audit);
       alert(`Resgate marcado manualmente para ${audit.user_name}.`);
     } catch (error) {
-      alert("Erro ao validar manualmente: " + (error?.message || "Tente novamente."));
+      alert(`Erro ao validar manualmente: ${error?.message || "Tente novamente."}`);
     }
   };
 
@@ -237,15 +178,18 @@ export default function AuditTab() {
       });
     }
 
-    const content = dataToDownload.map((audit) => {
-      const date = audit.drawn_at ? format(new Date(audit.drawn_at), "dd/MM/yyyy HH:mm:ss") : "N/A";
-      const validationDate = audit.validated_at ? format(new Date(audit.validated_at), "dd/MM/yyyy HH:mm:ss") : "N/A";
-      return `
+    const content = dataToDownload
+      .map((audit) => {
+        const date = audit.drawn_at ? format(new Date(audit.drawn_at), "dd/MM/yyyy HH:mm:ss") : "N/A";
+        const validationDate = audit.validated_at
+          ? format(new Date(audit.validated_at), "dd/MM/yyyy HH:mm:ss")
+          : "N/A";
+        return `
 ===========================================
 Data/Hora: ${date}
 Sorteio: ${audit.raffle_title}
 Call de Jogo: ${audit.game_call || "N/A"}
-Código: ${audit.validation_code || "N/A"}
+Codigo: ${audit.validation_code || "N/A"}
 -------------------------------------------
 Ganhador: ${audit.user_name} (@${audit.user_nick})
 Telefone: ${audit.user_phone || "N/A"}
@@ -253,16 +197,19 @@ Email: ${audit.user_email || "N/A"}
 Plataforma: ${audit.platform_name || "N/A"}
 ID da Plataforma: ${audit.user_platform_id || "N/A"}
 -------------------------------------------
-Prêmio: R$ ${audit.prize_amount?.toFixed(2) || "0.00"}
+Premio: R$ ${audit.prize_amount?.toFixed(2) || "0.00"}
 Tipo: ${audit.reward_type === "points_balance" ? "BANCA / SALDO" : "DINHEIRO / PIX"}
 Status: ${audit.status === "validated" ? "VALIDADO" : "INVALIDADO"}
 Resgate: ${audit.redemption_status === "redeemed" ? "CONFIRMADO" : "PENDENTE"}
-Data Validação: ${validationDate}
+Data Validacao: ${validationDate}
 ===========================================
 `;
-    }).join("\n");
+      })
+      .join("\n");
 
-    const filename = daily ? `auditoria_${format(new Date(), "dd-MM-yyyy")}.txt` : `auditoria_completa_${format(new Date(), "dd-MM-yyyy_HH-mm")}.txt`;
+    const filename = daily
+      ? `auditoria_${format(new Date(), "dd-MM-yyyy")}.txt`
+      : `auditoria_completa_${format(new Date(), "dd-MM-yyyy_HH-mm")}.txt`;
     const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -287,11 +234,11 @@ Data Validação: ${validationDate}
           <div className="flex gap-2">
             <Button onClick={() => downloadReport(true)} className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
               <Download className="w-4 h-4 mr-2" />
-              Baixar Relatório do Dia
+              Baixar Relatorio do Dia
             </Button>
             <Button onClick={() => downloadReport(false)} className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700">
               <Download className="w-4 h-4 mr-2" />
-              Baixar Relatório Completo
+              Baixar Relatorio Completo
             </Button>
           </div>
         </div>
@@ -301,7 +248,7 @@ Data Validação: ${validationDate}
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-400" />
             <Input
               type="text"
-              placeholder="Buscar por nome, nick, email, telefone, ID da plataforma, sorteio, call ou código..."
+              placeholder="Buscar por nome, nick, email, telefone, ID da plataforma, sorteio, call ou codigo..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 bg-indigo-900/50 border-indigo-700 text-white placeholder:text-indigo-400"
@@ -310,19 +257,23 @@ Data Validação: ${validationDate}
         </div>
 
         <div className="mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-950/30 p-4">
-          <p className="text-sm font-semibold text-emerald-200">Confirmar resgate por código</p>
+          <p className="text-sm font-semibold text-emerald-200">Confirmar resgate por codigo</p>
           <p className="mt-1 text-xs text-emerald-300/80">
-            Use o código enviado pelo ganhador para marcar que o prêmio em dinheiro ou banca já foi entregue.
+            Use o codigo enviado pelo ganhador para marcar que o premio em dinheiro ou banca ja foi entregue.
           </p>
           <div className="mt-3 flex flex-col gap-2 md:flex-row">
             <Input
               type="text"
-              placeholder="Digite o código de validação"
+              placeholder="Digite o codigo de validacao"
               value={redemptionCode}
               onChange={(e) => setRedemptionCode(e.target.value)}
               className="bg-emerald-950/40 border-emerald-700 text-white placeholder:text-emerald-300/60"
             />
-            <Button onClick={handleConfirmRedeemed} disabled={redeemAuditMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700">
+            <Button
+              onClick={handleConfirmRedeemed}
+              disabled={redeemAuditMutation.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
               {redeemAuditMutation.isPending ? "Confirmando..." : "Confirmar resgate"}
             </Button>
           </div>
@@ -339,11 +290,11 @@ Data Validação: ${validationDate}
                 <th className="text-left p-3 text-indigo-200 font-semibold">Email</th>
                 <th className="text-left p-3 text-indigo-200 font-semibold">Telefone</th>
                 <th className="text-left p-3 text-indigo-200 font-semibold">Plataforma / ID</th>
-                <th className="text-left p-3 text-indigo-200 font-semibold">Código</th>
-                <th className="text-left p-3 text-indigo-200 font-semibold">Prêmio</th>
+                <th className="text-left p-3 text-indigo-200 font-semibold">Codigo</th>
+                <th className="text-left p-3 text-indigo-200 font-semibold">Premio</th>
                 <th className="text-left p-3 text-indigo-200 font-semibold">Status</th>
                 <th className="text-left p-3 text-indigo-200 font-semibold">Resgate</th>
-                <th className="text-left p-3 text-indigo-200 font-semibold">Ações</th>
+                <th className="text-left p-3 text-indigo-200 font-semibold">Acoes</th>
               </tr>
             </thead>
             <tbody>

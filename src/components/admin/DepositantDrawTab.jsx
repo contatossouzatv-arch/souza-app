@@ -31,18 +31,15 @@ export default function DepositantDrawTab() {
   const [particles, setParticles] = useState([]);
   const [floatingIcons, setFloatingIcons] = useState([]);
 
-  // Buscar TODOS os ciclos que precisam ter o sorteio dos bilhetes realizado
-  const { data: pendingRaffleCycles = [] } = useQuery({
-    queryKey: ['pending-raffle-cycles'],
-    queryFn: async () => {
-      // Buscar TODOS os ciclos que ainda nao tiveram o sorteio dos bilhetes concluido
-      const allCycles = await base44.entities.DepositantDrawCycle.list('-cycle_number');
-      return allCycles.filter(c => !c.raffle_completed);
-    },
-  });
-
   // Ciclo selecionado para sorteio
   const [selectedCycleId, setSelectedCycleId] = useState(null);
+
+  const { data: overview } = useQuery({
+    queryKey: ['deposit-draw-overview', selectedCycleId],
+    queryFn: () => base44.adminEvents.depositDraws.overview({ cycleId: selectedCycleId }),
+  });
+
+  const pendingRaffleCycles = overview?.pendingCycles || [];
   
   useEffect(() => {
     // Selecionar automaticamente o primeiro ciclo pendente
@@ -51,28 +48,10 @@ export default function DepositantDrawTab() {
     }
   }, [pendingRaffleCycles, selectedCycleId]);
 
-  const lastEndedCycle = pendingRaffleCycles.find(c => c.id === selectedCycleId) || null;
-
-  const { data: deposits = [] } = useQuery({
-    queryKey: ['cycle-deposits-depositant', lastEndedCycle?.id],
-    queryFn: () => base44.entities.Deposit.filter({ 
-      cycle_id: lastEndedCycle.id,
-      status: 'approved' 
-    }, '-created_date'),
-    enabled: !!lastEndedCycle,
-  });
-
-  const { data: winners = [] } = useQuery({
-    queryKey: ['depositant-winners'],
-    queryFn: () => base44.entities.DepositantDrawWinner.list('-created_date'),
-  });
-
-  const { data: settings = [] } = useQuery({
-    queryKey: ['depositant-draw-settings'],
-    queryFn: () => base44.entities.AppSettings.list(),
-  });
-
-  const depositantDrawActive = settings.find(s => s.key === 'depositant_draw_active')?.value === 'true';
+  const lastEndedCycle = overview?.selectedCycle || pendingRaffleCycles.find(c => c.id === selectedCycleId) || null;
+  const deposits = overview?.deposits || [];
+  const winners = overview?.winners || [];
+  const depositantDrawActive = overview?.depositantDrawActive === true;
 
   // Gerar particulas e icones flutuantes
   useEffect(() => {
@@ -99,38 +78,8 @@ export default function DepositantDrawTab() {
     setFloatingIcons(icons);
   }, []);
 
-  // Calcular participantes usando os bilhetes ja gerados
-  const calculateParticipants = () => {
-    const userMap = {};
-    
-    deposits.forEach(deposit => {
-      const amount = parseFloat(deposit.amount) || 0;
-      const ticketsCount = deposit.ticket_numbers?.length || 0;
-      
-      if (!userMap[deposit.user_id]) {
-        userMap[deposit.user_id] = {
-          user_id: deposit.user_id,
-          user_name: deposit.user_name,
-          user_email: deposit.user_email,
-          user_nick: deposit.user_name,
-          user_avatar: "",
-          user_platform_id: deposit.user_platform_id || "",
-          total_deposited: 0,
-          tickets_count: 0
-        };
-      }
-      
-      userMap[deposit.user_id].total_deposited += amount;
-      // Usar os bilhetes ja gerados no deposito
-      userMap[deposit.user_id].tickets_count += ticketsCount;
-    });
-
-    // Retornar apenas usuarios com pelo menos 1 bilhete
-    return Object.values(userMap).filter(u => u.tickets_count > 0);
-  };
-
-  const participants = calculateParticipants();
-  const totalTickets = participants.reduce((sum, p) => sum + p.tickets_count, 0);
+  const participants = overview?.participants || [];
+  const totalTickets = Number(overview?.totalTickets || 0);
 
   // Filtrar ganhadores apenas do ultimo ciclo encerrado
   const cycleWinners = lastEndedCycle ? winners.filter(w => w.cycle_id === lastEndedCycle.id) : [];
@@ -144,15 +93,15 @@ export default function DepositantDrawTab() {
         winnerCount: drawCount,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['depositant-winners'] });
+      queryClient.invalidateQueries({ queryKey: ['deposit-draw-overview'] });
     }
   });
 
   const validateWinnerMutation = useMutation({
     mutationFn: async (winner) => base44.adminEvents.depositDraws.validateWinner(winner.id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['depositant-winners'] });
-      queryClient.invalidateQueries({ queryKey: ['audit'] });
+      queryClient.invalidateQueries({ queryKey: ['deposit-draw-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['winner-audits'] });
       alert("Ganhador validado e registrado na auditoria!");
     }
   });
@@ -160,15 +109,14 @@ export default function DepositantDrawTab() {
   const deleteWinnerMutation = useMutation({
     mutationFn: (winnerId) => base44.adminEvents.depositDraws.deleteWinner(winnerId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['depositant-winners'] });
+      queryClient.invalidateQueries({ queryKey: ['deposit-draw-overview'] });
     }
   });
 
   const clearAllTicketsMutation = useMutation({
     mutationFn: async () => base44.adminEvents.depositDraws.resetTickets(lastEndedCycle.id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['all-approved-deposits'] });
-      queryClient.invalidateQueries({ queryKey: ['deposits'] }); // Invalidate general deposits if any component uses it
+      queryClient.invalidateQueries({ queryKey: ['deposit-draw-overview'] });
       alert("Todos os bilhetes foram zerados com sucesso!");
     },
     onError: (error) => {

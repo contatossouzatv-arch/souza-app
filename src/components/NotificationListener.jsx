@@ -15,7 +15,10 @@ export default function NotificationListener() {
 
   const { data: notifications = [] } = useQuery({
     queryKey: ['push-notifications-check'],
-    queryFn: () => base44.entities.PushNotification.list('-created_date', 50),
+    queryFn: async () => {
+      const response = await base44.notifications.recent({ limit: 50 });
+      return response.items || [];
+    },
   });
 
   useEffect(() => {

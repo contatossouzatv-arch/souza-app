@@ -76,6 +76,19 @@ router.post("/admin/live-draws/:id/end", requireAuth, requireAdmin, async (req, 
   res.status(result?.idempotent ? 200 : 201).json(result);
 });
 
+router.get("/admin/live-draws/current", requireAuth, requireAdmin, async (_req, res) => {
+  const raffle = await liveDrawAdmin.getCurrent();
+  res.json({ item: raffle });
+});
+
+router.get("/admin/live-draws/:id/participants", requireAuth, requireAdmin, async (req, res) => {
+  const participants = await liveDrawAdmin.listParticipants({
+    raffleId: req.params.id,
+    limit: req.query?.limit,
+  });
+  res.json({ items: participants, count: participants.length });
+});
+
 router.post("/admin/live-draws/participants/:id/:action", requireAuth, requireAdmin, async (req, res) => {
   const action = String(req.params.action || "").trim();
   if (!["validate", "invalidate", "reactivate"].includes(action)) {
@@ -126,6 +139,19 @@ router.post("/admin/game-calls/:id/end", requireAuth, requireAdmin, async (req, 
   emitEntityChanged(req, "GameCallRaffle", "updated", result?.raffle || null);
   await logSecurity(req, "ADMIN_GAME_CALL_ENDED", { raffle_id: req.params.id, idempotent: result?.idempotent });
   res.status(result?.idempotent ? 200 : 201).json(result);
+});
+
+router.get("/admin/game-calls/current", requireAuth, requireAdmin, async (_req, res) => {
+  const raffle = await gameCallAdmin.getCurrent();
+  res.json({ item: raffle });
+});
+
+router.get("/admin/game-calls/:id/participants", requireAuth, requireAdmin, async (req, res) => {
+  const participants = await gameCallAdmin.listParticipants({
+    raffleId: req.params.id,
+    limit: req.query?.limit,
+  });
+  res.json({ items: participants, count: participants.length });
 });
 
 router.post("/admin/game-calls/participants/:id/:action", requireAuth, requireAdmin, async (req, res) => {
@@ -187,6 +213,14 @@ router.post("/admin/instant-raffles/:id/reactivate", requireAuth, requireAdmin, 
   res.status(result?.idempotent ? 200 : 201).json(result);
 });
 
+router.get("/admin/instant-raffles/:id/participants", requireAuth, requireAdmin, async (req, res) => {
+  const participants = await instantRaffleAdmin.listParticipants({
+    raffleId: req.params.id,
+    limit: req.query?.limit,
+  });
+  res.json({ items: participants, count: participants.length });
+});
+
 router.post("/admin/instant-raffles/participants/:id/validate", requireAuth, requireAdmin, async (req, res) => {
   const result = await instantRaffleAdmin.validateWinner({ participantId: req.params.id, validated: Boolean(req.body?.validated), requestId: req.body?.requestId, adminUserId: req.auth.sub, adminEmail: req.auth.email });
   emitEntityChanged(req, "InstantRaffleParticipant", "updated", result?.participant || null);
@@ -202,6 +236,78 @@ router.delete("/admin/instant-raffles/participants/:id", requireAuth, requireAdm
 router.delete("/admin/instant-raffles/:id", requireAuth, requireAdmin, async (req, res) => {
   const result = await instantRaffleAdmin.delete({ raffleId: req.params.id, requestId: req.body?.requestId, adminUserId: req.auth.sub, adminEmail: req.auth.email });
   emitEntityChanged(req, "InstantRaffle", "deleted", { id: req.params.id });
+  res.json(result);
+});
+
+router.get("/admin/deposit-draws/overview", requireAuth, requireAdmin, async (req, res) => {
+  const result = await depositDrawAdmin.getOverview({ cycleId: req.query?.cycleId });
+  res.json(result);
+});
+
+router.get("/admin/deposit-cycles/summary", requireAuth, requireAdmin, async (_req, res) => {
+  const items = await depositDrawAdmin.listCycleSummaries();
+  res.json({ items });
+});
+
+router.get("/admin/deposit-cycles/:id/totals", requireAuth, requireAdmin, async (req, res) => {
+  const result = await depositDrawAdmin.getCycleTotals({ cycleId: req.params.id });
+  res.json(result);
+});
+
+router.post("/admin/deposit-cycles", requireAuth, requireAdmin, async (req, res) => {
+  const result = await depositDrawAdmin.createCycle({
+    drawDate: req.body?.drawDate,
+    requestId: req.body?.requestId,
+    adminUserId: req.auth.sub,
+    adminEmail: req.auth.email,
+  });
+  emitEntityChanged(req, "DepositantDrawCycle", "created", result?.cycle || null);
+  res.status(result?.idempotent ? 200 : 201).json(result);
+});
+
+router.patch("/admin/deposit-cycles/:id", requireAuth, requireAdmin, async (req, res) => {
+  const result = await depositDrawAdmin.updateCycle({
+    cycleId: req.params.id,
+    drawDate: req.body?.drawDate,
+    endDate: req.body?.endDate,
+    requestId: req.body?.requestId,
+    adminUserId: req.auth.sub,
+    adminEmail: req.auth.email,
+  });
+  emitEntityChanged(req, "DepositantDrawCycle", "updated", result?.cycle || null);
+  res.json(result);
+});
+
+router.post("/admin/deposit-cycles/:id/end", requireAuth, requireAdmin, async (req, res) => {
+  const result = await depositDrawAdmin.endCycle({
+    cycleId: req.params.id,
+    requestId: req.body?.requestId,
+    adminUserId: req.auth.sub,
+    adminEmail: req.auth.email,
+  });
+  emitEntityChanged(req, "DepositantDrawCycle", "updated", result?.cycle || null);
+  res.status(result?.idempotent ? 200 : 201).json(result);
+});
+
+router.post("/admin/deposit-cycles/:id/reactivate", requireAuth, requireAdmin, async (req, res) => {
+  const result = await depositDrawAdmin.reactivateCycle({
+    cycleId: req.params.id,
+    requestId: req.body?.requestId,
+    adminUserId: req.auth.sub,
+    adminEmail: req.auth.email,
+  });
+  emitEntityChanged(req, "DepositantDrawCycle", "updated", result?.cycle || null);
+  res.status(result?.idempotent ? 200 : 201).json(result);
+});
+
+router.delete("/admin/deposit-cycles/:id", requireAuth, requireAdmin, async (req, res) => {
+  const result = await depositDrawAdmin.deleteCycle({
+    cycleId: req.params.id,
+    requestId: req.body?.requestId,
+    adminUserId: req.auth.sub,
+    adminEmail: req.auth.email,
+  });
+  emitEntityChanged(req, "DepositantDrawCycle", "deleted", { id: req.params.id });
   res.json(result);
 });
 
@@ -223,7 +329,13 @@ router.delete("/admin/deposit-draws/winners/:id", requireAuth, requireAdmin, asy
 });
 
 router.post("/admin/deposit-draws/:id/complete", requireAuth, requireAdmin, async (req, res) => {
-  const result = await depositDrawAdmin.complete({ cycleId: req.params.id, requestId: req.body?.requestId, adminUserId: req.auth.sub, adminEmail: req.auth.email });
+  const result = await depositDrawAdmin.complete({
+    cycleId: req.params.id,
+    winners: req.body?.winners || [],
+    requestId: req.body?.requestId,
+    adminUserId: req.auth.sub,
+    adminEmail: req.auth.email,
+  });
   emitEntityChanged(req, "DepositantDrawCycle", "updated", result?.cycle || null);
   res.status(result?.idempotent ? 200 : 201).json(result);
 });

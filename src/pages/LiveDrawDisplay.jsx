@@ -19,19 +19,12 @@ export default function LiveDrawDisplay() {
   const [floatingIcons, setFloatingIcons] = useState([]);
   const [isDrawing, setIsDrawing] = useState(false);
 
-  const { data: activeRaffle } = useQuery({
+  const { data: displaySummary } = useQuery({
     queryKey: ['display-raffle'],
-    queryFn: async () => {
-      const raffles = await base44.entities.LiveDrawRaffle.filter({ active: true, ended: false });
-      return raffles[0] || null;
-    },
+    queryFn: () => base44.liveDrawDisplay.current(),
   });
-
-  const { data: participants = [] } = useQuery({
-    queryKey: ['display-participants', activeRaffle?.id],
-    queryFn: () => base44.entities.LiveDrawParticipant.filter({ raffle_id: activeRaffle.id }, '-created_date'),
-    enabled: !!activeRaffle,
-  });
+  const activeRaffle = displaySummary?.raffle || null;
+  const participants = displaySummary?.participants || [];
 
   // Detectar quando está sorteando (participantes mudando rapidamente)
   const [lastParticipantCount, setLastParticipantCount] = useState(0);

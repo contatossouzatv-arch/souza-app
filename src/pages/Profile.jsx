@@ -134,14 +134,7 @@ const PROFILE_DEBUG_ENABLED = false;
 const PROFILE_NON_CRITICAL_LOAD_DELAY_MS = 1800;
 const PROFILE_ENGAGED_QUERY_LIMIT = 3;
 
-function profileDebugLog(label, payload = undefined) {
-  if (!PROFILE_DEBUG_ENABLED || typeof console === "undefined") return;
-  if (payload === undefined) {
-    console.log(`[PROFILE_DEBUG] ${label}`);
-    return;
-  }
-  console.log(`[PROFILE_DEBUG] ${label}`, payload);
-}
+function profileDebugLog() {}
 
 function getSpecialBadgeVisual(achievement) {
   const normalizedLabel = String(achievement?.label || "").toLowerCase();
@@ -1669,19 +1662,33 @@ export default function Profile() {
       retry: false,
     })),
   });
-  const engagedProfileUserQueries = useQueries({
-    queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
-      queryKey: ["public-profile-user", profile.id, "engaged-card"],
-      queryFn: async () => {
-        const items = await base44.entities.User.filter({ id: profile.id }, undefined, 1);
-        return Array.isArray(items) ? items[0] || null : null;
-      },
-      enabled: canLoadDeferredProfileQueries && !!profile?.id,
-      staleTime: 30000,
-      refetchOnWindowFocus: false,
-      retry: false,
-    })),
+  const publicProfileBasicIds = useMemo(() => {
+    const ids = [];
+    if (selectedPublicProfileId) ids.push(selectedPublicProfileId);
+    if (canLoadDeferredProfileQueries) {
+      engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).forEach((profile) => {
+        if (profile?.id) ids.push(profile.id);
+      });
+    }
+    return Array.from(new Set(ids.map((item) => String(item || "").trim()).filter(Boolean)));
+  }, [canLoadDeferredProfileQueries, engagedProfiles, selectedPublicProfileId]);
+  const { data: publicProfileBasicsPayload } = useQuery({
+    queryKey: ["public-profile-basics", publicProfileBasicIds.join(",")],
+    queryFn: () => base44.profile.publicBasics(publicProfileBasicIds),
+    enabled: publicProfileBasicIds.length > 0 && (Boolean(selectedPublicProfileId) || canLoadDeferredProfileQueries),
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
+  const publicProfileBasicsMap = useMemo(() => {
+    const map = new Map();
+    (publicProfileBasicsPayload?.items || []).forEach((item) => {
+      if (item?.id) {
+        map.set(String(item.id), item);
+      }
+    });
+    return map;
+  }, [publicProfileBasicsPayload?.items]);
   const engagedProfileSocialQueries = useQueries({
     queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
       queryKey: ["social-target-state", user?.id, profile.id, "engaged-card"],
@@ -1697,20 +1704,17 @@ export default function Profile() {
   });
   const engagedProfilesWithSummary = useMemo(() => {
     const summaryMap = new Map();
-    const userMap = new Map();
     const socialMap = new Map();
     engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).forEach((profile, index) => {
       const payload = engagedProfileSummaryQueries[index]?.data || null;
       if (payload) summaryMap.set(profile.id, payload);
-      const userPayload = engagedProfileUserQueries[index]?.data || null;
-      if (userPayload) userMap.set(profile.id, userPayload);
       const socialPayload = engagedProfileSocialQueries[index]?.data || null;
       if (socialPayload) socialMap.set(profile.id, socialPayload);
     });
 
     return engagedProfiles
       .map((profile) => {
-        const realUser = userMap.get(profile.id) || null;
+        const realUser = publicProfileBasicsMap.get(String(profile.id || "")) || null;
         const summary = summaryMap.get(profile.id) || null;
         const summaryMetrics = summary?.metrics || {};
         const summaryEntry = summary?.currentCompetitionEntry || {};
@@ -1776,7 +1780,7 @@ export default function Profile() {
         ...profile,
         position: index + 1,
       }));
-  }, [avatarSrcById, engagedProfileSocialQueries, engagedProfileSummaryQueries, engagedProfileUserQueries, engagedProfiles]);
+  }, [avatarSrcById, engagedProfileSocialQueries, engagedProfileSummaryQueries, engagedProfiles, publicProfileBasicsMap]);
 
   useEffect(() => {
     if (!simulatedProfiles.length) return;
@@ -2060,18 +2064,7 @@ export default function Profile() {
     };
   }, []);
 
-  const { data: selectedPublicUserById } = useQuery({
-    queryKey: ["public-profile-user", selectedPublicProfileId],
-    queryFn: async () => {
-      profileDebugLog("query:public-profile-user", {
-        selectedPublicProfileId,
-      });
-      const items = await base44.entities.User.filter({ id: selectedPublicProfileId }, undefined, 1);
-      return Array.isArray(items) ? items[0] || null : null;
-    },
-    enabled: Boolean(selectedPublicProfileId),
-    staleTime: 30000,
-  });
+  const selectedPublicUserById = publicProfileBasicsMap.get(String(selectedPublicProfileId || "")) || null;
 
   useEffect(() => {
     debugEffect("scroll-public-profile", {
@@ -2183,7 +2176,10 @@ export default function Profile() {
 
   const { data: profileNotifications = [] } = useQuery({
     queryKey: ["profile-notifications", user?.id],
-    queryFn: () => base44.entities.ProfileNotification.filter({ user_id: user.id }, "-created_date", 50),
+    queryFn: async () => {
+      const response = await base44.profile.notifications({ limit: 50 });
+      return response?.items || [];
+    },
     enabled: Boolean(user?.id) && !isViewingPublicProfile && canLoadDeferredProfileQueries,
     staleTime: 15000,
     refetchOnWindowFocus: false,
@@ -2191,17 +2187,7 @@ export default function Profile() {
   });
 
   const markProfileNotificationsReadMutation = useMutation({
-    mutationFn: async (notificationIds) => {
-      const ids = Array.isArray(notificationIds) ? notificationIds.filter(Boolean) : [];
-      await Promise.all(
-        ids.map((id) =>
-          base44.entities.ProfileNotification.update(id, {
-            status: "read",
-            read_at: new Date().toISOString(),
-          })
-        )
-      );
-    },
+    mutationFn: async (notificationIds) => base44.profile.markNotificationsRead(notificationIds),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile-notifications", user?.id] });
     },

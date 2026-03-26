@@ -128,10 +128,7 @@ function PrizeDetailsDialog({ item, viewer, open, onOpenChange }) {
     String(item?.source_type || item?.metadata?.source_type || "").toLowerCase() === "instant_raffle";
   const { data: relatedInstantRaffle = null } = useQuery({
     queryKey: ["prize-gallery-instant-raffle", raffleId],
-    queryFn: async () => {
-      const raffles = await base44.entities.InstantRaffle.filter({ id: raffleId });
-      return raffles[0] || null;
-    },
+    queryFn: () => base44.instantRaffles.basic(raffleId),
     enabled: open && isInstantRafflePrize && !!raffleId,
     staleTime: 60000,
   });

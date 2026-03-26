@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Card } from "@/components/ui/card";
@@ -10,88 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trophy, Plus, Calendar, Award, CheckCircle, Pencil, Users, DollarSign, Ticket } from "lucide-react";
 
-function buildUsersById(users = []) {
-  const map = {};
-  users.forEach((entry) => {
-    map[entry.id] = entry;
-  });
-  return map;
-}
-
-function buildDepositParticipantStats(deposits = [], usersById = {}) {
-  const stats = {};
-
-  deposits.forEach((deposit) => {
-    const profile = usersById[deposit.user_id] || {};
-
-    if (!stats[deposit.user_id]) {
-      stats[deposit.user_id] = {
-        user_id: deposit.user_id,
-        user_name: deposit.user_name || profile.full_name || profile.name || "-",
-        user_email: deposit.user_email || profile.email || "-",
-        platform_id: deposit.user_platform_id || deposit.platform_id || profile.platform_id || "-",
-        total: 0,
-        deposits_count: 0,
-        tickets_count: 0,
-      };
-    }
-
-    if (!stats[deposit.user_id].user_name || stats[deposit.user_id].user_name === "-") {
-      stats[deposit.user_id].user_name = deposit.user_name || profile.full_name || profile.name || "-";
-    }
-
-    if (!stats[deposit.user_id].user_email || stats[deposit.user_id].user_email === "-") {
-      stats[deposit.user_id].user_email = deposit.user_email || profile.email || "-";
-    }
-
-    if (!stats[deposit.user_id].platform_id || stats[deposit.user_id].platform_id === "-") {
-      stats[deposit.user_id].platform_id = deposit.user_platform_id || deposit.platform_id || profile.platform_id || "-";
-    }
-
-    stats[deposit.user_id].total += Number(deposit.amount || 0);
-    stats[deposit.user_id].deposits_count += 1;
-    stats[deposit.user_id].tickets_count += Number(
-      deposit.tickets_count || deposit.ticket_numbers?.length || 0
-    );
-  });
-
-  return Object.values(stats).sort((a, b) => b.total - a.total);
-}
-
 // Componente para exibir detalhes do ciclo ativo
-function ActiveCycleDetails({ activeCycle, onEdit, onEnd, onDelete }) {
-  const { data: allUsers = [] } = useQuery({
-    queryKey: ["admin-deposit-cycle-users"],
-    queryFn: () => base44.entities.User.list(undefined, 1000),
-    staleTime: 60000,
-  });
-
-  const { data: cycleDeposits = [] } = useQuery({
-    queryKey: ['active-cycle-deposits', activeCycle.id],
-    queryFn: async () => {
-      const allDeposits = await base44.entities.Deposit.list();
-      return allDeposits.filter(d => d.cycle_id === activeCycle.id && d.status === 'approved');
-    },
-  });
-
-  const { data: pendingDeposits = [] } = useQuery({
-    queryKey: ['active-cycle-pending', activeCycle.id],
-    queryFn: async () => {
-      const allDeposits = await base44.entities.Deposit.list();
-      return allDeposits.filter(d => d.cycle_id === activeCycle.id && d.status === 'pending');
-    },
-  });
-
-  const usersById = useMemo(() => buildUsersById(allUsers), [allUsers]);
-
-  const userStats = useMemo(() => {
-    return buildDepositParticipantStats(cycleDeposits, usersById);
-  }, [cycleDeposits, usersById]);
-
-  const top3 = userStats.slice(0, 3);
-  const totalDeposits = cycleDeposits.reduce((sum, d) => sum + d.amount, 0);
-  const totalPending = pendingDeposits.reduce((sum, d) => sum + d.amount, 0);
-  const totalTickets = userStats.reduce((sum, u) => sum + u.tickets_count, 0);
+function ActiveCycleDetails({ activeCycle, totals = [], onEdit, onEnd, onDelete }) {
+  const top3 = activeCycle?.top_participants || [];
+  const userStats = totals;
+  const totalDeposits = Number(activeCycle?.approved_total || 0);
+  const totalPending = Number(activeCycle?.pending_total || 0);
+  const totalTickets = Number(activeCycle?.tickets_total || 0);
 
   return (
     <>
@@ -292,29 +217,9 @@ function ActiveCycleDetails({ activeCycle, onEdit, onEnd, onDelete }) {
 
 // Componente auxiliar para exibir ciclo encerrado
 function EndedCycleCard({ cycle, onEdit, onViewTotals, onRegisterRaffle, onReactivate, onDelete }) {
-  const { data: allUsers = [] } = useQuery({
-    queryKey: ["admin-deposit-cycle-users"],
-    queryFn: () => base44.entities.User.list(undefined, 1000),
-    staleTime: 60000,
-  });
-
-  const { data: cycleDepositsForTop3 = [] } = useQuery({
-    queryKey: ['cycle-deposits-top3', cycle.id],
-    queryFn: async () => {
-      const allDeposits = await base44.entities.Deposit.list();
-      return allDeposits.filter(d => d.cycle_id === cycle.id && d.status === 'approved');
-    },
-  });
-
-  const usersById = useMemo(() => buildUsersById(allUsers), [allUsers]);
-
-  const userTotalsTop3 = useMemo(() => {
-    return buildDepositParticipantStats(cycleDepositsForTop3, usersById);
-  }, [cycleDepositsForTop3, usersById]);
-
-  const top1 = userTotalsTop3[0];
-  const top2 = userTotalsTop3[1];
-  const top3 = userTotalsTop3[2];
+  const top1 = cycle?.top_participants?.[0];
+  const top2 = cycle?.top_participants?.[1];
+  const top3 = cycle?.top_participants?.[2];
 
   return (
     <Card className="bg-slate-800/50 border-slate-700 p-6">
@@ -421,44 +326,33 @@ export default function DepositCyclesTab() {
   const [editDrawDate, setEditDrawDate] = useState("");
   const [viewingCycleTotals, setViewingCycleTotals] = useState(null);
 
-  const { data: allUsers = [] } = useQuery({
-    queryKey: ["admin-deposit-cycle-users"],
-    queryFn: () => base44.entities.User.list(undefined, 1000),
-    staleTime: 60000,
-  });
-
-  const { data: cycles = [] } = useQuery({
+  const { data: cyclesSummaryResponse } = useQuery({
     queryKey: ['deposit-cycles'],
-    queryFn: () => base44.entities.DepositantDrawCycle.list('-created_date'),
+    queryFn: () => base44.adminEvents.depositCycles.summary(),
+  });
+  const cycles = cyclesSummaryResponse?.items || [];
+
+  const { data: viewingCycleTotalsResponse } = useQuery({
+    queryKey: ['cycle-deposits', viewingCycleTotals?.id],
+    queryFn: () => base44.adminEvents.depositCycles.totals(viewingCycleTotals.id),
+    enabled: !!viewingCycleTotals,
   });
 
-  const { data: cycleDeposits = [] } = useQuery({
-    queryKey: ['cycle-deposits', viewingCycleTotals?.id],
-    queryFn: async () => {
-      if (!viewingCycleTotals) return [];
-      const allDeposits = await base44.entities.Deposit.list('-created_date');
-      return allDeposits.filter(d => d.cycle_id === viewingCycleTotals.id && d.status === 'approved');
-    },
-    enabled: !!viewingCycleTotals,
+  const { data: activeCycleTotalsResponse } = useQuery({
+    queryKey: ['active-cycle-totals', cycles.find(c => c.active)?.id],
+    queryFn: () => base44.adminEvents.depositCycles.totals(cycles.find(c => c.active).id),
+    enabled: Boolean(cycles.find(c => c.active)?.id),
   });
 
   const activeCycle = cycles.find(c => c.active);
   const endedCycles = cycles.filter(c => !c.active);
-  const usersById = useMemo(() => buildUsersById(allUsers), [allUsers]);
+  const cycleTotals = viewingCycleTotalsResponse?.totals || [];
+  const activeCycleTotals = activeCycleTotalsResponse?.totals || [];
 
   const [newCycleDrawDate, setNewCycleDrawDate] = useState("");
 
   const createCycleMutation = useMutation({
-    mutationFn: async () => {
-      const cycleNumber = cycles.length + 1;
-      await base44.entities.DepositantDrawCycle.create({
-        cycle_number: cycleNumber,
-        start_date: new Date().toISOString(),
-        draw_date: newCycleDrawDate || null,
-        active: true,
-        raffle_completed: false
-      });
-    },
+    mutationFn: async () => base44.adminEvents.depositCycles.create({ drawDate: newCycleDrawDate || null }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deposit-cycles'] });
       setShowNewCycle(false);
@@ -467,39 +361,7 @@ export default function DepositCyclesTab() {
   });
 
   const endCycleMutation = useMutation({
-    mutationFn: async (cycleId) => {
-      const deposits = await base44.entities.Deposit.list();
-      const approvedDeposits = deposits.filter(d => d.status === 'approved');
-      
-      const userTotals = {};
-      approvedDeposits.forEach(d => {
-        if (!userTotals[d.user_id]) {
-          userTotals[d.user_id] = {
-            user_id: d.user_id,
-            user_name: d.user_name,
-            total: 0
-          };
-        }
-        userTotals[d.user_id].total += d.amount;
-      });
-
-      const rankings = Object.values(userTotals).sort((a, b) => b.total - a.total);
-      const top3 = rankings.slice(0, 3);
-
-      await base44.entities.DepositantDrawCycle.update(cycleId, {
-        active: false,
-        end_date: new Date().toISOString(),
-        first_place_user_id: top3[0]?.user_id || '',
-        first_place_user_name: top3[0]?.user_name || '',
-        first_place_amount: top3[0]?.total || 0,
-        second_place_user_id: top3[1]?.user_id || '',
-        second_place_user_name: top3[1]?.user_name || '',
-        second_place_amount: top3[1]?.total || 0,
-        third_place_user_id: top3[2]?.user_id || '',
-        third_place_user_name: top3[2]?.user_name || '',
-        third_place_amount: top3[2]?.total || 0,
-      });
-    },
+    mutationFn: async (cycleId) => base44.adminEvents.depositCycles.end(cycleId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deposit-cycles'] });
     },
@@ -507,10 +369,7 @@ export default function DepositCyclesTab() {
 
   const completeRaffleMutation = useMutation({
     mutationFn: async ({ cycleId, winners }) => {
-      await base44.entities.DepositantDrawCycle.update(cycleId, {
-        raffle_completed: true,
-        raffle_winners: winners
-      });
+      await base44.adminEvents.depositDraws.complete(cycleId, { winners });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deposit-cycles'] });
@@ -520,7 +379,10 @@ export default function DepositCyclesTab() {
 
   const updateCycleMutation = useMutation({
     mutationFn: async ({ cycleId, data }) => {
-      await base44.entities.DepositantDrawCycle.update(cycleId, data);
+      await base44.adminEvents.depositCycles.update(cycleId, {
+        drawDate: data.draw_date,
+        endDate: data.end_date,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deposit-cycles'] });
@@ -529,18 +391,7 @@ export default function DepositCyclesTab() {
   });
 
   const reactivateCycleMutation = useMutation({
-    mutationFn: async (cycleId) => {
-      // Desativar qualquer ciclo ativo
-      const active = cycles.find(c => c.active);
-      if (active) {
-        await base44.entities.DepositantDrawCycle.update(active.id, { active: false });
-      }
-      // Reativar o ciclo selecionado
-      await base44.entities.DepositantDrawCycle.update(cycleId, { 
-        active: true,
-        end_date: null
-      });
-    },
+    mutationFn: async (cycleId) => base44.adminEvents.depositCycles.reactivate(cycleId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deposit-cycles'] });
       alert('✅ Ciclo reativado com sucesso!');
@@ -548,9 +399,7 @@ export default function DepositCyclesTab() {
   });
 
   const deleteCycleMutation = useMutation({
-    mutationFn: async (cycleId) => {
-      await base44.entities.DepositantDrawCycle.delete(cycleId);
-    },
+    mutationFn: async (cycleId) => base44.adminEvents.depositCycles.delete(cycleId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['deposit-cycles'] });
       queryClient.invalidateQueries({ queryKey: ['cycle-deposits'] });
@@ -576,7 +425,7 @@ export default function DepositCyclesTab() {
   };
 
   const getUserTotalsForCycle = () => {
-    return buildDepositParticipantStats(cycleDeposits, usersById).map((entry) => ({
+    return cycleTotals.map((entry) => ({
       id: entry.user_id,
       name: entry.user_name,
       email: entry.user_email,
@@ -622,6 +471,7 @@ export default function DepositCyclesTab() {
             {activeCycle ? (
               <ActiveCycleDetails 
                 activeCycle={activeCycle}
+                totals={activeCycleTotals}
                 onEdit={() => {
                   setEditingCycle(activeCycle);
                   setEditDrawDate(activeCycle.draw_date ? new Date(activeCycle.draw_date).toISOString().slice(0, 16) : "");

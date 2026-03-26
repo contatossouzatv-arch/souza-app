@@ -18,7 +18,10 @@ export default function NotificationsTab() {
 
   const { data: notifications = [] } = useQuery({
     queryKey: ["push-notifications"],
-    queryFn: () => base44.entities.PushNotification.list("-created_date"),
+    queryFn: async () => {
+      const response = await base44.notifications.recent({ limit: 100 });
+      return response.items || [];
+    },
   });
 
   const sendNotificationMutation = useMutation({

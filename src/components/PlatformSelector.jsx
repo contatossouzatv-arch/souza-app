@@ -7,8 +7,8 @@ export default function PlatformSelector() {
   const { data: platforms = [] } = useQuery({
     queryKey: ["active-platforms"],
     queryFn: async () => {
-      const allPlatforms = await base44.entities.Platform.filter({ active: true }, "order");
-      return allPlatforms;
+      const response = await base44.platforms.summary();
+      return response.activePlatforms || [];
     },
   });
 

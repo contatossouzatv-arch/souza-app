@@ -15,11 +15,17 @@ export default function PlatformMigrationModal({ user, onVisibilityChange, onCon
 
   const { data: platforms = [] } = useQuery({
     queryKey: ["current-platform-modal"],
-    queryFn: () => base44.entities.CurrentPlatform.list(),
+    queryFn: async () => {
+      const response = await base44.platforms.summary();
+      return response.currentPlatform ? [response.currentPlatform] : [];
+    },
   });
   const { data: platformHistory = [] } = useQuery({
     queryKey: ["platform-history", user?.id],
-    queryFn: () => base44.entities.PlatformHistory.filter({ user_id: user.id }, "-created_date"),
+    queryFn: async () => {
+      const response = await base44.adminEvents.profile.platformHistory();
+      return response.items || [];
+    },
     enabled: Boolean(user?.id),
   });
 

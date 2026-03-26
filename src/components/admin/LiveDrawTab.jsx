@@ -132,70 +132,25 @@ export default function LiveDrawTab() {
   const { data: activeRaffle } = useQuery({
     queryKey: ['active-raffle'],
     queryFn: async () => {
-      const raffles = await base44.entities.LiveDrawRaffle.filter({ active: true, ended: false });
-      return raffles[0] || null;
+      const response = await base44.adminEvents.liveDraws.current();
+      return response?.item || null;
     },
   });
 
   const { data: participants = [] } = useQuery({
     queryKey: ['raffle-participants', activeRaffle?.id],
-    queryFn: () => base44.entities.LiveDrawParticipant.filter({ raffle_id: activeRaffle.id }, '-created_date'),
-    enabled: !!activeRaffle,
-  });
-
-  const { data: activeCycle } = useQuery({
-    queryKey: ['active-cycle-livedraw'],
     queryFn: async () => {
-      const cycles = await base44.entities.DepositantDrawCycle.filter({ active: true });
-      return cycles[0] || null;
+      const response = await base44.adminEvents.liveDraws.listParticipants(activeRaffle.id);
+      return response?.items || [];
     },
-  });
-
-  const { data: cycleDeposits = [] } = useQuery({
-    queryKey: ['cycle-deposits', activeCycle?.id],
-    queryFn: () => base44.entities.Deposit.filter({ 
-      cycle_id: activeCycle.id, 
-      status: 'approved' 
-    }),
-    enabled: !!activeCycle,
-  });
-
-  const { data: validatedWinners = [] } = useQuery({
-    queryKey: ['validated-winners', activeRaffle?.id],
-    queryFn: () => base44.entities.LiveDrawParticipant.filter({ 
-      raffle_id: activeRaffle.id,
-      validation_status: 'validated'
-    }),
     enabled: !!activeRaffle,
   });
-
-  const { data: users = [] } = useQuery({
-    queryKey: ['livedraw-users-avatars'],
-    queryFn: () => base44.entities.User.list(),
-    staleTime: 60000,
-  });
-
-  const usersById = React.useMemo(() => {
-    const map = {};
-    users.forEach((u) => {
-      map[u.id] = u;
-    });
-    return map;
-  }, [users]);
 
   const getParticipantImageUrl = (participant) => {
     if (!participant) return "";
-
-    if (participant.user_profile_image_url) {
-      return resolveAssetUrl(participant.user_profile_image_url);
-    }
-
-    const linkedUser = usersById[participant.user_id];
-    if (linkedUser?.profile_image_status === "approved" && linkedUser?.profile_image_url) {
-      return resolveAssetUrl(linkedUser.profile_image_url);
-    }
-
-    return "";
+    return participant.user_profile_image_url
+      ? resolveAssetUrl(participant.user_profile_image_url)
+      : "";
   };
 
   useEffect(() => {
@@ -272,7 +227,7 @@ export default function LiveDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['active-raffle'] });
       queryClient.invalidateQueries({ queryKey: ['active-live-raffle-box'] });
-      queryClient.invalidateQueries({ queryKey: ['active-live-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       setNewRaffleTitle("");
       setMaxWinners(1);
       setPrizeAmount("");
@@ -287,7 +242,7 @@ export default function LiveDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['active-raffle'] });
       queryClient.invalidateQueries({ queryKey: ['active-live-raffle-box'] });
-      queryClient.invalidateQueries({ queryKey: ['active-live-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       queryClient.invalidateQueries({ queryKey: ['winner-raffles'] });
       queryClient.invalidateQueries({ queryKey: ['user-prize-gallery'] });
     },
@@ -298,7 +253,7 @@ export default function LiveDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['active-raffle'] });
       queryClient.invalidateQueries({ queryKey: ['active-live-raffle-box'] });
-      queryClient.invalidateQueries({ queryKey: ['active-live-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       setFinalWinners([]);
       setShowAnimation(false);
     },
@@ -310,7 +265,7 @@ export default function LiveDrawTab() {
       queryClient.invalidateQueries({ queryKey: ['raffle-participants'] });
       queryClient.invalidateQueries({ queryKey: ['validated-winners'] });
       queryClient.invalidateQueries({ queryKey: ['active-raffle'] });
-      queryClient.invalidateQueries({ queryKey: ['active-live-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       queryClient.invalidateQueries({ queryKey: ['my-winnings'] });
       queryClient.invalidateQueries({ queryKey: ['winner-audits'] });
     },
@@ -322,7 +277,7 @@ export default function LiveDrawTab() {
       queryClient.invalidateQueries({ queryKey: ['raffle-participants'] });
       queryClient.invalidateQueries({ queryKey: ['validated-winners'] });
       queryClient.invalidateQueries({ queryKey: ['active-raffle'] });
-      queryClient.invalidateQueries({ queryKey: ['active-live-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       queryClient.invalidateQueries({ queryKey: ['my-winnings'] });
       queryClient.invalidateQueries({ queryKey: ['winner-audits'] });
     },
@@ -334,7 +289,7 @@ export default function LiveDrawTab() {
       queryClient.invalidateQueries({ queryKey: ['raffle-participants'] });
       queryClient.invalidateQueries({ queryKey: ['validated-winners'] });
       queryClient.invalidateQueries({ queryKey: ['active-raffle'] });
-      queryClient.invalidateQueries({ queryKey: ['active-live-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
     },
   });
 
@@ -343,7 +298,7 @@ export default function LiveDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['raffle-participants'] });
       queryClient.invalidateQueries({ queryKey: ['active-raffle'] });
-      queryClient.invalidateQueries({ queryKey: ['active-live-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
     },
   });
 
@@ -352,7 +307,7 @@ export default function LiveDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['raffle-participants'] });
       queryClient.invalidateQueries({ queryKey: ['active-raffle'] });
-      queryClient.invalidateQueries({ queryKey: ['active-live-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
     },
   });
 
@@ -360,7 +315,7 @@ export default function LiveDrawTab() {
     mutationFn: ({ raffleId, winnerCount }) => base44.adminEvents.liveDraws.draw(raffleId, { winnerCount }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['active-raffle'] });
-      queryClient.invalidateQueries({ queryKey: ['active-live-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
     },
   });
 
@@ -512,6 +467,7 @@ export default function LiveDrawTab() {
 
   // SORTEIO LIVE: Todos que clicarem em participar devem aparecer
   // Não há filtro por depósitos - diferente do Sorteio dos Depositantes
+  const validatedWinners = participants.filter((participant) => participant.validation_status === 'validated' || participant.validated);
   const validatedIds = new Set(validatedWinners.map(w => w.id));
   const activeParticipants = participants.filter(p => 
     p.validation_status === 'pending' && 

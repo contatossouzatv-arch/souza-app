@@ -33,7 +33,7 @@ export default function BannersTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-banners'] });
-      queryClient.invalidateQueries({ queryKey: ['carousel-banners'] });
+      queryClient.invalidateQueries({ queryKey: ['public-ui-config'] });
       setFormData({ title: "", image_url: "", link_url: "", type: "custom", active: true, order: 0 });
       setShowForm(false);
     },
@@ -43,7 +43,7 @@ export default function BannersTab() {
     mutationFn: ({ id, active }) => base44.entities.BannerCarousel.update(id, { active }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-banners'] });
-      queryClient.invalidateQueries({ queryKey: ['carousel-banners'] });
+      queryClient.invalidateQueries({ queryKey: ['public-ui-config'] });
     },
   });
 
@@ -51,7 +51,7 @@ export default function BannersTab() {
     mutationFn: (id) => base44.entities.BannerCarousel.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-banners'] });
-      queryClient.invalidateQueries({ queryKey: ['carousel-banners'] });
+      queryClient.invalidateQueries({ queryKey: ['public-ui-config'] });
     },
   });
 

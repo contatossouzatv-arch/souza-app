@@ -100,7 +100,10 @@ export default function DepositsTab() {
 
   const { data: cycles = [] } = useQuery({
     queryKey: ["deposit-cycles-admin"],
-    queryFn: () => base44.entities.DepositantDrawCycle.list("-created_date"),
+    queryFn: async () => {
+      const response = await base44.adminEvents.depositCycles.summary();
+      return response.items || [];
+    },
   });
 
   const activeCycle = cycles.find((item) => item.active);
@@ -112,33 +115,17 @@ export default function DepositsTab() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: allUsers = [] } = useQuery({
-    queryKey: ["admin-deposits-users"],
-    queryFn: () => base44.entities.User.list(undefined, 1000),
-    staleTime: 60000,
-  });
-
-  const usersById = useMemo(() => {
-    const map = {};
-    allUsers.forEach((entry) => {
-      map[entry.id] = entry;
-    });
-    return map;
-  }, [allUsers]);
-
   const deposits = useMemo(() => {
     const items = depositsResponse?.items || [];
     return items.map((deposit) => {
-      const profile = usersById[deposit.user_id] || {};
       return {
         ...deposit,
-        user_name: deposit.user_name || profile.full_name || profile.name || "Usuário",
-        user_email: deposit.user_email || profile.email || "",
-        user_platform_id:
-          deposit.user_platform_id || deposit.platform_id || profile.platform_id || "",
+        user_name: deposit.user_name || "Usuario",
+        user_email: deposit.user_email || "",
+        user_platform_id: deposit.user_platform_id || deposit.platform_id || "",
       };
     });
-  }, [depositsResponse?.items, usersById]);
+  }, [depositsResponse?.items]);
 
   const { data: historyResponse } = useQuery({
     queryKey: ["admin-deposit-history", historyDeposit?.id],

@@ -8,30 +8,24 @@ import { Card } from "@/components/ui/card";
 import { buildWhatsAppLink } from "@/lib/whatsapp";
 import { useAppSettings } from "@/hooks/useAppSettings";
 
-export default function InstantRaffleBox({ user }) {
+export default function InstantRaffleBox({ user, summary = null }) {
   const queryClient = useQueryClient();
   const [timeRemaining, setTimeRemaining] = useState(null);
   const [isShaking, setIsShaking] = useState(false);
 
-  const { data: activeRaffle } = useQuery({
-    queryKey: ['active-instant-raffles'],
-    queryFn: () => base44.entities.InstantRaffle.filter({ active: true, ended: false }),
-    select: (raffles) => raffles[0] || null,
+  const { data: instantSummaryFromQuery } = useQuery({
+    queryKey: ["dashboard-dynamics-summary"],
+    queryFn: () => base44.dynamics.summary(),
+    select: (data) => data?.instantRaffle || null,
     staleTime: 15_000,
+    enabled: !summary?.raffle,
   });
 
   const { data: settings = [] } = useAppSettings();
 
-  const { data: myParticipationRaw } = useQuery({
-    queryKey: ['my-instant-participation', activeRaffle?.id, user?.id],
-    queryFn: () => base44.entities.InstantRaffleParticipant.filter({ 
-      raffle_id: activeRaffle.id, 
-      user_id: user.id 
-    }),
-    enabled: !!activeRaffle && !!user,
-    staleTime: 15_000,
-    refetchOnWindowFocus: false,
-  });
+  const instantSummary = summary || instantSummaryFromQuery || null;
+  const activeRaffle = instantSummary?.raffle || null;
+  const myParticipationRaw = instantSummary?.myParticipation || [];
 
   // Se houver múltiplas entradas, priorizar a que ganhou
   const myParticipation = React.useMemo(() => {
@@ -47,13 +41,7 @@ export default function InstantRaffleBox({ user }) {
 
   const hasEnded = Boolean(activeRaffle?.winners_drawn);
 
-  const { data: allParticipantsRaw = [] } = useQuery({
-    queryKey: ['instant-raffle-participants', activeRaffle?.id],
-    queryFn: () => base44.entities.InstantRaffleParticipant.filter({ raffle_id: activeRaffle.id }),
-    enabled: !!activeRaffle && !hasEnded,
-    staleTime: 15_000,
-    refetchOnWindowFocus: false,
-  });
+  const allParticipantsRaw = instantSummary?.participantsPreview || [];
 
   // Filtrar participantes únicos (remover duplicatas por user_id)
   const allParticipants = React.useMemo(() => {
@@ -66,18 +54,7 @@ export default function InstantRaffleBox({ user }) {
     return Array.from(uniqueUsers.values());
   }, [allParticipantsRaw]);
 
-  const { data: winnersRaw = [] } = useQuery({
-    queryKey: ['instant-raffle-winners', activeRaffle?.id],
-    queryFn: () =>
-      base44.entities.InstantRaffleParticipant.filter({
-        raffle_id: activeRaffle.id,
-        won: true,
-        validated: true,
-      }),
-    enabled: !!activeRaffle && hasEnded,
-    staleTime: 15_000,
-    refetchOnWindowFocus: false,
-  });
+  const winnersRaw = instantSummary?.winners || [];
 
   // Filtrar ganhadores únicos direto do source para não perder nenhum ganhador
   const winners = React.useMemo(() => {
@@ -111,6 +88,7 @@ export default function InstantRaffleBox({ user }) {
     },
     onSuccess: () => {
       setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
         queryClient.invalidateQueries({ queryKey: ['my-instant-participation'] });
         queryClient.invalidateQueries({ queryKey: ['instant-raffle-participants'] });
         setIsProcessing(false);
@@ -132,6 +110,7 @@ export default function InstantRaffleBox({ user }) {
       await base44.winnings.claim("instant-raffle", participation.id);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       queryClient.invalidateQueries({ queryKey: ['my-instant-participation'] });
     },
   });
@@ -142,6 +121,7 @@ export default function InstantRaffleBox({ user }) {
       await base44.winnings.dismiss("instant-raffle", participation.id);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       queryClient.invalidateQueries({ queryKey: ['my-instant-participation'] });
     },
   });
@@ -149,6 +129,7 @@ export default function InstantRaffleBox({ user }) {
   const dismissEndedBoxMutation = useMutation({
     mutationFn: async () => base44.instantRaffles.dismiss(activeRaffle.id),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       queryClient.invalidateQueries({ queryKey: ['my-instant-participation'] });
     },
   });
@@ -207,6 +188,7 @@ export default function InstantRaffleBox({ user }) {
   const hasParticipated = !!myEntry;
   const isWinner = Boolean(myEntry?.won && myEntry?.validated !== false);
   const redeemLink = buildWhatsAppLink(activeRaffle.telegram_link);
+  const displayedParticipantsCount = Number(instantSummary?.participantsCount || allParticipants.length || 0);
 
   // Se confirmou (ganhou e recebeu ou perdeu e fechou), some o box
   if (myEntry?.prize_claimed) return null;
@@ -280,7 +262,7 @@ export default function InstantRaffleBox({ user }) {
               {allParticipants.length > 0 && (
                 <div className="bg-white/10 backdrop-blur-sm rounded-lg md:rounded-xl p-3 md:p-4 mb-3 md:mb-4 w-full overflow-hidden">
                   <p className="text-xs md:text-sm font-bold text-white mb-3 text-center">
-                     Participando ({allParticipants.length})
+                     Participando ({displayedParticipantsCount})
                   </p>
                   <div className="relative h-[50px] overflow-hidden">
                     <motion.div

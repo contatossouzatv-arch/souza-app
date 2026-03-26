@@ -33,8 +33,12 @@ export default function InstantRaffleTab() {
 
   const { data: participantsRaw = [] } = useQuery({
     queryKey: ['admin-instant-participants', activeRaffle?.id],
-    queryFn: () => base44.entities.InstantRaffleParticipant.filter({ raffle_id: activeRaffle.id }),
+    queryFn: async () => {
+      const response = await base44.adminEvents.instantRaffles.listParticipants(activeRaffle.id);
+      return response?.items || [];
+    },
     enabled: !!activeRaffle,
+    staleTime: 10000,
   });
 
   // Filtrar participantes únicos por user_id
@@ -55,8 +59,12 @@ export default function InstantRaffleTab() {
 
   const { data: historyParticipantsRaw = [] } = useQuery({
     queryKey: ['history-instant-participants', selectedHistoryRaffle?.id],
-    queryFn: () => base44.entities.InstantRaffleParticipant.filter({ raffle_id: selectedHistoryRaffle.id }),
+    queryFn: async () => {
+      const response = await base44.adminEvents.instantRaffles.listParticipants(selectedHistoryRaffle.id);
+      return response?.items || [];
+    },
     enabled: !!selectedHistoryRaffle,
+    staleTime: 10000,
   });
 
   // Filtrar participantes do histórico únicos por user_id

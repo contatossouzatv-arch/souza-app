@@ -7,6 +7,7 @@ import {
   getEntityById,
   getEntityRecordData,
   listEntityRecordsForUpdate,
+  normalizeRecord,
   pool,
   updateEntityRecordData,
 } from "../db/index.js";
@@ -143,7 +144,127 @@ async function syncDepositPrizeGalleryItem(client, { winner, cycle, active }) {
   });
 }
 
+function sortCyclesDesc(a = {}, b = {}) {
+  const left = Number(a?.cycle_number || 0);
+  const right = Number(b?.cycle_number || 0);
+  if (left !== right) return right - left;
+  return String(b?.created_date || "").localeCompare(String(a?.created_date || ""));
+}
+
+function buildUsersById(users = []) {
+  return new Map(users.map((user) => [String(user?.id || ""), user]));
+}
+
+function buildDepositParticipantStats(deposits = [], usersById = new Map()) {
+  const stats = {};
+
+  deposits.forEach((deposit) => {
+    const userId = String(deposit?.user_id || "").trim();
+    if (!userId) return;
+    const profile = usersById.get(userId) || {};
+    const totalTickets =
+      Number(deposit?.tickets_count || 0) ||
+      (Array.isArray(deposit?.ticket_numbers) ? deposit.ticket_numbers.length : 0);
+
+    if (!stats[userId]) {
+      stats[userId] = {
+        user_id: userId,
+        user_name: deposit.user_name || profile.full_name || profile.name || "-",
+        user_email: deposit.user_email || profile.email || "-",
+        platform_id: deposit.user_platform_id || deposit.platform_id || profile.platform_id || "-",
+        total: 0,
+        deposits_count: 0,
+        tickets_count: 0,
+      };
+    }
+
+    stats[userId].total += Number(deposit?.amount || 0);
+    stats[userId].deposits_count += 1;
+    stats[userId].tickets_count += Number(totalTickets || 0);
+  });
+
+  return Object.values(stats).sort((a, b) => b.total - a.total);
+}
+
+async function listEntityRecordsByIds(entityName, ids = []) {
+  const normalized = [...new Set(ids.map((item) => String(item || "").trim()).filter(Boolean))];
+  if (normalized.length === 0) return [];
+  const placeholders = normalized.map((_, index) => `$${index + 2}`).join(", ");
+  const result = await pool.query(
+    `SELECT id, data, created_at, updated_at
+     FROM entity_records
+     WHERE entity_name = $1
+       AND id IN (${placeholders})`,
+    [String(entityName || ""), ...normalized]
+  );
+  return result.rows.map(normalizeRecord);
+}
+
+async function listDepositCycles() {
+  const result = await pool.query(
+    `SELECT id, data, created_at, updated_at
+     FROM entity_records
+     WHERE entity_name = 'DepositantDrawCycle'
+     ORDER BY created_at DESC`
+  );
+  return result.rows.map(normalizeRecord).sort(sortCyclesDesc);
+}
+
+async function listDepositsForCycles(cycleIds = []) {
+  const normalized = [...new Set(cycleIds.map((item) => String(item || "").trim()).filter(Boolean))];
+  if (normalized.length === 0) return [];
+  const result = await pool.query(
+    `SELECT id, data, created_at, updated_at
+     FROM entity_records
+     WHERE entity_name = 'Deposit'
+       AND data->>'cycle_id' = ANY($1::text[])`,
+    [normalized]
+  );
+  return result.rows.map(normalizeRecord);
+}
+
+async function listDepositWinnersForCycles(cycleIds = []) {
+  const normalized = [...new Set(cycleIds.map((item) => String(item || "").trim()).filter(Boolean))];
+  if (normalized.length === 0) return [];
+  const result = await pool.query(
+    `SELECT id, data, created_at, updated_at
+     FROM entity_records
+     WHERE entity_name = 'DepositantDrawWinner'
+       AND data->>'cycle_id' = ANY($1::text[])`,
+    [normalized]
+  );
+  return result.rows.map(normalizeRecord);
+}
+
+async function listAppSettingsByKeys(keys = []) {
+  const normalized = [...new Set(keys.map((item) => String(item || "").trim()).filter(Boolean))];
+  if (normalized.length === 0) return [];
+  const result = await pool.query(
+    `SELECT id, data, created_at, updated_at
+     FROM entity_records
+     WHERE entity_name = 'AppSettings'
+       AND data->>'key' = ANY($1::text[])`,
+    [normalized]
+  );
+  return result.rows.map(normalizeRecord);
+}
+
 export const instantRaffleAdmin = {
+  async listParticipants({ raffleId, limit = 2000 }) {
+    const parsedLimit = Math.max(1, Math.min(5000, Number(limit || 2000)));
+    const result = await pool.query(
+      `SELECT id, data, created_at, updated_at
+       FROM entity_records
+       WHERE entity_name = 'InstantRaffleParticipant'
+         AND data->>'raffle_id' = $1
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [String(raffleId || ""), parsedLimit]
+    );
+
+    return result.rows.map(normalizeRecord);
+  },
+
   async create({ payload, requestId = "", adminUserId, adminEmail }) {
     const existing = await findEvent("admin_instant_raffle_create", requestId);
     if (existing?.entity_id) return { raffle: await getEntityById("InstantRaffle", existing.entity_id), processing_event: existing, idempotent: true };
@@ -445,6 +566,361 @@ export const instantRaffleAdmin = {
 };
 
 export const depositDrawAdmin = {
+  async getOverview({ cycleId = "" } = {}) {
+    const cycles = await listDepositCycles();
+    const pendingCycles = cycles.filter((cycle) => !cycle.raffle_completed);
+    const selectedCycle =
+      pendingCycles.find((cycle) => String(cycle.id) === String(cycleId || "")) ||
+      pendingCycles[0] ||
+      null;
+    const selectedCycleId = String(selectedCycle?.id || "");
+
+    const [deposits, winners, settings] = await Promise.all([
+      selectedCycleId ? listDepositsForCycles([selectedCycleId]) : Promise.resolve([]),
+      selectedCycleId ? listDepositWinnersForCycles([selectedCycleId]) : Promise.resolve([]),
+      listAppSettingsByKeys(["depositant_draw_active"]),
+    ]);
+
+    const approvedDeposits = deposits
+      .filter((deposit) => String(deposit?.status || "").toLowerCase() === "approved")
+      .sort((left, right) => String(right?.created_date || "").localeCompare(String(left?.created_date || "")));
+
+    const participants = approvedDeposits.reduce((acc, deposit) => {
+      const userId = String(deposit?.user_id || "").trim();
+      if (!userId) return acc;
+      const amount = Number(deposit?.amount || 0);
+      const ticketsCount =
+        Number(deposit?.tickets_count || 0) ||
+        (Array.isArray(deposit?.ticket_numbers) ? deposit.ticket_numbers.length : 0);
+
+      if (!acc[userId]) {
+        acc[userId] = {
+          user_id: userId,
+          user_name: deposit.user_name,
+          user_email: deposit.user_email,
+          user_nick: deposit.user_name,
+          user_avatar: "",
+          user_platform_id: deposit.user_platform_id || "",
+          total_deposited: 0,
+          tickets_count: 0,
+        };
+      }
+
+      acc[userId].total_deposited += amount;
+      acc[userId].tickets_count += ticketsCount;
+      return acc;
+    }, {});
+
+    const participantsList = Object.values(participants).filter((item) => Number(item?.tickets_count || 0) > 0);
+    const totalTickets = participantsList.reduce((sum, item) => sum + Number(item?.tickets_count || 0), 0);
+    const depositantDrawActive =
+      settings.find((entry) => String(entry?.key || "") === "depositant_draw_active")?.value === "true";
+
+    return {
+      depositantDrawActive,
+      pendingCycles,
+      selectedCycleId: selectedCycleId || null,
+      selectedCycle,
+      deposits: approvedDeposits,
+      participants: participantsList,
+      totalTickets,
+      winners: winners.sort((left, right) => String(right?.created_date || "").localeCompare(String(left?.created_date || ""))),
+    };
+  },
+
+  async listCycleSummaries() {
+    const cycles = await listDepositCycles();
+    const cycleIds = cycles.map((cycle) => cycle.id);
+    const deposits = await listDepositsForCycles(cycleIds);
+    const userIds = [...new Set(deposits.map((item) => String(item?.user_id || "").trim()).filter(Boolean))];
+    const users = await listEntityRecordsByIds("User", userIds);
+
+    const usersById = buildUsersById(users);
+    const depositsByCycleId = deposits.reduce((acc, deposit) => {
+      const cycleKey = String(deposit?.cycle_id || "").trim();
+      if (!cycleKey) return acc;
+      if (!acc[cycleKey]) acc[cycleKey] = [];
+      acc[cycleKey].push(deposit);
+      return acc;
+    }, {});
+
+    return cycles.map((cycle) => {
+      const cycleDeposits = depositsByCycleId[String(cycle.id)] || [];
+      const approvedDeposits = cycleDeposits.filter((deposit) => String(deposit?.status || "").toLowerCase() === "approved");
+      const pendingDeposits = cycleDeposits.filter((deposit) => String(deposit?.status || "").toLowerCase() === "pending");
+      const totals = buildDepositParticipantStats(approvedDeposits, usersById);
+      return {
+        ...cycle,
+        approved_total: approvedDeposits.reduce((sum, deposit) => sum + Number(deposit?.amount || 0), 0),
+        pending_total: pendingDeposits.reduce((sum, deposit) => sum + Number(deposit?.amount || 0), 0),
+        participants_count: totals.length,
+        tickets_total: totals.reduce((sum, item) => sum + Number(item?.tickets_count || 0), 0),
+        top_participants: totals.slice(0, 3),
+      };
+    });
+  },
+
+  async getCycleTotals({ cycleId }) {
+    const normalizedCycleId = String(cycleId || "").trim();
+    if (!normalizedCycleId) {
+      return { cycle: null, totals: [] };
+    }
+
+    const [cycles, deposits] = await Promise.all([
+      listEntityRecordsByIds("DepositantDrawCycle", [normalizedCycleId]),
+      listDepositsForCycles([normalizedCycleId]),
+    ]);
+    const approvedDeposits = deposits.filter((deposit) => String(deposit?.status || "").toLowerCase() === "approved");
+    const userIds = [...new Set(approvedDeposits.map((deposit) => String(deposit?.user_id || "").trim()).filter(Boolean))];
+    const users = await listEntityRecordsByIds("User", userIds);
+    return {
+      cycle: cycles[0] || null,
+      totals: buildDepositParticipantStats(approvedDeposits, buildUsersById(users)),
+    };
+  },
+
+  async createCycle({ drawDate = null, requestId = "", adminUserId, adminEmail }) {
+    const existing = await findEvent("admin_deposit_cycle_create", requestId);
+    if (existing?.entity_id) {
+      return {
+        cycle: await getEntityById("DepositantDrawCycle", existing.entity_id),
+        processing_event: existing,
+        idempotent: true,
+      };
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const cycles = await listEntityRecordsForUpdate(client, "DepositantDrawCycle", {});
+      const nextCycleNumber =
+        cycles.reduce((maxValue, item) => Math.max(maxValue, Number(item?.cycle_number || 0)), 0) + 1;
+
+      const cycle = await createEntityRecordData(client, "DepositantDrawCycle", {
+        cycle_number: nextCycleNumber,
+        start_date: new Date().toISOString(),
+        draw_date: drawDate || null,
+        active: true,
+        raffle_completed: false,
+        created_date: new Date().toISOString(),
+        updated_date: new Date().toISOString(),
+      });
+
+      const processingEvent = await createEvent(client, {
+        domain: "admin_deposit_cycle_create",
+        action: "create_cycle",
+        requestId,
+        entityName: "DepositantDrawCycle",
+        entityId: cycle.id,
+        metadata: { draw_date: drawDate || null },
+        adminUserId,
+        adminEmail,
+      });
+      await client.query("COMMIT");
+      return { cycle, processing_event: processingEvent, idempotent: false };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  async endCycle({ cycleId, requestId = "", adminUserId, adminEmail }) {
+    const existing = await findEvent("admin_deposit_cycle_end", requestId);
+    if (existing?.entity_id === String(cycleId || "")) {
+      return {
+        cycle: await getEntityById("DepositantDrawCycle", cycleId),
+        processing_event: existing,
+        idempotent: true,
+      };
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const lockedCycle = await findEntityRecordByNameAndIdForUpdate(client, "DepositantDrawCycle", cycleId);
+      if (!lockedCycle) return await client.query("ROLLBACK").then(() => null);
+
+      const cycle = getEntityRecordData(lockedCycle);
+      const deposits = await listEntityRecordsForUpdate(client, "Deposit", { cycle_id: cycleId, status: "approved" });
+      const userIds = [...new Set(deposits.map((item) => String(item?.user_id || "").trim()).filter(Boolean))];
+      const users = await listEntityRecordsByIds("User", userIds);
+      const totals = buildDepositParticipantStats(deposits, buildUsersById(users));
+      const top3 = totals.slice(0, 3);
+      const now = new Date().toISOString();
+
+      const updated = await updateEntityRecordData(client, "DepositantDrawCycle", cycleId, {
+        ...cycle,
+        active: false,
+        end_date: now,
+        first_place_user_id: top3[0]?.user_id || "",
+        first_place_user_name: top3[0]?.user_name || "",
+        first_place_amount: Number(top3[0]?.total || 0),
+        second_place_user_id: top3[1]?.user_id || "",
+        second_place_user_name: top3[1]?.user_name || "",
+        second_place_amount: Number(top3[1]?.total || 0),
+        third_place_user_id: top3[2]?.user_id || "",
+        third_place_user_name: top3[2]?.user_name || "",
+        third_place_amount: Number(top3[2]?.total || 0),
+        updated_date: now,
+      });
+
+      const processingEvent = await createEvent(client, {
+        domain: "admin_deposit_cycle_end",
+        action: "end_cycle",
+        requestId,
+        entityName: "DepositantDrawCycle",
+        entityId: cycleId,
+        metadata: {
+          deposits_count: deposits.length,
+          top_participants: top3.map((item) => ({
+            user_id: item.user_id,
+            total: item.total,
+          })),
+        },
+        adminUserId,
+        adminEmail,
+      });
+      await client.query("COMMIT");
+      return { cycle: updated, processing_event: processingEvent, idempotent: false };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  async updateCycle({ cycleId, drawDate = undefined, endDate = undefined, requestId = "", adminUserId, adminEmail }) {
+    const existing = await findEvent("admin_deposit_cycle_update", requestId);
+    if (existing?.entity_id === String(cycleId || "")) {
+      return {
+        cycle: await getEntityById("DepositantDrawCycle", cycleId),
+        processing_event: existing,
+        idempotent: true,
+      };
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const lockedCycle = await findEntityRecordByNameAndIdForUpdate(client, "DepositantDrawCycle", cycleId);
+      if (!lockedCycle) return await client.query("ROLLBACK").then(() => null);
+      const cycle = getEntityRecordData(lockedCycle);
+      const updated = await updateEntityRecordData(client, "DepositantDrawCycle", cycleId, {
+        ...cycle,
+        draw_date: drawDate !== undefined ? drawDate || null : cycle.draw_date || null,
+        end_date: endDate !== undefined ? endDate || null : cycle.end_date || null,
+        updated_date: new Date().toISOString(),
+      });
+      const processingEvent = await createEvent(client, {
+        domain: "admin_deposit_cycle_update",
+        action: "update_cycle",
+        requestId,
+        entityName: "DepositantDrawCycle",
+        entityId: cycleId,
+        metadata: {
+          draw_date: updated.draw_date || null,
+          end_date: updated.end_date || null,
+        },
+        adminUserId,
+        adminEmail,
+      });
+      await client.query("COMMIT");
+      return { cycle: updated, processing_event: processingEvent, idempotent: false };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  async reactivateCycle({ cycleId, requestId = "", adminUserId, adminEmail }) {
+    const existing = await findEvent("admin_deposit_cycle_reactivate", requestId);
+    if (existing?.entity_id === String(cycleId || "")) {
+      return {
+        cycle: await getEntityById("DepositantDrawCycle", cycleId),
+        processing_event: existing,
+        idempotent: true,
+      };
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const cycles = await listEntityRecordsForUpdate(client, "DepositantDrawCycle", {});
+      const target = cycles.find((item) => String(item?.id || "") === String(cycleId || ""));
+      if (!target) return await client.query("ROLLBACK").then(() => null);
+
+      const activeCycle = cycles.find((item) => Boolean(item?.active) && String(item?.id || "") !== String(cycleId || ""));
+      if (activeCycle) {
+        await updateEntityRecordData(client, "DepositantDrawCycle", activeCycle.id, {
+          ...activeCycle,
+          active: false,
+          updated_date: new Date().toISOString(),
+        });
+      }
+
+      const updated = await updateEntityRecordData(client, "DepositantDrawCycle", target.id, {
+        ...target,
+        active: true,
+        end_date: null,
+        updated_date: new Date().toISOString(),
+      });
+
+      const processingEvent = await createEvent(client, {
+        domain: "admin_deposit_cycle_reactivate",
+        action: "reactivate_cycle",
+        requestId,
+        entityName: "DepositantDrawCycle",
+        entityId: cycleId,
+        metadata: { previous_active_cycle_id: activeCycle?.id || null },
+        adminUserId,
+        adminEmail,
+      });
+      await client.query("COMMIT");
+      return { cycle: updated, processing_event: processingEvent, idempotent: false };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  async deleteCycle({ cycleId, requestId = "", adminUserId, adminEmail }) {
+    const existing = await findEvent("admin_deposit_cycle_delete", requestId);
+    if (existing?.entity_id === String(cycleId || "")) {
+      return { deleted: true, processing_event: existing, idempotent: true };
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const lockedCycle = await findEntityRecordByNameAndIdForUpdate(client, "DepositantDrawCycle", cycleId);
+      if (!lockedCycle) return await client.query("ROLLBACK").then(() => null);
+      await client.query("DELETE FROM entity_records WHERE entity_name = 'DepositantDrawCycle' AND id = $1", [cycleId]);
+      const processingEvent = await createEvent(client, {
+        domain: "admin_deposit_cycle_delete",
+        action: "delete_cycle",
+        requestId,
+        entityName: "DepositantDrawCycle",
+        entityId: cycleId,
+        adminUserId,
+        adminEmail,
+      });
+      await client.query("COMMIT");
+      return { deleted: true, processing_event: processingEvent, idempotent: false };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
   async draw({ cycleId, prizeAmount, winnerCount = 1, requestId = "", adminUserId, adminEmail }) {
     const existing = await findEvent("admin_deposit_draw", requestId);
     if (existing?.entity_id === String(cycleId || "")) return { winners: [], processing_event: existing, idempotent: true };
@@ -533,7 +1009,7 @@ export const depositDrawAdmin = {
     }
   },
 
-  async complete({ cycleId, requestId = "", adminUserId, adminEmail }) {
+  async complete({ cycleId, winners = [], requestId = "", adminUserId, adminEmail }) {
     const existing = await findEvent("admin_deposit_draw_complete", requestId);
     if (existing?.entity_id === String(cycleId || "")) return { cycle: await getEntityById("DepositantDrawCycle", cycleId), processing_event: existing, idempotent: true };
     const client = await pool.connect();
@@ -542,8 +1018,25 @@ export const depositDrawAdmin = {
       const locked = await findEntityRecordByNameAndIdForUpdate(client, "DepositantDrawCycle", cycleId);
       if (!locked) return await client.query("ROLLBACK").then(() => null);
       const cycle = getEntityRecordData(locked);
-      const updated = await updateEntityRecordData(client, "DepositantDrawCycle", cycleId, { ...cycle, raffle_completed: true, updated_date: new Date().toISOString() });
-      const processingEvent = await createEvent(client, { domain: "admin_deposit_draw_complete", action: "complete_cycle", requestId, entityName: "DepositantDrawCycle", entityId: cycleId, metadata: { previous_completed: Boolean(cycle.raffle_completed) }, adminUserId, adminEmail });
+      const updated = await updateEntityRecordData(client, "DepositantDrawCycle", cycleId, {
+        ...cycle,
+        raffle_completed: true,
+        raffle_winners: Array.isArray(winners) ? winners : [],
+        updated_date: new Date().toISOString(),
+      });
+      const processingEvent = await createEvent(client, {
+        domain: "admin_deposit_draw_complete",
+        action: "complete_cycle",
+        requestId,
+        entityName: "DepositantDrawCycle",
+        entityId: cycleId,
+        metadata: {
+          previous_completed: Boolean(cycle.raffle_completed),
+          winners_count: Array.isArray(winners) ? winners.length : 0,
+        },
+        adminUserId,
+        adminEmail,
+      });
       await client.query("COMMIT");
       return { cycle: updated, processing_event: processingEvent, idempotent: false };
     } catch (error) {

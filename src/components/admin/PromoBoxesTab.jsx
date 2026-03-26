@@ -46,6 +46,7 @@ export default function PromoBoxesTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
+      queryClient.invalidateQueries({ queryKey: ["public-ui-config"] });
     },
   });
 
@@ -72,6 +73,7 @@ export default function PromoBoxesTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
+      queryClient.invalidateQueries({ queryKey: ["public-ui-config"] });
       toast({
         title: "Configurações salvas",
         description: "As regras de bilhetes extras foram atualizadas.",

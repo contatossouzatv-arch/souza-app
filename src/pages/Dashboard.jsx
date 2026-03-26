@@ -18,33 +18,17 @@ import { useAuth } from "@/lib/AuthContext";
 export default function Dashboard() {
   const { user, isLoadingAuth } = useAuth();
 
-  const { data: promoBoxes = [], isLoading: promoBoxesLoading } = useQuery({
-    queryKey: ["promoBoxes"],
-    queryFn: () => base44.entities.PromoBox.filter({ active: true }, "-created_date"),
-    enabled: !!user,
-    staleTime: 300000,
-  });
-
-  const { data: activeInstantRaffles = [], isLoading: instantLoading } = useQuery({
-    queryKey: ["active-instant-raffles"],
-    queryFn: () => base44.entities.InstantRaffle.filter({ active: true, ended: false }),
+  const { data: dynamicsSummary, isLoading: dynamicsLoading } = useQuery({
+    queryKey: ["dashboard-dynamics-summary"],
+    queryFn: () => base44.dynamics.summary(),
     enabled: !!user,
     staleTime: 30000,
   });
 
-  const { data: activeLiveRaffles = [], isLoading: liveLoading } = useQuery({
-    queryKey: ["active-live-raffles"],
-    queryFn: () => base44.entities.LiveDrawRaffle.filter({ active: true, ended: false }),
-    enabled: !!user,
-    staleTime: 30000,
-  });
-
-  const { data: activeGameCallRaffles = [], isLoading: gameCallLoading } = useQuery({
-    queryKey: ["active-gamecall-raffles"],
-    queryFn: () => base44.entities.GameCallRaffle.filter({ active: true, ended: false }),
-    enabled: !!user,
-    staleTime: 30000,
-  });
+  const promoBoxes = dynamicsSummary?.promoBoxes || [];
+  const instantSummary = dynamicsSummary?.instantRaffle || null;
+  const liveDrawSummary = dynamicsSummary?.liveDraw || null;
+  const gameCallSummary = dynamicsSummary?.gameCall || null;
   const containerVariants = {
     hidden: { opacity: 0 },
     show: {
@@ -60,16 +44,16 @@ export default function Dashboard() {
     show: { opacity: 1, y: 0 },
   };
 
-  const isLoading = isLoadingAuth || !user || promoBoxesLoading || instantLoading || liveLoading || gameCallLoading;
+  const isLoading = isLoadingAuth || !user || dynamicsLoading;
 
   if (isLoading) {
     return <TechLoader />;
   }
 
   const hasActiveDynamics =
-    activeInstantRaffles.length > 0 ||
-    activeLiveRaffles.length > 0 ||
-    activeGameCallRaffles.length > 0 ||
+    Boolean(instantSummary?.raffle) ||
+    Boolean(liveDrawSummary?.raffle) ||
+    Boolean(gameCallSummary?.raffle) ||
     promoBoxes.length > 0;
 
   return (
@@ -90,7 +74,7 @@ export default function Dashboard() {
         {hasActiveDynamics ? (
           <>
             <motion.div variants={itemVariants}>
-              <InstantRaffleBox user={user} />
+              <InstantRaffleBox user={user} summary={instantSummary} />
             </motion.div>
 
             <motion.div variants={itemVariants}>
@@ -98,11 +82,11 @@ export default function Dashboard() {
             </motion.div>
 
             <motion.div variants={itemVariants}>
-              <LiveDrawBox user={user} />
+              <LiveDrawBox user={user} summary={liveDrawSummary} />
             </motion.div>
 
             <motion.div variants={itemVariants}>
-              <GameCallBox user={user} />
+              <GameCallBox user={user} summary={gameCallSummary} />
             </motion.div>
 
             {promoBoxes.length > 0 ? (

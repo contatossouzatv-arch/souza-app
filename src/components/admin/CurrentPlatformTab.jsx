@@ -17,7 +17,10 @@ export default function CurrentPlatformTab() {
 
   const { data: platforms = [] } = useQuery({
     queryKey: ['current-platform'],
-    queryFn: () => base44.entities.CurrentPlatform.list(),
+    queryFn: async () => {
+      const response = await base44.platforms.summary();
+      return response.currentPlatform ? [response.currentPlatform] : [];
+    },
   });
 
   const currentPlatform = platforms[0] || null;

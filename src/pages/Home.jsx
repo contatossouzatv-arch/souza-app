@@ -36,43 +36,43 @@ export default function Home() {
   const [highlightPostId, setHighlightPostId] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const { data: posts = [], isLoading } = useQuery({
-    queryKey: ["inicio-posts"],
-    queryFn: () => base44.entities.PushNotification.list("-created_date"),
-    staleTime: 30000,
-  });
-
-  const { data: winnerFeed = { items: [] }, isLoading: winnersLoading } = useQuery({
-    queryKey: ["inicio-winner-posts"],
-    queryFn: () => base44.gamification.feedWins(),
-    staleTime: 30000,
-  });
-
-  const { data: feedLikes = { counts: {}, likedPostIds: [] } } = useQuery({
-    queryKey: ["inicio-feed-likes"],
-    queryFn: () => base44.gamification.feedLikes(),
+  const { data: feedSummary = null, isLoading } = useQuery({
+    queryKey: ["inicio-feed-summary"],
+    queryFn: () => base44.home.feedSummary(),
     staleTime: 15000,
   });
 
-  const { data: users = [] } = useQuery({
-    queryKey: ["inicio-users"],
-    queryFn: () => base44.entities.User.list(),
+  const posts = feedSummary?.posts || [];
+  const winnerFeed = feedSummary?.winnerFeed || { items: [] };
+  const feedLikes = feedSummary?.feedLikes || { counts: {}, likedPostIds: [] };
+
+  const { data: homeSummary } = useQuery({
+    queryKey: ["inicio-summary"],
+    queryFn: () => base44.home.summary(),
     staleTime: 60000,
   });
 
-  const { data: creatorUsers = [] } = useQuery({
-    queryKey: ["inicio-creator-users"],
-    queryFn: () => base44.entities.User.filter({ role: "admin" }, "created_date", 5),
+  const winnerUserIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (winnerFeed?.items || [])
+            .map((item) => String(item?.user_id || "").trim())
+            .filter(Boolean)
+        )
+      ),
+    [winnerFeed?.items]
+  );
+
+  const { data: winnerUsersPayload } = useQuery({
+    queryKey: ["inicio-winner-users", winnerUserIds.join(",")],
+    queryFn: () => base44.profile.publicBasics(winnerUserIds),
+    enabled: winnerUserIds.length > 0,
     staleTime: 60000,
+    retry: false,
   });
 
-  const { data: recentProfilesData } = useQuery({
-    queryKey: ["inicio-recent-profiles"],
-    queryFn: () => base44.social.discover({ limit: 10, offset: 0, sort: "recent" }),
-    staleTime: 60000,
-  });
-
-  const formattedMembersCount = users.length || 0;
+  const formattedMembersCount = Number(homeSummary?.totalMembers || 0);
 
   const publishedPosts = useMemo(() => {
     return posts.slice(0, 30);
@@ -80,12 +80,12 @@ export default function Home() {
 
   const usersById = useMemo(() => {
     const map = new Map();
-    users.forEach((item) => map.set(item.id, item));
+    (winnerUsersPayload?.items || []).forEach((item) => map.set(item.id, item));
     return map;
-  }, [users]);
+  }, [winnerUsersPayload?.items]);
 
   const creatorProfile = useMemo(() => {
-    const admin = creatorUsers[0] || null;
+    const admin = homeSummary?.creator || null;
     if (!admin) return null;
     const creatorPhoto =
       admin.profile_image_mode === "photo" &&
@@ -100,10 +100,10 @@ export default function Home() {
       avatarEmoji: admin.avatar_emoji || "S",
       avatarUrl: creatorPhoto || getProfileAvatarSrc(admin, avatarById, defaultAvatar) || defaultAvatar,
     };
-  }, [creatorUsers, users]);
+  }, [homeSummary?.creator]);
 
   const recentProfiles = useMemo(() => {
-    return (recentProfilesData?.items || []).map((profile) => {
+    return (homeSummary?.recentProfiles || []).map((profile) => {
       const avatarUrl = getProfileAvatarSrc(profile, avatarById, defaultAvatar) || defaultAvatar;
       return {
         id: profile.id,
@@ -112,7 +112,7 @@ export default function Home() {
         avatarUrl,
       };
     });
-  }, [recentProfilesData?.items]);
+  }, [homeSummary?.recentProfiles]);
 
   const winnerPosts = useMemo(() => {
     return (winnerFeed?.items || [])
@@ -309,7 +309,7 @@ export default function Home() {
     }
   };
 
-  if (isLoading || winnersLoading) {
+  if (isLoading) {
     return (
       <div className="space-y-3">
         <Card className="border-slate-800 bg-slate-900/70 p-5 text-slate-300">Carregando avisos...</Card>

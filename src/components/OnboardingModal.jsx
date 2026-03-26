@@ -20,7 +20,10 @@ export default function OnboardingModal({ open, onComplete }) {
 
   const { data: platforms = [] } = useQuery({
     queryKey: ["current-platform-onboarding"],
-    queryFn: () => base44.entities.CurrentPlatform.list(),
+    queryFn: async () => {
+      const response = await base44.platforms.summary();
+      return response.currentPlatform ? [response.currentPlatform] : [];
+    },
   });
 
   const platformLink = settings.find((s) => s.key === "platform_link")?.value || "#";

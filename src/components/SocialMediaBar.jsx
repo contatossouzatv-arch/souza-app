@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { motion } from "framer-motion";
 import { Instagram, MessageCircle, Youtube, Facebook, Twitter, Send } from "lucide-react";
-import { useAppSettings } from "@/hooks/useAppSettings";
+import { PUBLIC_UI_CONFIG_QUERY_KEY, useAppSettings } from "@/hooks/useAppSettings";
 
 const SOCIAL_ICONS = {
   instagram: { Icon: Instagram, defaultGradient: ['#e4405f', '#f77737'] },
@@ -17,11 +17,9 @@ const SOCIAL_ICONS = {
 
 export default function SocialMediaBar() {
   const { data: socials = [] } = useQuery({
-    queryKey: ['active-socials'],
-    queryFn: async () => {
-      const allSocials = await base44.entities.SocialMedia.filter({ active: true }, 'order');
-      return allSocials;
-    },
+    queryKey: PUBLIC_UI_CONFIG_QUERY_KEY,
+    queryFn: () => base44.ui.publicConfig(),
+    select: (data) => data?.socials || [],
   });
 
   const { data: settings = [] } = useAppSettings();

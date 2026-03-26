@@ -19,7 +19,10 @@ export default function TicketsDisplay({
 
   const { data: cycles = [] } = useQuery({
     queryKey: ["deposit-cycles-user"],
-    queryFn: () => base44.entities.DepositantDrawCycle.list("-created_date"),
+    queryFn: async () => {
+      const response = await base44.deposits.dashboardSummary();
+      return response.cycles || [];
+    },
   });
 
   const depositantDrawActive = settings.find((s) => s.key === "depositant_draw_active")?.value === "true";

@@ -48,7 +48,8 @@ function resolveTimeoutMs(path = "", timeoutMs) {
   if (
     normalizedPath === "/api/entities/InstantRaffleParticipant/filter" ||
     normalizedPath === "/api/entities/LiveDrawParticipant/filter" ||
-    normalizedPath === "/api/entities/GameCallParticipant/filter"
+    normalizedPath === "/api/entities/GameCallParticipant/filter" ||
+    (normalizedPath.includes("/api/admin/instant-raffles/") && normalizedPath.includes("/participants"))
   ) {
     return RAFFLE_PARTICIPANT_TIMEOUT_MS;
   }
@@ -891,6 +892,10 @@ export const base44 = {
       return request("/api/deposits/my");
     },
 
+    async dashboardSummary() {
+      return request("/api/deposits/dashboard-summary");
+    },
+
     async leaderboard({ cycleId = "", limit } = {}) {
       const params = new URLSearchParams();
       if (cycleId) params.set("cycleId", cycleId);
@@ -1011,6 +1016,10 @@ export const base44 = {
   },
 
   instantRaffles: {
+    async basic(id) {
+      return request(`/api/instant-raffles/${id}/basic`);
+    },
+
     async join(id, { platformId, requestId } = {}) {
       return request(`/api/instant-raffles/${id}/join`, {
         method: "POST",
@@ -1034,6 +1043,10 @@ export const base44 = {
   },
 
   winnings: {
+    async summary() {
+      return request("/api/winnings/summary");
+    },
+
     async claim(kind, id, requestId) {
       return request(`/api/winnings/${kind}/${id}/claim`, {
         method: "POST",
@@ -1056,6 +1069,9 @@ export const base44 = {
   },
 
   cashback: {
+    async status() {
+      return request("/api/cashback/status");
+    },
     async claim(goalType, requestId) {
       return request("/api/cashback/claim", {
         method: "POST",
@@ -1068,8 +1084,43 @@ export const base44 = {
     },
   },
 
+  home: {
+    async summary() {
+      return request("/api/home/summary");
+    },
+
+    async feedSummary() {
+      return request("/api/home/feed-summary");
+    },
+  },
+
+  notifications: {
+    async recent({ limit = 50 } = {}) {
+      const params = new URLSearchParams();
+      params.set("limit", String(limit));
+      return request(`/api/notifications/recent?${params.toString()}`);
+    },
+  },
+
+  platforms: {
+    async summary() {
+      return request("/api/platforms/summary");
+    },
+  },
+
   adminEvents: {
     liveDraws: {
+      current() {
+        return request("/api/admin/live-draws/current");
+      },
+      listParticipants(id, { limit = 2000 } = {}) {
+        const search = new URLSearchParams();
+        if (Number.isFinite(Number(limit)) && Number(limit) > 0) {
+          search.set("limit", String(limit));
+        }
+        const query = search.toString();
+        return request(`/api/admin/live-draws/${id}/participants${query ? `?${query}` : ""}`);
+      },
       create({ title, maxWinners, prizeAmount, adminName, adminPhone, requestId } = {}) {
         return request("/api/admin/live-draws", {
           method: "POST",
@@ -1117,6 +1168,17 @@ export const base44 = {
       },
     },
     gameCalls: {
+      current() {
+        return request("/api/admin/game-calls/current");
+      },
+      listParticipants(id, { limit = 2000 } = {}) {
+        const search = new URLSearchParams();
+        if (Number.isFinite(Number(limit)) && Number(limit) > 0) {
+          search.set("limit", String(limit));
+        }
+        const query = search.toString();
+        return request(`/api/admin/game-calls/${id}/participants${query ? `?${query}` : ""}`);
+      },
       create({ title, prizeAmount, maxAttempts, maxWinners, adminName, adminPhone, requestId } = {}) {
         return request("/api/admin/game-calls", {
           method: "POST",
@@ -1164,6 +1226,14 @@ export const base44 = {
       },
     },
     instantRaffles: {
+      listParticipants(id, { limit = 2000 } = {}) {
+        const search = new URLSearchParams();
+        if (Number.isFinite(Number(limit)) && Number(limit) > 0) {
+          search.set("limit", String(limit));
+        }
+        const query = search.toString();
+        return request(`/api/admin/instant-raffles/${id}/participants${query ? `?${query}` : ""}`);
+      },
       create(payload = {}) {
         return request("/api/admin/instant-raffles", {
           method: "POST",
@@ -1221,6 +1291,12 @@ export const base44 = {
       },
     },
     depositDraws: {
+      overview({ cycleId } = {}) {
+        const search = new URLSearchParams();
+        if (cycleId) search.set("cycleId", String(cycleId));
+        const query = search.toString();
+        return request(`/api/admin/deposit-draws/overview${query ? `?${query}` : ""}`);
+      },
       draw(id, { prizeAmount, winnerCount, requestId } = {}) {
         return request(`/api/admin/deposit-draws/${id}/draw`, {
           method: "POST",
@@ -1240,11 +1316,14 @@ export const base44 = {
           method: "DELETE",
         });
       },
-      complete(id, requestId) {
+      complete(id, { winners = [], requestId } = {}) {
         return request(`/api/admin/deposit-draws/${id}/complete`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ requestId: requestId || createRequestId("admin-deposit-complete") }),
+          body: JSON.stringify({
+            winners,
+            requestId: requestId || createRequestId("admin-deposit-complete"),
+          }),
         });
       },
       resetTickets(id, requestId) {
@@ -1255,6 +1334,56 @@ export const base44 = {
         });
       },
     },
+    depositCycles: {
+      create({ drawDate, requestId } = {}) {
+        return request("/api/admin/deposit-cycles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            drawDate: drawDate || null,
+            requestId: requestId || createRequestId("admin-deposit-cycle-create"),
+          }),
+        });
+      },
+      summary() {
+        return request("/api/admin/deposit-cycles/summary");
+      },
+      totals(id) {
+        return request(`/api/admin/deposit-cycles/${id}/totals`);
+      },
+      update(id, { drawDate, endDate, requestId } = {}) {
+        return request(`/api/admin/deposit-cycles/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            drawDate,
+            endDate,
+            requestId: requestId || createRequestId("admin-deposit-cycle-update"),
+          }),
+        });
+      },
+      end(id, requestId) {
+        return request(`/api/admin/deposit-cycles/${id}/end`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestId: requestId || createRequestId("admin-deposit-cycle-end") }),
+        });
+      },
+      reactivate(id, requestId) {
+        return request(`/api/admin/deposit-cycles/${id}/reactivate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestId: requestId || createRequestId("admin-deposit-cycle-reactivate") }),
+        });
+      },
+      delete(id, requestId) {
+        return request(`/api/admin/deposit-cycles/${id}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestId: requestId || createRequestId("admin-deposit-cycle-delete") }),
+        });
+      },
+    },
     profile: {
       syncPhone(phone, requestId) {
         return request("/api/profile/sync-phone", {
@@ -1262,6 +1391,31 @@ export const base44 = {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ phone, requestId: requestId || createRequestId("profile-sync-phone") }),
         });
+      },
+      notifications({ limit = 50 } = {}) {
+        const params = new URLSearchParams();
+        params.set("limit", String(limit));
+        return request(`/api/profile/notifications?${params.toString()}`);
+      },
+      markNotificationsRead(ids = []) {
+        return request("/api/profile/notifications/read", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        });
+      },
+      publicBasics(ids = []) {
+        const uniqueIds = Array.from(
+          new Set((Array.isArray(ids) ? ids : []).map((item) => String(item || "").trim()).filter(Boolean))
+        );
+        const params = new URLSearchParams();
+        params.set("ids", uniqueIds.join(","));
+        return request(`/api/profile/public-basics?${params.toString()}`);
+      },
+      platformHistory({ limit = 100 } = {}) {
+        const params = new URLSearchParams();
+        params.set("limit", String(limit));
+        return request(`/api/profile/platform-history?${params.toString()}`);
       },
     },
 
@@ -1445,6 +1599,18 @@ export const base44 = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestId: requestId || createRequestId("social-auto-like-creator") }),
       });
+    },
+  },
+
+  dynamics: {
+    async summary() {
+      return request("/api/dynamics/summary");
+    },
+  },
+
+  ui: {
+    async publicConfig() {
+      return request("/api/ui/public-config");
     },
   },
 
@@ -1669,10 +1835,19 @@ export const base44 = {
   },
 
   adminAudit: {
+    async listWinnerAudits() {
+      return request("/api/admin/audits/winners");
+    },
     async deleteWinnerAudit(auditId) {
       return request(`/api/admin/audits/winners/${encodeURIComponent(auditId)}`, {
         method: "DELETE",
       });
+    },
+  },
+
+  liveDrawDisplay: {
+    async current() {
+      return request("/api/live-draws/current-display");
     },
   },
 

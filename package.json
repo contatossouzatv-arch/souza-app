@@ -10,6 +10,7 @@
         "lint": "eslint .",
         "typecheck": "tsc -p ./jsconfig.json",
         "preview": "vite preview",
+        "loadtest:smoke": "node ./scripts/loadtest-smoke.mjs",
         "dev:backend": "npm --prefix backend run dev",
         "start:backend": "npm --prefix backend run start",
         "release:prepare": "powershell -ExecutionPolicy Bypass -File scripts/prepare-release.ps1"

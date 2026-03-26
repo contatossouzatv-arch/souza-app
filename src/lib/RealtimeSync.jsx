@@ -17,6 +17,7 @@ export default function RealtimeSync() {
   const { isAuthenticated } = useAuth();
   const invalidateTimerRef = useRef(null);
   const retryTimerRef = useRef(null);
+  const reconnectAttemptRef = useRef(0);
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
@@ -42,9 +43,9 @@ export default function RealtimeSync() {
 
         if (["livedrawraffle", "livedrawparticipant"].includes(entity)) {
           addKeys(prefixes, [
+            "dashboard-dynamics-summary",
             "active-live-raffle-box",
             "active-raffle",
-            "active-live-raffles",
             "raffle-participants",
             "validated-winners",
             "my-live-participation",
@@ -57,9 +58,9 @@ export default function RealtimeSync() {
 
         if (["gamecallraffle", "gamecallparticipant"].includes(entity)) {
           addKeys(prefixes, [
+            "dashboard-dynamics-summary",
             "admin-active-gamecall",
             "active-gamecall-raffle",
-            "active-gamecall-raffles",
             "admin-gamecall-participants",
             "validated-gamecall-winners",
             "my-gamecall-participation",
@@ -69,40 +70,63 @@ export default function RealtimeSync() {
           ]);
         }
 
+        if (["instantraffle", "instantraffleparticipant", "promobox"].includes(entity)) {
+          addKeys(prefixes, [
+            "dashboard-dynamics-summary",
+            "my-winnings",
+            "winner-audits",
+            "inicio-winner-posts",
+            "user-prize-gallery",
+          ]);
+        }
+
+        if (["appsettings", "bannercarousel", "socialmedia"].includes(entity)) {
+          addKeys(prefixes, ["public-ui-config", "app-settings"]);
+        }
+
         if (prefixes.size > 0) {
           invalidatePrefixes([...prefixes]);
         }
       }, 120);
     };
 
-    const connectSocket = async () => {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 1500);
+    const scheduleReconnect = () => {
+      if (cancelled || retryTimerRef.current) return;
+      reconnectAttemptRef.current += 1;
+      const delayMs = Math.min(30000, 3000 * reconnectAttemptRef.current);
+      retryTimerRef.current = setTimeout(() => {
+        retryTimerRef.current = null;
+        connectSocket();
+      }, delayMs);
+    };
 
-        const health = await fetch(`${API_BASE_URL}/health`, {
-          method: "GET",
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
+    const connectSocket = () => {
+      if (cancelled) return;
 
-        if (!health.ok || cancelled) return;
+      socket = io(API_BASE_URL, {
+        transports: ["websocket"],
+        withCredentials: true,
+        reconnection: false,
+        timeout: 4000,
+      });
 
-        socket = io(API_BASE_URL, {
-          transports: ["websocket", "polling"],
-          withCredentials: true,
-          reconnection: true,
-          reconnectionAttempts: 20,
-          reconnectionDelay: 500,
-          reconnectionDelayMax: 3000,
-          timeout: 5000,
-        });
+      socket.on("connect", () => {
+        reconnectAttemptRef.current = 0;
+      });
 
-        socket.on("entity:changed", scheduleInvalidate);
-      } catch {
-        if (cancelled) return;
-        retryTimerRef.current = setTimeout(connectSocket, 10000);
-      }
+      socket.on("entity:changed", scheduleInvalidate);
+      socket.on("connect_error", () => {
+        if (socket) {
+          socket.off("entity:changed", scheduleInvalidate);
+          socket.disconnect();
+          socket = null;
+        }
+        scheduleReconnect();
+      });
+      socket.on("disconnect", (reason) => {
+        if (reason === "io client disconnect") return;
+        scheduleReconnect();
+      });
     };
 
     connectSocket();
@@ -121,6 +145,7 @@ export default function RealtimeSync() {
         socket.off("entity:changed", scheduleInvalidate);
         socket.disconnect();
       }
+      reconnectAttemptRef.current = 0;
     };
   }, [isAuthenticated, queryClient]);
 

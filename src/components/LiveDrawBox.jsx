@@ -6,40 +6,34 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Zap, Sparkles, Trophy, ExternalLink, Heart } from "lucide-react";
 import { useAppSettings } from "@/hooks/useAppSettings";
 
-export default function LiveDrawBox({ user }) {
+export default function LiveDrawBox({ user, summary = null }) {
   const queryClient = useQueryClient();
 
   const { data: settings = [] } = useAppSettings();
 
   const liveLink = settings.find((s) => s.key === "live_link")?.value || "";
 
-  const { data: activeRaffle = null } = useQuery({
-    queryKey: ["active-live-raffles"],
-    queryFn: () => base44.entities.LiveDrawRaffle.filter({ active: true, ended: false }),
-    select: (raffles) => raffles[0] || null,
+  const { data: liveDrawSummaryFromQuery = null } = useQuery({
+    queryKey: ["dashboard-dynamics-summary"],
+    queryFn: () => base44.dynamics.summary(),
+    select: (data) => data?.liveDraw || null,
     staleTime: 15_000,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
+    enabled: !summary?.raffle,
   });
 
-  const { data: myParticipation = [] } = useQuery({
-    queryKey: ["my-live-participation", activeRaffle?.id, user?.id],
-    queryFn: () =>
-      base44.entities.LiveDrawParticipant.filter({
-        raffle_id: activeRaffle.id,
-        user_id: user.id,
-      }),
-    enabled: !!activeRaffle && !!user?.id,
-    staleTime: 15_000,
-    refetchOnWindowFocus: false,
-  });
+  const liveSummary = summary || liveDrawSummaryFromQuery || null;
+  const activeRaffle = liveSummary?.raffle || null;
+  const myParticipation = liveSummary?.myParticipation || [];
 
   const hasParticipated = myParticipation.length > 0;
 
   const participateMutation = useMutation({
     mutationFn: async () => base44.liveDraws.join(activeRaffle.id),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard-dynamics-summary"] });
       queryClient.invalidateQueries({ queryKey: ["my-live-participation"] });
       queryClient.invalidateQueries({ queryKey: ["raffle-participants"] });
     },

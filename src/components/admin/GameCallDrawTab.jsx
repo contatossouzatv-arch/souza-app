@@ -121,53 +121,25 @@ export default function GameCallDrawTab() {
   const { data: activeRaffle } = useQuery({
     queryKey: ['admin-active-gamecall'],
     queryFn: async () => {
-      const raffles = await base44.entities.GameCallRaffle.filter({ active: true, ended: false });
-      return raffles[0] || null;
+      const response = await base44.adminEvents.gameCalls.current();
+      return response?.item || null;
     },
   });
 
   const { data: participants = [] } = useQuery({
     queryKey: ['admin-gamecall-participants', activeRaffle?.id],
-    queryFn: () => base44.entities.GameCallParticipant.filter({ raffle_id: activeRaffle.id }, '-created_date'),
+    queryFn: async () => {
+      const response = await base44.adminEvents.gameCalls.listParticipants(activeRaffle.id);
+      return response?.items || [];
+    },
     enabled: !!activeRaffle,
   });
-
-  const { data: validatedWinners = [] } = useQuery({
-    queryKey: ['validated-gamecall-winners', activeRaffle?.id],
-    queryFn: () => base44.entities.GameCallParticipant.filter({ 
-      raffle_id: activeRaffle.id,
-      validated: true
-    }),
-    enabled: !!activeRaffle,
-  });
-
-  const { data: users = [] } = useQuery({
-    queryKey: ['gamecall-users-avatars'],
-    queryFn: () => base44.entities.User.list(),
-    staleTime: 60000,
-  });
-
-  const usersById = React.useMemo(() => {
-    const map = {};
-    users.forEach((u) => {
-      map[u.id] = u;
-    });
-    return map;
-  }, [users]);
 
   const getParticipantImageUrl = (participant) => {
     if (!participant) return "";
-
-    if (participant.user_profile_image_url) {
-      return resolveAssetUrl(participant.user_profile_image_url);
-    }
-
-    const linkedUser = usersById[participant.user_id];
-    if (linkedUser?.profile_image_status === "approved" && linkedUser?.profile_image_url) {
-      return resolveAssetUrl(linkedUser.profile_image_url);
-    }
-
-    return "";
+    return participant.user_profile_image_url
+      ? resolveAssetUrl(participant.user_profile_image_url)
+      : "";
   };
 
   useEffect(() => {
@@ -247,7 +219,7 @@ export default function GameCallDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
       queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffle'] });
-      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       setNewRaffleTitle("");
       setPrizeAmount("");
       setMaxAttempts(3);
@@ -263,7 +235,7 @@ export default function GameCallDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
       queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffle'] });
-      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       queryClient.invalidateQueries({ queryKey: ['winner-raffles'] });
       queryClient.invalidateQueries({ queryKey: ['user-prize-gallery'] });
     },
@@ -274,7 +246,7 @@ export default function GameCallDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
       queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffle'] });
-      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       setFinalWinners([]);
       setShowAnimation(false);
     },
@@ -286,7 +258,7 @@ export default function GameCallDrawTab() {
       queryClient.invalidateQueries({ queryKey: ['admin-gamecall-participants'] });
       queryClient.invalidateQueries({ queryKey: ['validated-gamecall-winners'] });
       queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
-      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       queryClient.invalidateQueries({ queryKey: ['my-gamecall-participation'] });
       queryClient.invalidateQueries({ queryKey: ['winner-audits'] });
     },
@@ -298,7 +270,7 @@ export default function GameCallDrawTab() {
       queryClient.invalidateQueries({ queryKey: ['admin-gamecall-participants'] });
       queryClient.invalidateQueries({ queryKey: ['validated-gamecall-winners'] });
       queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
-      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       queryClient.invalidateQueries({ queryKey: ['my-gamecall-participation'] });
       queryClient.invalidateQueries({ queryKey: ['winner-audits'] });
     },
@@ -310,7 +282,7 @@ export default function GameCallDrawTab() {
       queryClient.invalidateQueries({ queryKey: ['admin-gamecall-participants'] });
       queryClient.invalidateQueries({ queryKey: ['validated-gamecall-winners'] });
       queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
-      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
     },
   });
 
@@ -319,7 +291,7 @@ export default function GameCallDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-gamecall-participants'] });
       queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
-      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
     },
   });
 
@@ -328,7 +300,7 @@ export default function GameCallDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-gamecall-participants'] });
       queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
-      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       queryClient.invalidateQueries({ queryKey: ['my-gamecall-participation'] });
     },
   });
@@ -338,7 +310,7 @@ export default function GameCallDrawTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-gamecall-participants'] });
       queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
-      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       queryClient.invalidateQueries({ queryKey: ['my-gamecall-participation'] });
     },
   });
@@ -355,7 +327,7 @@ export default function GameCallDrawTab() {
     mutationFn: ({ raffleId, winnerCount }) => base44.adminEvents.gameCalls.draw(raffleId, { winnerCount }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-active-gamecall'] });
-      queryClient.invalidateQueries({ queryKey: ['active-gamecall-raffles'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
     },
   });
 
@@ -447,6 +419,7 @@ export default function GameCallDrawTab() {
     reactivateWinnerMutation.mutate(winnerId);
   };
 
+  const validatedWinners = participants.filter((participant) => participant.validation_status === 'validated' || participant.validated);
   const activeParticipants = participants.filter(p => 
     p.validation_status === 'pending' && 
     !p.validated

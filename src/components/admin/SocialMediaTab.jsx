@@ -53,7 +53,7 @@ export default function SocialMediaTab() {
     mutationFn: (data) => base44.entities.SocialMedia.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-socials'] });
-      queryClient.invalidateQueries({ queryKey: ['active-socials'] });
+      queryClient.invalidateQueries({ queryKey: ['public-ui-config'] });
       setNewSocial({
         name: "",
         icon: "instagram",
@@ -70,7 +70,7 @@ export default function SocialMediaTab() {
     mutationFn: ({ id, data }) => base44.entities.SocialMedia.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-socials'] });
-      queryClient.invalidateQueries({ queryKey: ['active-socials'] });
+      queryClient.invalidateQueries({ queryKey: ['public-ui-config'] });
       setEditingSocial(null);
     },
   });
@@ -79,7 +79,7 @@ export default function SocialMediaTab() {
     mutationFn: (id) => base44.entities.SocialMedia.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-socials'] });
-      queryClient.invalidateQueries({ queryKey: ['active-socials'] });
+      queryClient.invalidateQueries({ queryKey: ['public-ui-config'] });
     },
   });
 
@@ -95,6 +95,7 @@ export default function SocialMediaTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['social-bar-settings'] });
       queryClient.invalidateQueries({ queryKey: ['social-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['public-ui-config'] });
     },
   });
 

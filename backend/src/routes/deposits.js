@@ -10,7 +10,9 @@ import {
   listAdminDeposits,
   listDepositCycleLeaderboard,
   listDepositsByUserId,
+  normalizeRecord,
   approveDepositRecord,
+  pool,
   rejectDepositRecord,
   updateDepositAdminRecord,
 } from "../db/index.js";
@@ -59,6 +61,62 @@ function normalizeAdminPatchPayload(body = {}) {
   return patch;
 }
 
+async function listDepositCycles() {
+  const result = await pool.query(
+    `SELECT id, data, created_at, updated_at
+     FROM entity_records
+     WHERE entity_name = 'DepositantDrawCycle'
+     ORDER BY created_at DESC`
+  );
+  return result.rows.map(normalizeRecord);
+}
+
+async function listDepositDrawWinners(limit = 200) {
+  const result = await pool.query(
+    `SELECT id, data, created_at, updated_at
+     FROM entity_records
+     WHERE entity_name = 'DepositantDrawWinner'
+     ORDER BY created_at DESC
+     LIMIT $1`,
+    [Math.max(1, Math.min(1000, Number(limit || 200)))]
+  );
+  return result.rows.map(normalizeRecord);
+}
+
+async function listUsersBasicByIds(ids = []) {
+  const normalized = [...new Set(ids.map((item) => String(item || "").trim()).filter(Boolean))];
+  if (normalized.length === 0) return [];
+  const result = await pool.query(
+    `SELECT
+       id::text AS id,
+       full_name,
+       name,
+       nick,
+       email,
+       phone,
+       platform_id,
+       profile_avatar_id,
+       profile_image_mode,
+       profile_image_url,
+       profile_image_status
+     FROM users
+     WHERE id::text = ANY($1::text[])`,
+    [normalized]
+  );
+  return result.rows.map((row) => ({
+    id: String(row.id || ""),
+    full_name: String(row.full_name || row.name || "").trim(),
+    nick: String(row.nick || "").trim(),
+    email: String(row.email || "").trim(),
+    phone: String(row.phone || "").trim(),
+    platform_id: String(row.platform_id || "").trim(),
+    profile_avatar_id: String(row.profile_avatar_id || "").trim(),
+    profile_image_mode: String(row.profile_image_mode || "").trim(),
+    profile_image_url: String(row.profile_image_url || "").trim(),
+    profile_image_status: String(row.profile_image_status || "").trim(),
+  }));
+}
+
 router.post("/deposits", requireAuth, async (req, res) => {
   const payload = normalizeCreatePayload(req.body || {});
   if (!payload.platformName || !payload.userPlatformId || !payload.cycleId || !Number.isFinite(payload.amount) || payload.amount <= 0) {
@@ -90,6 +148,29 @@ router.post("/deposits", requireAuth, async (req, res) => {
 router.get("/deposits/my", requireAuth, async (req, res) => {
   const deposits = await listDepositsByUserId(req.auth.sub);
   return res.json({ items: deposits });
+});
+
+router.get("/deposits/dashboard-summary", requireAuth, async (_req, res) => {
+  const [cycles, drawWinners] = await Promise.all([
+    listDepositCycles(),
+    listDepositDrawWinners(),
+  ]);
+
+  const userIds = [
+    ...drawWinners.map((item) => item.user_id),
+    ...cycles.flatMap((cycle) => [
+      cycle.first_place_user_id,
+      cycle.second_place_user_id,
+      cycle.third_place_user_id,
+    ]),
+  ];
+
+  const profiles = await listUsersBasicByIds(userIds);
+  return res.json({
+    cycles,
+    drawWinners,
+    profiles,
+  });
 });
 
 router.get("/deposits/leaderboard", requireAuth, async (req, res) => {

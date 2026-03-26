@@ -9,31 +9,23 @@ import { format } from "date-fns";
 import { buildWhatsAppLink } from "@/lib/whatsapp";
 import { useAppSettings } from "@/hooks/useAppSettings";
 
-export default function GameCallBox({ user }) {
+export default function GameCallBox({ user, summary = null }) {
   const queryClient = useQueryClient();
   const [gameCall, setGameCall] = useState("");
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  const { data: activeRaffle } = useQuery({
-    queryKey: ['active-gamecall-raffles'],
-    queryFn: () => base44.entities.GameCallRaffle.filter({ active: true, ended: false }),
-    select: (raffles) => raffles[0] || null,
+  const { data: gameCallSummaryFromQuery } = useQuery({
+    queryKey: ["dashboard-dynamics-summary"],
+    queryFn: () => base44.dynamics.summary(),
+    select: (data) => data?.gameCall || null,
     staleTime: 15_000,
+    enabled: !summary?.raffle,
   });
 
-  const { data: myParticipation } = useQuery({
-    queryKey: ['my-gamecall-participation', activeRaffle?.id, user?.id],
-    queryFn: async () => {
-      if (!activeRaffle || !user) return null;
-      const participations = await base44.entities.GameCallParticipant.filter({
-        raffle_id: activeRaffle.id,
-        user_id: user.id
-      });
-      return participations[0] || null;
-    },
-    enabled: !!activeRaffle && !!user,
-  });
+  const gameCallSummary = summary || gameCallSummaryFromQuery || null;
+  const activeRaffle = gameCallSummary?.raffle || null;
+  const myParticipation = gameCallSummary?.myParticipation ?? null;
 
   const { data: settings = [] } = useAppSettings();
 
@@ -54,6 +46,7 @@ export default function GameCallBox({ user }) {
       setLoading(true);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       queryClient.invalidateQueries({ queryKey: ['my-gamecall-participation'] });
       setLoading(false);
       setGameCall("");
@@ -67,6 +60,7 @@ export default function GameCallBox({ user }) {
   const claimPrizeMutation = useMutation({
     mutationFn: () => base44.winnings.claim("game-call", myParticipation.id),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard-dynamics-summary'] });
       queryClient.invalidateQueries({ queryKey: ['my-gamecall-participation'] });
     }
   });

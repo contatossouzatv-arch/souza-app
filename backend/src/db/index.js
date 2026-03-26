@@ -2364,12 +2364,37 @@ export async function listDepositsByUserId(userId) {
 
 export async function listAdminDeposits({ status = "", cycleId = "", limit } = {}) {
   const result = await pool.query(
-    `SELECT *
-     FROM entity_records
-     WHERE entity_name = 'Deposit'
-     ORDER BY created_at DESC`
+    `SELECT
+       er.*,
+       u.full_name AS user_full_name,
+       u.name AS user_name_fallback,
+       u.email AS user_email_fallback,
+       u.platform_id AS user_platform_id_fallback
+     FROM entity_records er
+     LEFT JOIN users u
+       ON u.id::text = er.data->>'user_id'
+     WHERE er.entity_name = 'Deposit'
+     ORDER BY er.created_at DESC`
   );
-  let rows = result.rows.map(normalizeRecord);
+  let rows = result.rows.map((row) => {
+    const record = normalizeRecord(row);
+    return {
+      ...record,
+      user_name:
+        record.user_name ||
+        String(row.user_full_name || row.user_name_fallback || "").trim() ||
+        record.user_name,
+      user_email:
+        record.user_email ||
+        String(row.user_email_fallback || "").trim() ||
+        record.user_email,
+      user_platform_id:
+        record.user_platform_id ||
+        record.platform_id ||
+        String(row.user_platform_id_fallback || "").trim() ||
+        record.user_platform_id,
+    };
+  });
   if (status) {
     rows = rows.filter((item) => String(item.status || "") === String(status));
   }

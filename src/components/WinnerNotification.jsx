@@ -12,52 +12,34 @@ import { useAppSettings } from "@/hooks/useAppSettings";
 export default function WinnerNotification({ userId }) {
   const queryClient = useQueryClient();
 
-  const { data: winnings = [] } = useQuery({
-    queryKey: ["my-winnings", userId],
-    queryFn: () =>
-      base44.entities.LiveDrawParticipant.filter({
-        user_id: userId,
-        validated: true,
-        won: true,
-      }),
+  const { data: winningsSummary } = useQuery({
+    queryKey: ["my-winnings-summary", userId],
+    queryFn: () => base44.winnings.summary(),
+    enabled: !!userId,
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
   });
 
-  const { data: depositantWinnings = [] } = useQuery({
-    queryKey: ["my-depositant-winnings", userId],
-    queryFn: () =>
-      base44.entities.DepositantDrawWinner.filter({
-        user_id: userId,
-        prize_type: "raffle",
-      }),
-  });
+  const winnings = winningsSummary?.liveWinnings || [];
+  const depositantWinnings = winningsSummary?.depositantWinnings || [];
 
   const { data: settings = [] } = useAppSettings();
 
-  const activeWinning = winnings.find((w) => !w.claimed_at);
-  const activeDepositantWinning = depositantWinnings.find((w) => !w.claimed_at);
-
-  const { data: raffle = null } = useQuery({
-    queryKey: ["winner-raffle", activeWinning?.raffle_id],
-    queryFn: async () => {
-      const items = await base44.entities.LiveDrawRaffle.filter({ id: activeWinning.raffle_id }, undefined, 1);
-      return items[0] || null;
-    },
-    enabled: !!activeWinning?.raffle_id,
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-  });
+  const activeWinning = winningsSummary?.activeLiveWinning || winnings.find((w) => !w.claimed_at);
+  const activeDepositantWinning = winningsSummary?.activeDepositWinning || depositantWinnings.find((w) => !w.claimed_at);
+  const raffle = winningsSummary?.raffle || null;
 
   const updateParticipantMutation = useMutation({
     mutationFn: (participantId) => base44.winnings.claim("live-draw", participantId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["my-winnings"] });
+      queryClient.invalidateQueries({ queryKey: ["my-winnings-summary"] });
     },
   });
 
   const updateDepositantMutation = useMutation({
     mutationFn: (winnerId) => base44.winnings.claim("deposit-draw", winnerId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["my-depositant-winnings"] });
+      queryClient.invalidateQueries({ queryKey: ["my-winnings-summary"] });
     },
   });
 

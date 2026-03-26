@@ -74,9 +74,9 @@ export default function Deposits() {
     staleTime: 30000,
   });
 
-  const { data: allUsers = [], isLoading: usersLoading } = useQuery({
-    queryKey: ["all-users-top3"],
-    queryFn: () => base44.entities.User.list(undefined, 1000),
+  const { data: depositsDashboardSummary, isLoading: depositsDashboardLoading } = useQuery({
+    queryKey: ["deposits-dashboard-summary"],
+    queryFn: () => base44.deposits.dashboardSummary(),
     enabled: !!user,
     staleTime: 60000,
   });
@@ -85,19 +85,9 @@ export default function Deposits() {
     enabled: !!user,
   });
 
-  const { data: cycles = [] } = useQuery({
-    queryKey: ["deposit-cycles-dashboard"],
-    queryFn: () => base44.entities.DepositantDrawCycle.list("-created_date"),
-    enabled: !!user,
-    staleTime: 60000,
-  });
-
-  const { data: drawWinners = [], isLoading: drawWinnersLoading } = useQuery({
-    queryKey: ["depositant-draw-winners-history"],
-    queryFn: () => base44.entities.DepositantDrawWinner.list("-draw_date"),
-    enabled: !!user,
-    staleTime: 60000,
-  });
+  const cycles = depositsDashboardSummary?.cycles || [];
+  const drawWinners = depositsDashboardSummary?.drawWinners || [];
+  const dashboardProfiles = depositsDashboardSummary?.profiles || [];
   const activeCycle = cycles.find((c) => c.active);
 
   const { data: leaderboardData, isLoading: leaderboardLoading } = useQuery({
@@ -141,8 +131,7 @@ export default function Deposits() {
     depositsLoading ||
     allDepositsLoading ||
     settingsLoading ||
-    usersLoading ||
-    drawWinnersLoading ||
+    depositsDashboardLoading ||
     (Boolean(activeCycle?.id) && leaderboardLoading);
 
   if (isLoading) {
@@ -150,7 +139,7 @@ export default function Deposits() {
   }
 
   const usersById = {};
-  allUsers.forEach((u) => {
+  dashboardProfiles.forEach((u) => {
     usersById[u.id] = u;
   });
 

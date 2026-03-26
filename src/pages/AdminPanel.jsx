@@ -51,7 +51,7 @@ export default function AdminPanel() {
   const { data: pendingProfileImages = [] } = useQuery({
     queryKey: ["admin-profile-images-pending-counter"],
     queryFn: () => base44.auth.listAdminProfileImages("manual_review"),
-    staleTime: 5000,
+    staleTime: 60000,
     refetchOnWindowFocus: false,
   });
 
@@ -63,7 +63,7 @@ export default function AdminPanel() {
       const response = await base44.deposits.adminList({ status: "pending" });
       return response.items || [];
     },
-    staleTime: 5000,
+    staleTime: 60000,
     refetchOnWindowFocus: false,
   });
 

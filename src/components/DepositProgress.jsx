@@ -39,12 +39,18 @@ export default function DepositProgress({ totalApproved, pendingAmount, user, on
 
   const { data: activePlatforms = [] } = useQuery({
     queryKey: ["active-platforms"],
-    queryFn: () => base44.entities.Platform.filter({ active: true }, "order"),
+    queryFn: async () => {
+      const response = await base44.platforms.summary();
+      return response.activePlatforms || [];
+    },
   });
 
   const { data: cashbackClaims = [] } = useQuery({
     queryKey: ["my-cashback-claims", user?.id],
-    queryFn: () => base44.entities.CashbackClaim.filter({ user_id: user.id }),
+    queryFn: async () => {
+      const response = await base44.cashback.status();
+      return response.items || [];
+    },
     enabled: !!user,
   });
 

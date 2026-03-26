@@ -124,6 +124,7 @@ export default function SettingsTab() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["app-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["public-ui-config"] });
       queryClient.invalidateQueries({ queryKey: ["settings"] });
       queryClient.invalidateQueries({ queryKey: ["deposit-settings"] });
       queryClient.invalidateQueries({ queryKey: ["live-settings"] });

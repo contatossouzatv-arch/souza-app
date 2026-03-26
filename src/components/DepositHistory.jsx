@@ -36,7 +36,10 @@ export default function DepositHistory() {
 
   const { data: cycles = [], isLoading: cyclesLoading } = useQuery({
     queryKey: ["deposit-cycles-history", user?.id],
-    queryFn: () => base44.entities.DepositantDrawCycle.list("-created_date"),
+    queryFn: async () => {
+      const response = await base44.deposits.dashboardSummary();
+      return response.cycles || [];
+    },
     enabled: Boolean(user?.id),
     refetchOnWindowFocus: true,
   });

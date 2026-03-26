@@ -315,7 +315,80 @@ async function clearParticipants({ domain, entityName, raffleId, requestId, admi
   }
 }
 
+async function findCurrentRaffle(entityName) {
+  const result = await pool.query(
+    `SELECT id, data, created_at, updated_at
+     FROM entity_records
+     WHERE entity_name = $1
+       AND COALESCE(data->>'active', 'false') = 'true'
+       AND COALESCE(data->>'ended', 'false') <> 'true'
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [String(entityName || "")]
+  );
+
+  const row = result.rows[0];
+  return row ? normalizeRecord(row) : null;
+}
+
+async function listParticipantsWithProfileImage({ entityName, raffleId, limit = 2000 }) {
+  const parsedLimit = Math.max(1, Math.min(5000, Number(limit || 2000)));
+  const participantsResult = await pool.query(
+    `SELECT id, data, created_at, updated_at
+     FROM entity_records
+     WHERE entity_name = $1
+       AND data->>'raffle_id' = $2
+     ORDER BY created_at DESC
+     LIMIT $3`,
+    [String(entityName || ""), String(raffleId || ""), parsedLimit]
+  );
+
+  const participants = participantsResult.rows.map(normalizeRecord);
+  const userIds = [...new Set(participants.map((item) => String(item?.user_id || "").trim()).filter(Boolean))];
+
+  if (userIds.length === 0) {
+    return participants;
+  }
+
+  const placeholders = userIds.map((_, index) => `$${index + 2}`).join(", ");
+  const usersResult = await pool.query(
+    `SELECT id, data, created_at, updated_at
+     FROM entity_records
+     WHERE entity_name = $1
+       AND id IN (${placeholders})`,
+    ["User", ...userIds]
+  );
+
+  const usersById = new Map(usersResult.rows.map((row) => {
+    const normalized = normalizeRecord(row);
+    return [String(normalized?.id || ""), normalized];
+  }));
+
+  return participants.map((participant) => {
+    if (participant?.user_profile_image_url) {
+      return participant;
+    }
+
+    const linkedUser = usersById.get(String(participant?.user_id || ""));
+    const approvedProfileImage =
+      linkedUser?.profile_image_status === "approved" && linkedUser?.profile_image_url
+        ? linkedUser.profile_image_url
+        : "";
+
+    return approvedProfileImage
+      ? { ...participant, user_profile_image_url: approvedProfileImage }
+      : participant;
+  });
+}
+
 export const liveDrawAdmin = {
+  getCurrent: () => findCurrentRaffle("LiveDrawRaffle"),
+  listParticipants: ({ raffleId, limit = 2000 }) =>
+    listParticipantsWithProfileImage({
+      entityName: "LiveDrawParticipant",
+      raffleId,
+      limit,
+    }),
   create: (input) => createRaffle({ domain: "admin_live_draw_create", entityName: "LiveDrawRaffle", ...input, payload: { title: String(input.title || "").trim(), active: true, max_winners: Math.max(1, Number(input.maxWinners || 1)), prize_amount: Math.max(0, Number(input.prizeAmount || 0)), admin_name: normalizeAdminName(input.adminName), admin_phone: normalizeAdminPhone(input.adminPhone), ended: false, pending_draw_candidates: [], pending_draw_count: 0 } }),
   update: ({ raffleId, adminName, adminPhone, ...input }) => {
     return (async () => {
@@ -438,6 +511,13 @@ export const liveDrawAdmin = {
 };
 
 export const gameCallAdmin = {
+  getCurrent: () => findCurrentRaffle("GameCallRaffle"),
+  listParticipants: ({ raffleId, limit = 2000 }) =>
+    listParticipantsWithProfileImage({
+      entityName: "GameCallParticipant",
+      raffleId,
+      limit,
+    }),
   create: (input) => createRaffle({ domain: "admin_game_call_create", entityName: "GameCallRaffle", ...input, payload: { title: String(input.title || "").trim(), active: true, prize_amount: Math.max(0, Number(input.prizeAmount || 0)), max_attempts: Math.max(1, Number(input.maxAttempts || 3)), max_winners: Math.max(1, Number(input.maxWinners || 1)), admin_name: normalizeAdminName(input.adminName), admin_phone: normalizeAdminPhone(input.adminPhone), ended: false, pending_draw_candidates: [], pending_draw_count: 0 } }),
   update: ({ raffleId, maxAttempts, maxWinners, adminName, adminPhone, ...input }) => {
     return (async () => {
