@@ -2140,6 +2140,10 @@ export default function Profile() {
           avatarMatch?.src ||
           defaultAvatar,
         avatar_emoji: String(resolvedProfile.avatar_emoji || entry.avatar_emoji || ""),
+        profile_avatar_id: String(resolvedProfile.profile_avatar_id || entry.profile_avatar_id || ""),
+        profile_image_mode: String(resolvedProfile.profile_image_mode || entry.profile_image_mode || "avatar"),
+        profile_image_status: String(resolvedProfile.profile_image_status || entry.profile_image_status || ""),
+        profile_image_url: String(resolvedProfile.profile_image_url || entry.profile_image_url || ""),
         points: Number(entry.weekly_points ?? entry.points ?? 0),
         xpTotal: Math.max(0, Number(entry.xp_total ?? entry.xpTotal ?? resolvedProfile.xp_total ?? resolvedProfile.xpTotal ?? 0)),
         xp_total: Math.max(0, Number(entry.xp_total ?? entry.xpTotal ?? resolvedProfile.xp_total ?? resolvedProfile.xpTotal ?? 0)),
@@ -2168,6 +2172,10 @@ export default function Profile() {
             .replace(/\s+/g, "."),
         avatarSrc: getProfileAvatarSrc(selectedPublicUser, avatarSrcById, defaultAvatar) || defaultAvatar,
         avatar_emoji: String(selectedPublicUser.avatar_emoji || ""),
+        profile_avatar_id: String(selectedPublicUser.profile_avatar_id || ""),
+        profile_image_mode: String(selectedPublicUser.profile_image_mode || "avatar"),
+        profile_image_status: String(selectedPublicUser.profile_image_status || ""),
+        profile_image_url: String(selectedPublicUser.profile_image_url || ""),
         points: 0,
         xpTotal: Math.max(0, Number(selectedPublicUser.xp_total ?? selectedPublicUser.xpTotal ?? 0)),
         xp_total: Math.max(0, Number(selectedPublicUser.xp_total ?? selectedPublicUser.xpTotal ?? 0)),
@@ -2187,8 +2195,20 @@ export default function Profile() {
       : simulatedProfiles.find((profile) => profile.id === selectedPublicProfileId);
     if (!baseProfile) return null;
     const state = simState[baseProfile.id] || {};
+    const resolvedBaseProfile =
+      publicProfileBasicsMap.get(String(baseProfile.id || "")) ||
+      realProfilesById[String(baseProfile.id || "")] ||
+      baseProfile;
     return {
       ...baseProfile,
+      avatarSrc:
+        getProfileAvatarSrc(resolvedBaseProfile, avatarSrcById, baseProfile.avatarSrc || defaultAvatar) ||
+        baseProfile.avatarSrc ||
+        defaultAvatar,
+      profile_avatar_id: String(resolvedBaseProfile.profile_avatar_id || baseProfile.profile_avatar_id || ""),
+      profile_image_mode: String(resolvedBaseProfile.profile_image_mode || baseProfile.profile_image_mode || "avatar"),
+      profile_image_status: String(resolvedBaseProfile.profile_image_status || baseProfile.profile_image_status || ""),
+      profile_image_url: String(resolvedBaseProfile.profile_image_url || baseProfile.profile_image_url || ""),
       followers: state.followers ?? baseProfile.followers,
       likes: state.likes ?? baseProfile.likes,
     };
@@ -2202,6 +2222,7 @@ export default function Profile() {
     realProfilesById,
     selectedPublicUser,
     avatarSrcById,
+    publicProfileBasicsMap,
   ]);
 
   const isSelectedRealProfile = Boolean(selectedPublicProfile?.id);
