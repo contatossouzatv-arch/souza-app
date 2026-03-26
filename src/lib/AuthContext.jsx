@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 
 const AuthContext = createContext();
@@ -36,42 +36,7 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState(null);
   const [appPublicSettings] = useState(null);
 
-  useEffect(() => {
-    console.info('[auth-bootstrap] mount');
-    const hasToken = base44.auth.hasToken();
-    const cachedUser = hasToken ? readLastKnownUser() : null;
-
-    if (cachedUser?.id) {
-      console.info('[auth-bootstrap] mount:using-cached-user', {
-        userId: cachedUser.id,
-      });
-      setUser(cachedUser);
-      setIsAuthenticated(true);
-      setIsLoadingAuth(false);
-      checkAppState({ background: true });
-    } else {
-      checkAppState();
-    }
-
-    const handleAuthRequired = (event) => {
-      console.warn('[auth-bootstrap] auth-required event received', event?.detail || {});
-      writeLastKnownUser(null);
-      setUser(null);
-      setIsAuthenticated(false);
-      setAuthError({
-        type: 'auth_required',
-        message: event?.detail?.message || 'Authentication required',
-      });
-      setIsLoadingAuth(false);
-    };
-
-    window.addEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
-    return () => {
-      window.removeEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
-    };
-  }, []);
-
-  const checkAppState = async ({ background = false } = {}) => {
+  const checkAppState = useCallback(async ({ background = false } = {}) => {
     console.info('[auth-bootstrap] checkAppState:start', {
       hasToken: base44.auth.hasToken(),
       background,
@@ -128,7 +93,42 @@ export const AuthProvider = ({ children }) => {
         setIsLoadingAuth(false);
       }
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    console.info('[auth-bootstrap] mount');
+    const hasToken = base44.auth.hasToken();
+    const cachedUser = hasToken ? readLastKnownUser() : null;
+
+    if (cachedUser?.id) {
+      console.info('[auth-bootstrap] mount:using-cached-user', {
+        userId: cachedUser.id,
+      });
+      setUser(cachedUser);
+      setIsAuthenticated(true);
+      setIsLoadingAuth(false);
+      checkAppState({ background: true });
+    } else {
+      checkAppState();
+    }
+
+    const handleAuthRequired = (event) => {
+      console.warn('[auth-bootstrap] auth-required event received', event?.detail || {});
+      writeLastKnownUser(null);
+      setUser(null);
+      setIsAuthenticated(false);
+      setAuthError({
+        type: 'auth_required',
+        message: event?.detail?.message || 'Authentication required',
+      });
+      setIsLoadingAuth(false);
+    };
+
+    window.addEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
+    return () => {
+      window.removeEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
+    };
+  }, [checkAppState]);
 
   const logout = (shouldRedirect = true) => {
     writeLastKnownUser(null);

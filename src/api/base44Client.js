@@ -280,6 +280,25 @@ function isAuthPath(path = "") {
   return String(path || "").startsWith("/api/auth/");
 }
 
+function shouldSkipAuthRefresh(path = "", explicitSkip = false) {
+  if (explicitSkip) return true;
+  const normalizedPath = String(path || "").trim();
+  const skipRefreshPaths = new Set([
+    "/api/auth/refresh",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/auth/google",
+    "/api/auth/register",
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
+    "/api/auth/2fa/diagnose",
+    "/api/auth/2fa/setup",
+    "/api/auth/2fa/enable",
+    "/api/auth/2fa/disable",
+  ]);
+  return skipRefreshPaths.has(normalizedPath);
+}
+
 function shouldHandleUnauthorized(path, status) {
   if (Number(status) !== 401 || !isAuthPath(path)) return false;
   const normalizedPath = String(path || "").trim();
@@ -348,11 +367,7 @@ async function request(path, options = {}) {
     throw error;
   }
 
-  const skipRefresh =
-    Boolean(__skipAuthRefresh) ||
-    path === "/api/auth/refresh" ||
-    path === "/api/auth/login" ||
-    path === "/api/auth/logout";
+  const skipRefresh = shouldSkipAuthRefresh(path, Boolean(__skipAuthRefresh));
 
   if (response.status === 401 && !skipRefresh) {
     const refreshed = await tryRefreshSession();
@@ -423,11 +438,7 @@ async function requestBlob(path, options = {}) {
     throw error;
   }
 
-  const skipRefresh =
-    Boolean(__skipAuthRefresh) ||
-    path === "/api/auth/refresh" ||
-    path === "/api/auth/login" ||
-    path === "/api/auth/logout";
+  const skipRefresh = shouldSkipAuthRefresh(path, Boolean(__skipAuthRefresh));
 
   if (response.status === 401 && !skipRefresh) {
     const refreshed = await tryRefreshSession();
