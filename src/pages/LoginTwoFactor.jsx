@@ -147,6 +147,7 @@ export default function LoginTwoFactor() {
               <Input
                 type="text"
                 inputMode="numeric"
+                autoComplete="one-time-code"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 8))}
                 placeholder="000000"

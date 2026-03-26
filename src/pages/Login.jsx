@@ -429,6 +429,7 @@ export default function Login() {
                   <Label className="text-slate-200">Email</Label>
                   <Input
                     type="email"
+                    autoComplete="email"
                     value={loginData.email}
                     onChange={(e) => setLoginData((prev) => ({ ...prev, email: e.target.value }))}
                     placeholder="você@email.com"
@@ -441,6 +442,7 @@ export default function Login() {
                   <div className="relative">
                     <Input
                       type={showLoginPassword ? "text" : "password"}
+                      autoComplete="current-password"
                       value={loginData.password}
                       onChange={(e) => setLoginData((prev) => ({ ...prev, password: e.target.value }))}
                       placeholder="Sua senha"
@@ -502,6 +504,7 @@ export default function Login() {
                   <Label className="text-slate-200">Email</Label>
                   <Input
                     type="email"
+                    autoComplete="email"
                     value={registerData.email}
                     onChange={(e) => setRegisterData((prev) => ({ ...prev, email: e.target.value }))}
                     placeholder="você@email.com"
@@ -528,6 +531,7 @@ export default function Login() {
                   <div className="relative">
                     <Input
                       type={showRegisterPassword ? "text" : "password"}
+                      autoComplete="new-password"
                       value={registerData.password}
                       onChange={(e) => setRegisterData((prev) => ({ ...prev, password: e.target.value }))}
                       placeholder="Crie uma senha"
@@ -549,6 +553,7 @@ export default function Login() {
                   <div className="relative">
                     <Input
                       type={showConfirmPassword ? "text" : "password"}
+                      autoComplete="new-password"
                       value={registerData.confirmPassword}
                       onChange={(e) => setRegisterData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
                       placeholder="Repita a senha"
