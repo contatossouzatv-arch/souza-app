@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 
 const AuthContext = createContext();
@@ -36,7 +36,7 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState(null);
   const [appPublicSettings] = useState(null);
 
-  const checkAppState = useCallback(async ({ background = false } = {}) => {
+  const checkAppState = async ({ background = false } = {}) => {
     console.info('[auth-bootstrap] checkAppState:start', {
       hasToken: base44.auth.hasToken(),
       background,
@@ -93,7 +93,7 @@ export const AuthProvider = ({ children }) => {
         setIsLoadingAuth(false);
       }
     }
-  }, []);
+  };
 
   useEffect(() => {
     console.info('[auth-bootstrap] mount');
@@ -128,7 +128,7 @@ export const AuthProvider = ({ children }) => {
     return () => {
       window.removeEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
     };
-  }, [checkAppState]);
+  }, []);
 
   const logout = (shouldRedirect = true) => {
     writeLastKnownUser(null);

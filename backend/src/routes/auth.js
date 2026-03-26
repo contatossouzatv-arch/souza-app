@@ -3,7 +3,6 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import rateLimit from "express-rate-limit";
 import multer from "multer";
 import { OAuth2Client } from "google-auth-library";
@@ -52,7 +51,6 @@ const googleClient = new OAuth2Client();
 const profilePendingDir = path.resolve(privateUploadsDir, "profile-pending");
 const profilePublicDir = path.resolve(uploadsDir, "profile");
 const bannedNameTokens = ["nude", "porn", "sexo", "sex", "nsfw"];
-const GOOGLE_2FA_CHALLENGE_TTL_SEC = 10 * 60;
 
 fs.mkdirSync(profilePendingDir, { recursive: true });
 fs.mkdirSync(profilePublicDir, { recursive: true });
@@ -408,27 +406,6 @@ function logAuthRoute(req, message, details = {}) {
   });
 }
 
-function signGoogleTwoFactorChallenge(user) {
-  return jwt.sign(
-    {
-      type: "google-2fa",
-      sub: user.id,
-      email: user.email || "",
-    },
-    env.jwtAccessSecret,
-    { expiresIn: GOOGLE_2FA_CHALLENGE_TTL_SEC }
-  );
-}
-
-function parseGoogleTwoFactorChallenge(token) {
-  try {
-    const parsed = jwt.verify(String(token || ""), env.jwtAccessSecret);
-    if (parsed?.type !== "google-2fa" || !parsed?.sub) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
 
 async function issueSession(req, user, familyId = null) {
   const refreshToken = generateRefreshToken();
@@ -586,8 +563,8 @@ router.post("/login", loginRateLimiter, async (req, res) => {
 });
 
 router.post("/google", loginRateLimiter, async (req, res) => {
-  const { credential, otp, challengeToken } = req.body || {};
-  if (!credential && !challengeToken) {
+  const { credential, otp } = req.body || {};
+  if (!credential) {
     return res.status(400).json({ error: "credential is required" });
   }
 
@@ -597,69 +574,50 @@ router.post("/google", loginRateLimiter, async (req, res) => {
 
   try {
     const meta = requestMeta(req);
-    let email = "";
-    let user = null;
-    let userRow = null;
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: env.googleClientId,
+    });
 
-    if (challengeToken) {
-      const parsedChallenge = parseGoogleTwoFactorChallenge(challengeToken);
-      if (!parsedChallenge?.sub) {
-        return res.status(401).json({ error: "Desafio 2FA expirado. Entre com Google novamente." });
-      }
+    const payload = ticket.getPayload();
+    const email = sanitizeEmail(payload?.email);
+    const googleId = payload?.sub;
 
-      user = await findUserById(parsedChallenge.sub);
-      userRow = await findUserRowById(parsedChallenge.sub);
-      email = sanitizeEmail(parsedChallenge.email || userRow?.email || user?.email || "");
-
-      if (!user || !userRow) {
-        return res.status(401).json({ error: "Sessão de 2FA inválida. Entre com Google novamente." });
-      }
-    } else {
-      const ticket = await googleClient.verifyIdToken({
-        idToken: credential,
-        audience: env.googleClientId,
+    if (!email || !googleId) {
+      await createLoginAttempt({
+        identifier: email || googleId || "google",
+        ip: meta.ip,
+        user_agent: meta.user_agent,
+        success: false,
       });
-
-      const payload = ticket.getPayload();
-      email = sanitizeEmail(payload?.email);
-      const googleId = payload?.sub;
-
-      if (!email || !googleId) {
-        await createLoginAttempt({
-          identifier: email || googleId || "google",
-          ip: meta.ip,
-          user_agent: meta.user_agent,
-          success: false,
-        });
-        return res.status(400).json({ error: "Token Google inválido" });
-      }
-
-      user = await findUserByGoogleId(googleId);
-
-      if (!user) {
-        const existingByEmail = await findUserRowByEmail(email);
-        if (existingByEmail) {
-          user = await updateUserGoogleLink(existingByEmail.id, googleId);
-        } else {
-          const requestedNick = payload?.given_name || email.split("@")[0];
-          await ensureUniqueIdentityFields({
-            email,
-            nick: requestedNick,
-            phone: "",
-          });
-          user = await findOrCreateUserByEmail(email, {
-            google_id: googleId,
-            full_name: payload?.name || "",
-            nick: sanitizeNick(requestedNick) || requestedNick,
-            terms_accepted: false,
-            privacy_accepted: false,
-            onboarding_completed: false,
-          });
-        }
-      }
-
-      userRow = await findUserRowById(user.id);
+      return res.status(400).json({ error: "Token Google inválido" });
     }
+
+    let user = await findUserByGoogleId(googleId);
+
+    if (!user) {
+      const existingByEmail = await findUserRowByEmail(email);
+      if (existingByEmail) {
+        user = await updateUserGoogleLink(existingByEmail.id, googleId);
+      } else {
+        const requestedNick = payload?.given_name || email.split("@")[0];
+        await ensureUniqueIdentityFields({
+          email,
+          nick: requestedNick,
+          phone: "",
+        });
+        user = await findOrCreateUserByEmail(email, {
+          google_id: googleId,
+          full_name: payload?.name || "",
+          nick: sanitizeNick(requestedNick) || requestedNick,
+          terms_accepted: false,
+          privacy_accepted: false,
+          onboarding_completed: false,
+        });
+      }
+    }
+
+    const userRow = await findUserRowById(user.id);
 
     if (Boolean(userRow?.two_factor_enabled) && userRow?.two_factor_secret) {
       if (!String(otp || "").trim()) {
@@ -670,10 +628,7 @@ router.post("/google", loginRateLimiter, async (req, res) => {
           success: false,
         });
         await auditEvent(req, "LOGIN_2FA_REQUIRED", user.id, { method: "google" });
-        return res.status(401).json({
-          error: "2FA_REQUIRED",
-          challengeToken: signGoogleTwoFactorChallenge(userRow),
-        });
+        return res.status(401).json({ error: "2FA_REQUIRED" });
       }
 
       const otpOk = verifyTotp(userRow.two_factor_secret, otp);
@@ -702,10 +657,7 @@ router.post("/google", loginRateLimiter, async (req, res) => {
     await auditEvent(req, "USER_LOGGED_IN", activeUser.id, { method: "google" });
     emitEntityChanged(req, "user", activeUser.id, "updated");
     return res.json(session);
-  } catch (error) {
-    console.error("[auth-backend] google auth failed", {
-      message: error?.message || "unknown",
-    });
+  } catch (_error) {
     return res.status(401).json({ error: "Falha na autenticação Google" });
   }
 });

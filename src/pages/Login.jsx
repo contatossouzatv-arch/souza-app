@@ -58,7 +58,6 @@ export default function Login() {
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const googleButtonRef = useRef(null);
-  const googleInitializedRef = useRef(false);
   const loginPanelRef = useRef(null);
   const registerPanelRef = useRef(null);
   const [panelHeight, setPanelHeight] = useState(0);
@@ -86,8 +85,7 @@ export default function Login() {
     let script = document.getElementById(scriptId);
 
     const initGoogle = () => {
-      if (!window.google || !googleButtonRef.current || googleInitializedRef.current) return;
-      googleInitializedRef.current = true;
+      if (!window.google || !googleButtonRef.current) return;
       const buttonWidth = Math.min(googleButtonRef.current.clientWidth || 320, 320);
       window.google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
@@ -109,7 +107,6 @@ export default function Login() {
                   JSON.stringify({
                     provider: "google",
                     credential: response.credential,
-                    challengeToken: err?.challengeToken || err?.payload?.challengeToken || "",
                     email: "",
                     created_at: Date.now(),
                   })

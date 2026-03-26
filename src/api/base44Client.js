@@ -209,20 +209,15 @@ async function parseResponse(response) {
   }
 
   let message = `HTTP ${response.status}`;
-  let payload = null;
   try {
-    payload = await response.json();
-    message = payload?.error || payload?.message || message;
+    const data = await response.json();
+    message = data?.error || data?.message || message;
   } catch {
     // ignore parse error
   }
 
   const error = new Error(message);
   error.status = response.status;
-  error.payload = payload;
-  if (payload && typeof payload === "object") {
-    Object.assign(error, payload);
-  }
   throw error;
 }
 
@@ -283,25 +278,6 @@ async function tryRefreshSession() {
 
 function isAuthPath(path = "") {
   return String(path || "").startsWith("/api/auth/");
-}
-
-function shouldSkipAuthRefresh(path = "", explicitSkip = false) {
-  if (explicitSkip) return true;
-  const normalizedPath = String(path || "").trim();
-  const skipRefreshPaths = new Set([
-    "/api/auth/refresh",
-    "/api/auth/login",
-    "/api/auth/logout",
-    "/api/auth/google",
-    "/api/auth/register",
-    "/api/auth/forgot-password",
-    "/api/auth/reset-password",
-    "/api/auth/2fa/diagnose",
-    "/api/auth/2fa/setup",
-    "/api/auth/2fa/enable",
-    "/api/auth/2fa/disable",
-  ]);
-  return skipRefreshPaths.has(normalizedPath);
 }
 
 function shouldHandleUnauthorized(path, status) {
@@ -372,7 +348,11 @@ async function request(path, options = {}) {
     throw error;
   }
 
-  const skipRefresh = shouldSkipAuthRefresh(path, Boolean(__skipAuthRefresh));
+  const skipRefresh =
+    Boolean(__skipAuthRefresh) ||
+    path === "/api/auth/refresh" ||
+    path === "/api/auth/login" ||
+    path === "/api/auth/logout";
 
   if (response.status === 401 && !skipRefresh) {
     const refreshed = await tryRefreshSession();
@@ -443,7 +423,11 @@ async function requestBlob(path, options = {}) {
     throw error;
   }
 
-  const skipRefresh = shouldSkipAuthRefresh(path, Boolean(__skipAuthRefresh));
+  const skipRefresh =
+    Boolean(__skipAuthRefresh) ||
+    path === "/api/auth/refresh" ||
+    path === "/api/auth/login" ||
+    path === "/api/auth/logout";
 
   if (response.status === 401 && !skipRefresh) {
     const refreshed = await tryRefreshSession();
@@ -640,11 +624,11 @@ export const base44 = {
       return data;
     },
 
-    async loginWithGoogle(credential, otp, challengeToken) {
+    async loginWithGoogle(credential, otp) {
       const data = await request("/api/auth/google", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ credential, otp, challengeToken }),
+        body: JSON.stringify({ credential, otp }),
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
