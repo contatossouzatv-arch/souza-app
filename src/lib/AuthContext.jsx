@@ -3,6 +3,30 @@ import { base44 } from '@/api/base44Client';
 
 const AuthContext = createContext();
 const AUTH_REQUIRED_EVENT = 'souza:auth-required';
+const LAST_KNOWN_USER_KEY = 'souza_last_known_user_v1';
+
+function readLastKnownUser() {
+  try {
+    const raw = window.localStorage.getItem(LAST_KNOWN_USER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLastKnownUser(user) {
+  try {
+    if (user && typeof user === 'object') {
+      window.localStorage.setItem(LAST_KNOWN_USER_KEY, JSON.stringify(user));
+    } else {
+      window.localStorage.removeItem(LAST_KNOWN_USER_KEY);
+    }
+  } catch {
+    // ignore localStorage errors
+  }
+}
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -18,6 +42,7 @@ export const AuthProvider = ({ children }) => {
 
     const handleAuthRequired = (event) => {
       console.warn('[auth-bootstrap] auth-required event received', event?.detail || {});
+      writeLastKnownUser(null);
       setUser(null);
       setIsAuthenticated(false);
       setAuthError({
@@ -45,22 +70,35 @@ export const AuthProvider = ({ children }) => {
       console.info('[auth-bootstrap] checkAppState:authenticated', {
         userId: currentUser?.id || null,
       });
+      writeLastKnownUser(currentUser);
       setUser(currentUser);
       setIsAuthenticated(true);
     } catch (error) {
       const isRecoverable = base44.auth.isRecoverableAuthError(error);
+      const hasToken = base44.auth.hasToken();
+      const cachedUser = hasToken ? readLastKnownUser() : null;
       console.warn('[auth-bootstrap] checkAppState:failed', {
         status: error?.status || null,
         message: error?.message || 'Authentication required',
         isRecoverable,
+        hasToken,
+        hasCachedUser: Boolean(cachedUser?.id),
       });
-      if (isRecoverable) {
+      if (isRecoverable && cachedUser?.id) {
+        console.warn('[auth-bootstrap] checkAppState:using-cached-user', {
+          userId: cachedUser.id,
+        });
+        setUser(cachedUser);
+        setIsAuthenticated(true);
+        setAuthError(null);
+      } else if (isRecoverable) {
         setAuthError({
           type: 'auth_unreachable',
           message: 'Nao foi possivel validar sua sessao agora. Tente novamente em instantes.',
         });
       } else {
         base44.auth.clearClientAuthState('bootstrap_unauthorized');
+        writeLastKnownUser(null);
         setUser(null);
         setIsAuthenticated(false);
         setAuthError({
@@ -75,6 +113,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = (shouldRedirect = true) => {
+    writeLastKnownUser(null);
     setUser(null);
     setIsAuthenticated(false);
     base44.auth.logout(shouldRedirect ? '/login' : undefined);
