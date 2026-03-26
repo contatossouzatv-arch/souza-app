@@ -84,9 +84,9 @@ export default function Deposits() {
     enabled: !!user,
   });
 
-  const cycles = depositsDashboardSummary?.cycles || [];
-  const drawWinners = depositsDashboardSummary?.drawWinners || [];
-  const dashboardProfiles = depositsDashboardSummary?.profiles || [];
+  const cycles = Array.isArray(depositsDashboardSummary?.cycles) ? depositsDashboardSummary.cycles : [];
+  const drawWinners = Array.isArray(depositsDashboardSummary?.drawWinners) ? depositsDashboardSummary.drawWinners : [];
+  const dashboardProfiles = Array.isArray(depositsDashboardSummary?.profiles) ? depositsDashboardSummary.profiles : [];
   const activeCycle = cycles.find((c) => c.active);
 
   const { data: leaderboardData, isLoading: leaderboardLoading } = useQuery({
@@ -112,12 +112,13 @@ export default function Deposits() {
     0
   );
 
-  const rankings = leaderboardData?.items || [];
+  const rankings = Array.isArray(leaderboardData?.items) ? leaderboardData.items : [];
   const top3 = rankings.slice(0, 3);
   const userPosition = Number(leaderboardData?.currentUser?.position || 0);
 
   const getSettingValue = (key, defaultValue = "") => {
-    const setting = settings.find((s) => s.key === key);
+    const safeSettings = Array.isArray(settings) ? settings : [];
+    const setting = safeSettings.find((s) => s?.key === key);
     return setting?.value || defaultValue;
   };
 

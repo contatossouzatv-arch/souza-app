@@ -918,10 +918,12 @@ export default function Profile() {
     return map;
   }, []);
 
+  const [loadDiscoverProfiles, setLoadDiscoverProfiles] = useState(false);
+
   const { data: discoverProfilesData } = useQuery({
     queryKey: ["profile-discover-profiles", user?.id],
     queryFn: () => base44.social.discover({ limit: 24, offset: 0 }),
-    enabled: canLoadDeferredProfileQueries,
+    enabled: !!user && loadDiscoverProfiles,
     staleTime: 60000,
     refetchOnWindowFocus: false,
     retry: false,
@@ -1242,6 +1244,17 @@ export default function Profile() {
     loadNonCriticalProfileData &&
     hasProfileGamification &&
     !isProfileGamificationUnavailable;
+
+  useEffect(() => {
+    setLoadDiscoverProfiles(false);
+    if (!canLoadDeferredProfileQueries) return undefined;
+
+    const timerId = window.setTimeout(() => {
+      setLoadDiscoverProfiles(true);
+    }, PROFILE_NON_CRITICAL_LOAD_DELAY_MS + 600);
+
+    return () => window.clearTimeout(timerId);
+  }, [canLoadDeferredProfileQueries, location.pathname, location.search, user?.id]);
 
   useEffect(() => {
     setLoadNonCriticalProfileData(false);

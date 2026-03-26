@@ -8,7 +8,12 @@ export function useAppSettings(options = {}) {
   return useQuery({
     queryKey: PUBLIC_UI_CONFIG_QUERY_KEY,
     queryFn: () => base44.ui.publicConfig(),
-    select: (data) => data?.settings || [],
+    select: (data) => {
+      const settings = data?.settings;
+      if (Array.isArray(settings)) return settings;
+      if (settings && typeof settings === "object") return Object.values(settings);
+      return [];
+    },
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     ...options,
