@@ -27,6 +27,10 @@ const MainGameComingSoon = lazyWithRecovery(() => import('@/pages/MainGameComing
 const DailyChestHub = lazyWithRecovery(() => import('@/pages/DailyChestHub'));
 
 const { Pages, Layout, mainPage } = pagesConfig;
+const MAINTENANCE_MODE = import.meta.env.VITE_MAINTENANCE_MODE === "true";
+const MAINTENANCE_BYPASS_KEY = String(import.meta.env.VITE_MAINTENANCE_BYPASS_KEY || "").trim();
+const MAINTENANCE_BYPASS_PATH = String(import.meta.env.VITE_MAINTENANCE_BYPASS_PATH || "/acesso-manutencao").trim() || "/acesso-manutencao";
+const MAINTENANCE_SESSION_KEY = "souza_maintenance_bypass_v1";
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 const FULLSCREEN_PAGES = new Set(["DailyEvent"]);
@@ -122,6 +126,89 @@ const AppUnavailableState = ({ message, onRetry }) => (
     </div>
   </div>
 );
+
+const MaintenanceGate = () => {
+  const location = useLocation();
+  const [isUnlocked, setIsUnlocked] = useState(() => {
+    try {
+      return window.sessionStorage.getItem(MAINTENANCE_SESSION_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    if (!MAINTENANCE_MODE) return;
+    if (!MAINTENANCE_BYPASS_KEY) return;
+    const params = new URLSearchParams(location.search);
+    const providedKey = String(params.get("k") || "").trim();
+    if (!providedKey || providedKey !== MAINTENANCE_BYPASS_KEY) return;
+    try {
+      window.sessionStorage.setItem(MAINTENANCE_SESSION_KEY, "true");
+    } catch {
+      // ignore sessionStorage errors
+    }
+    setIsUnlocked(true);
+  }, [location.search]);
+
+  if (!MAINTENANCE_MODE || isUnlocked || location.pathname === MAINTENANCE_BYPASS_PATH) {
+    return <AuthenticatedApp />;
+  }
+
+  return (
+    <div className="fixed inset-0 z-[220] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_34%),linear-gradient(180deg,#020617_0%,#071120_42%,#020617_100%)] text-white">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(16,185,129,0.14),transparent_24%),radial-gradient(circle_at_80%_22%,rgba(56,189,248,0.16),transparent_22%)]" />
+      <div className="relative flex h-full items-center justify-center px-6">
+        <div className="w-full max-w-xl rounded-[2rem] border border-white/10 bg-slate-950/55 px-7 py-8 shadow-[0_24px_80px_rgba(2,6,23,0.42)] backdrop-blur-xl">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-200/90">Souza Cass</p>
+          <h1 className="mt-3 text-3xl font-black text-white">Estamos em manutenção</h1>
+          <p className="mt-3 text-sm text-slate-200/88">
+            Estamos ajustando o app para melhorar estabilidade, login e desempenho. O acesso público volta em instantes.
+          </p>
+          <div className="mt-6 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-4 text-sm text-cyan-100">
+            Se você precisa entrar para testar internamente, use seu link privado de manutenção.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MaintenanceBypass = () => {
+  const location = useLocation();
+  const [status, setStatus] = useState("Validando acesso privado");
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const providedKey = String(params.get("k") || "").trim();
+    if (!MAINTENANCE_MODE) {
+      window.location.replace("/login");
+      return;
+    }
+    if (!MAINTENANCE_BYPASS_KEY || providedKey !== MAINTENANCE_BYPASS_KEY) {
+      setStatus("Link privado inválido");
+      return;
+    }
+    try {
+      window.sessionStorage.setItem(MAINTENANCE_SESSION_KEY, "true");
+    } catch {
+      // ignore sessionStorage errors
+    }
+    window.location.replace("/login");
+  }, [location.search]);
+
+  return (
+    <div className="fixed inset-0 z-[220] overflow-hidden bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_34%),linear-gradient(180deg,#020617_0%,#071120_42%,#020617_100%)] text-white">
+      <div className="relative flex h-full items-center justify-center px-6">
+        <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-slate-950/55 px-7 py-8 shadow-[0_24px_80px_rgba(2,6,23,0.42)] backdrop-blur-xl">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-200/90">Souza Cass</p>
+          <h1 className="mt-3 text-2xl font-black text-white">Acesso interno</h1>
+          <p className="mt-3 text-sm text-slate-200/88">{status}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const AUTH_BOOT_FAILSAFE_MS = 18000;
 
@@ -384,7 +471,12 @@ function App() {
           <RealtimeSync />
           <NavigationTracker />
           <MetricGainNotifier />
-          <AuthenticatedApp />
+          <Routes>
+            {MAINTENANCE_MODE ? (
+              <Route path={MAINTENANCE_BYPASS_PATH} element={<MaintenanceBypass />} />
+            ) : null}
+            <Route path="*" element={<MaintenanceGate />} />
+          </Routes>
         </Router>
         <Analytics />
         <Toaster />
