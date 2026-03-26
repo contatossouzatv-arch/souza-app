@@ -8,6 +8,7 @@ const LOGIN_2FA_PENDING_KEY = "souza_login_2fa_pending_v1";
 const AUTH_REQUIRED_EVENT = "souza:auth-required";
 const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
 const AUTH_REQUEST_TIMEOUT_MS = 15000;
+const PROFILE_REQUEST_TIMEOUT_MS = 30000;
 const AUTH_RECOVERABLE_RETRY_DELAY_MS = 1200;
 
 function logAuthClient(message, details) {
@@ -34,6 +35,13 @@ function resolveTimeoutMs(path = "", timeoutMs) {
   const normalizedPath = String(path || "").trim();
   if (normalizedPath === "/api/auth/me" || normalizedPath === "/api/auth/refresh") {
     return AUTH_REQUEST_TIMEOUT_MS;
+  }
+  if (
+    normalizedPath === "/api/profile/metrics" ||
+    normalizedPath === "/api/profile/metrics?force=true" ||
+    normalizedPath.startsWith("/api/profile/public/")
+  ) {
+    return PROFILE_REQUEST_TIMEOUT_MS;
   }
   return DEFAULT_REQUEST_TIMEOUT_MS;
 }
