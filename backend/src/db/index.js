@@ -2367,7 +2367,6 @@ export async function listAdminDeposits({ status = "", cycleId = "", limit } = {
     `SELECT
        er.*,
        u.full_name AS user_full_name,
-       u.name AS user_name_fallback,
        u.email AS user_email_fallback,
        u.platform_id AS user_platform_id_fallback
      FROM entity_records er
@@ -2382,7 +2381,7 @@ export async function listAdminDeposits({ status = "", cycleId = "", limit } = {
       ...record,
       user_name:
         record.user_name ||
-        String(row.user_full_name || row.user_name_fallback || "").trim() ||
+        String(row.user_full_name || "").trim() ||
         record.user_name,
       user_email:
         record.user_email ||
