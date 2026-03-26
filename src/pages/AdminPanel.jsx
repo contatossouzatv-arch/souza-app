@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -47,6 +47,7 @@ export default function AdminPanel() {
   const { toast } = useToast();
   const previousPendingPhotosRef = useRef(null);
   const previousPendingDepositsRef = useRef(null);
+  const [activeTab, setActiveTab] = useState("deposits");
 
   const { data: pendingProfileImages = [] } = useQuery({
     queryKey: ["admin-profile-images-pending-counter"],
@@ -119,7 +120,7 @@ export default function AdminPanel() {
           <p className="mb-6 text-purple-300">Gerencie todos os aspectos da plataforma</p>
         </div>
 
-        <Tabs defaultValue="deposits" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="flex h-auto w-full flex-wrap gap-2 bg-purple-900/50 p-2">
             <TabsTrigger value="deposits" className="flex items-center gap-2 data-[state=active]:bg-purple-700">
               <TrendingUp className="h-4 w-4" />
@@ -212,62 +213,62 @@ export default function AdminPanel() {
           </TabsList>
 
           <TabsContent value="deposits">
-            <DepositsTab />
+            {activeTab === "deposits" ? <DepositsTab /> : null}
           </TabsContent>
           <TabsContent value="deposit-cycles">
-            <DepositCyclesTab />
+            {activeTab === "deposit-cycles" ? <DepositCyclesTab /> : null}
           </TabsContent>
           <TabsContent value="live-draw">
-            <LiveDrawTab />
+            {activeTab === "live-draw" ? <LiveDrawTab /> : null}
           </TabsContent>
           <TabsContent value="game-call">
-            <GameCallDrawTab />
+            {activeTab === "game-call" ? <GameCallDrawTab /> : null}
           </TabsContent>
           <TabsContent value="instant-raffle">
-            <InstantRaffleTab />
+            {activeTab === "instant-raffle" ? <InstantRaffleTab /> : null}
           </TabsContent>
           <TabsContent value="depositant-draw">
-            <DepositantDrawTab />
+            {activeTab === "depositant-draw" ? <DepositantDrawTab /> : null}
           </TabsContent>
           <TabsContent value="notifications">
-            <NotificationsTab />
+            {activeTab === "notifications" ? <NotificationsTab /> : null}
           </TabsContent>
           <TabsContent value="audit">
-            <AuditTab />
+            {activeTab === "audit" ? <AuditTab /> : null}
           </TabsContent>
           <TabsContent value="stats">
-            <StatsTab />
+            {activeTab === "stats" ? <StatsTab /> : null}
           </TabsContent>
           <TabsContent value="users-admin">
-            <UsersAdminTab />
+            {activeTab === "users-admin" ? <UsersAdminTab /> : null}
           </TabsContent>
           <TabsContent value="promos">
-            <PromoBoxesTab />
+            {activeTab === "promos" ? <PromoBoxesTab /> : null}
           </TabsContent>
           <TabsContent value="platforms">
-            <PlatformsTab />
+            {activeTab === "platforms" ? <PlatformsTab /> : null}
           </TabsContent>
           <TabsContent value="socials">
-            <SocialMediaTab />
+            {activeTab === "socials" ? <SocialMediaTab /> : null}
           </TabsContent>
           <TabsContent value="current-platform">
-            <CurrentPlatformTab />
+            {activeTab === "current-platform" ? <CurrentPlatformTab /> : null}
           </TabsContent>
           <TabsContent value="profile-images">
-            <ProfileImagesTab />
+            {activeTab === "profile-images" ? <ProfileImagesTab /> : null}
           </TabsContent>
           <TabsContent value="settings">
-            <SettingsTab />
+            {activeTab === "settings" ? <SettingsTab /> : null}
           </TabsContent>
           <TabsContent value="achievements-rules">
-            <GamificationTab />
+            {activeTab === "achievements-rules" ? <GamificationTab /> : null}
           </TabsContent>
           <TabsContent value="daily-chest">
-            <DailyChestTab />
+            {activeTab === "daily-chest" ? <DailyChestTab /> : null}
           </TabsContent>
           {FEATURE_FLAGS.GAME_MAIN_ENABLED ? (
             <TabsContent value="island-game">
-              <IslandGameTab />
+              {activeTab === "island-game" ? <IslandGameTab /> : null}
             </TabsContent>
           ) : null}
         </Tabs>
@@ -275,7 +276,3 @@ export default function AdminPanel() {
     </div>
   );
 }
-
-
-
-

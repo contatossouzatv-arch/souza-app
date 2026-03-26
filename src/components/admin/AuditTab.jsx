@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Download, Search, Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { useToast } from "@/components/ui/use-toast";
 
 function resolveValidationCode(audit) {
   return String(
@@ -53,13 +54,17 @@ export default function AuditTab() {
   const [searchTerm, setSearchTerm] = useState("");
   const [redemptionCode, setRedemptionCode] = useState("");
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: audits = [] } = useQuery({
     queryKey: ["winner-audits"],
-    queryFn: async () => {
-      const response = await base44.adminAudit.listWinnerAudits();
+    queryFn: async ({ signal }) => {
+      const response = await base44.adminAudit.listWinnerAudits({ limit: 300, signal });
       return response?.items || [];
     },
+    refetchOnWindowFocus: false,
+    staleTime: 30000,
+    retry: false,
   });
 
   const normalizedAudits = useMemo(() => audits.map(normalizeAudit), [audits]);
@@ -78,15 +83,20 @@ export default function AuditTab() {
   });
 
   const redeemAuditMutation = useMutation({
-    mutationFn: (audit) =>
-      base44.entities.DrawWinnerAudit.update(audit.id, {
-        ...audit,
-        redemption_status: "redeemed",
-        redeemed_at: new Date().toISOString(),
-        updated_date: new Date().toISOString(),
-      }),
+    mutationFn: (audit) => base44.adminAudit.redeemWinnerAudit(audit.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["winner-audits"] });
+      toast({
+        title: "Resgate validado",
+        description: "O prêmio foi marcado como resgatado.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Falha ao validar resgate",
+        description: error?.message || "Tente novamente.",
+      });
     },
   });
 

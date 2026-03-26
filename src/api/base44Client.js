@@ -10,6 +10,7 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
 const AUTH_REQUEST_TIMEOUT_MS = 15000;
 const PROFILE_REQUEST_TIMEOUT_MS = 30000;
 const ADMIN_ACTION_TIMEOUT_MS = 45000;
+const ADMIN_READ_TIMEOUT_MS = 30000;
 const RAFFLE_PARTICIPANT_TIMEOUT_MS = 30000;
 const AUTH_RECOVERABLE_RETRY_DELAY_MS = 1200;
 
@@ -56,12 +57,23 @@ function resolveTimeoutMs(path = "", timeoutMs) {
   if (
     normalizedPath.includes("/api/admin/instant-raffles/participants/") ||
     normalizedPath.includes("/api/admin/deposit-draws/winners/") ||
+    normalizedPath.includes("/api/admin/audits/winners/") ||
     normalizedPath.endsWith("/approve") ||
     normalizedPath.endsWith("/reject") ||
     normalizedPath.endsWith("/validate") ||
-    normalizedPath.endsWith("/complete")
+    normalizedPath.endsWith("/complete") ||
+    normalizedPath.endsWith("/redeem")
   ) {
     return ADMIN_ACTION_TIMEOUT_MS;
+  }
+  if (
+    normalizedPath === "/api/admin/audits/winners" ||
+    normalizedPath.startsWith("/api/admin/audits/winners?") ||
+    normalizedPath === "/api/admin/deposits" ||
+    normalizedPath.startsWith("/api/admin/deposits?") ||
+    normalizedPath === "/api/admin/deposit-cycles/summary"
+  ) {
+    return ADMIN_READ_TIMEOUT_MS;
   }
   return DEFAULT_REQUEST_TIMEOUT_MS;
 }
@@ -1655,8 +1667,8 @@ export const base44 = {
       return request(`/api/profile/prize-gallery?${params.toString()}`);
     },
 
-    async profileHistory() {
-      return request("/api/profile/history");
+    async profileHistory(options = {}) {
+      return request("/api/profile/history", options);
     },
 
     async winnersHistory(options = {}) {
@@ -1856,8 +1868,17 @@ export const base44 = {
   },
 
   adminAudit: {
-    async listWinnerAudits() {
-      return request("/api/admin/audits/winners");
+    async listWinnerAudits({ limit = 300, signal } = {}) {
+      const params = new URLSearchParams();
+      if (limit) params.set("limit", String(limit));
+      return request(`/api/admin/audits/winners${params.toString() ? `?${params.toString()}` : ""}`, { signal });
+    },
+    async redeemWinnerAudit(auditId) {
+      return request(`/api/admin/audits/winners/${encodeURIComponent(auditId)}/redeem`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: createRequestId("admin-audit-redeem") }),
+      });
     },
     async deleteWinnerAudit(auditId) {
       return request(`/api/admin/audits/winners/${encodeURIComponent(auditId)}`, {

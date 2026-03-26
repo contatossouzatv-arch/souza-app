@@ -3350,12 +3350,13 @@ router.get("/admin/users/adjustments/recent", requireAuth, requireAdmin, async (
   res.json({ items: await listRecentAdminAdjustments(20) });
 });
 
-router.get("/admin/audits/winners", requireAuth, requireAdmin, async (_req, res) => {
+router.get("/admin/audits/winners", requireAuth, requireAdmin, async (req, res) => {
+  const limit = clampInt(req.query?.limit, 300, 50, 500);
   const [audits, users, platformHistory, prizeGalleryItems] = await Promise.all([
-    listEntity("DrawWinnerAudit", "-drawn_at", 1000),
-    listEntity("User", "-created_date", 1000),
-    listEntity("PlatformHistory", "-created_date", 1000),
-    listEntity("UserPrizeGalleryItem", "-claimed_at", 1000),
+    listEntity("DrawWinnerAudit", "-drawn_at", limit),
+    listEntity("User", "-created_date", Math.max(limit, 300)),
+    listEntity("PlatformHistory", "-created_date", Math.max(limit, 300)),
+    listEntity("UserPrizeGalleryItem", "-claimed_at", Math.max(limit, 300)),
   ]);
 
   const usersById = new Map(users.map((user) => [String(user?.id || ""), user]));
@@ -3419,6 +3420,46 @@ router.get("/admin/audits/winners", requireAuth, requireAdmin, async (_req, res)
   });
 
   res.json({ items });
+});
+
+router.post("/admin/audits/winners/:id/redeem", requireAuth, requireAdmin, async (req, res) => {
+  const auditId = String(req.params.id || "").trim();
+  if (!auditId) {
+    return res.status(400).json({ error: "Informe um auditId válido." });
+  }
+
+  const audit = await getEntityById("DrawWinnerAudit", auditId);
+  if (!audit) {
+    return res.status(404).json({ error: "Registro de auditoria não encontrado." });
+  }
+
+  const nextAudit = {
+    ...audit,
+    redemption_status: "redeemed",
+    redeemed_at: audit.redeemed_at || new Date().toISOString(),
+    updated_date: new Date().toISOString(),
+  };
+
+  await pool.query(
+    `UPDATE entity_records
+        SET data = $2::jsonb,
+            updated_at = NOW()
+      WHERE entity_name = 'DrawWinnerAudit'
+        AND id = $1`,
+    [auditId, JSON.stringify(nextAudit)]
+  );
+
+  req.app?.locals?.io?.emit("entity:changed", {
+    entity: "DrawWinnerAudit",
+    action: "redeemed",
+    payload: {
+      audit_id: auditId,
+      user_id: String(audit.user_id || ""),
+      redemption_status: "redeemed",
+    },
+  });
+
+  return res.json({ item: nextAudit });
 });
 
 router.delete("/admin/audits/winners/:id", requireAuth, requireAdmin, async (req, res) => {

@@ -25,23 +25,25 @@ export default function DepositHistory() {
   const { user, isLoadingAuth } = useAuth();
 
   const { data: deposits = [], isLoading } = useQuery({
-    queryKey: ["user-deposit-history", user?.id],
+    queryKey: ["deposits", user?.id],
     queryFn: async () => {
       const response = await base44.deposits.my();
       return response.items || [];
     },
     enabled: Boolean(user?.id),
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
+    staleTime: 30000,
   });
 
   const { data: cycles = [], isLoading: cyclesLoading } = useQuery({
-    queryKey: ["deposit-cycles-history", user?.id],
+    queryKey: ["deposits-dashboard-summary"],
     queryFn: async () => {
       const response = await base44.deposits.dashboardSummary();
       return response.cycles || [];
     },
     enabled: Boolean(user?.id),
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
+    staleTime: 60000,
   });
 
   const activeCycle = cycles.find((cycle) => cycle.active);

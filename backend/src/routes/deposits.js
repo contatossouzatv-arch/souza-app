@@ -34,6 +34,18 @@ function requestMeta(req) {
   };
 }
 
+async function recordSecurityEventSafe(payload) {
+  try {
+    await createSecurityEvent(payload);
+  } catch (error) {
+    console.error("[deposits-route] security event failed", {
+      type: String(payload?.type || ""),
+      user_id: String(payload?.user_id || ""),
+      message: error?.message || "unknown error",
+    });
+  }
+}
+
 function normalizeCreatePayload(body = {}) {
   return {
     requestId: String(body.requestId || "").trim(),
@@ -90,7 +102,6 @@ async function listUsersBasicByIds(ids = []) {
     `SELECT
        id::text AS id,
        full_name,
-       name,
        nick,
        email,
        phone,
@@ -105,7 +116,7 @@ async function listUsersBasicByIds(ids = []) {
   );
   return result.rows.map((row) => ({
     id: String(row.id || ""),
-    full_name: String(row.full_name || row.name || "").trim(),
+    full_name: String(row.full_name || "").trim(),
     nick: String(row.nick || "").trim(),
     email: String(row.email || "").trim(),
     phone: String(row.phone || "").trim(),
@@ -213,7 +224,7 @@ router.post("/admin/deposits/:id/approve", requireAuth, requireAdmin, async (req
     return res.status(404).json({ error: "Depósito não encontrado." });
   }
 
-  await createSecurityEvent({
+  await recordSecurityEventSafe({
     user_id: req.auth.sub,
     type: "DEPOSIT_APPROVED",
     ip: requestMeta(req).ip,
@@ -256,7 +267,7 @@ router.patch("/admin/deposits/:id", requireAuth, requireAdmin, async (req, res) 
     return res.status(404).json({ error: "Depósito não encontrado." });
   }
 
-  await createSecurityEvent({
+  await recordSecurityEventSafe({
     user_id: req.auth.sub,
     type: "DEPOSIT_EDITED",
     ip: requestMeta(req).ip,
@@ -294,7 +305,7 @@ router.post("/admin/deposits/:id/adjust-tickets", requireAuth, requireAdmin, asy
     return res.status(404).json({ error: "Depósito não encontrado." });
   }
 
-  await createSecurityEvent({
+  await recordSecurityEventSafe({
     user_id: req.auth.sub,
     type: "DEPOSIT_TICKETS_ADJUSTED",
     ip: requestMeta(req).ip,
@@ -336,7 +347,7 @@ router.post("/admin/deposits/:id/reject", requireAuth, requireAdmin, async (req,
     return res.status(404).json({ error: "Depósito não encontrado." });
   }
 
-  await createSecurityEvent({
+  await recordSecurityEventSafe({
     user_id: req.auth.sub,
     type: "DEPOSIT_REJECTED",
     ip: requestMeta(req).ip,
@@ -373,7 +384,7 @@ router.post("/admin/deposits/:id/invalidate", requireAuth, requireAdmin, async (
     return res.status(404).json({ error: "Depósito não encontrado." });
   }
 
-  await createSecurityEvent({
+  await recordSecurityEventSafe({
     user_id: req.auth.sub,
     type: "DEPOSIT_INVALIDATED",
     ip: requestMeta(req).ip,
@@ -414,7 +425,7 @@ router.delete("/admin/deposits/:id", requireAuth, requireAdmin, async (req, res)
     return res.status(404).json({ error: "Depósito não encontrado." });
   }
 
-  await createSecurityEvent({
+  await recordSecurityEventSafe({
     user_id: req.auth.sub,
     type: "DEPOSIT_DELETED",
     ip: requestMeta(req).ip,

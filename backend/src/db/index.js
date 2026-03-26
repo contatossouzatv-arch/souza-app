@@ -2431,13 +2431,24 @@ export async function listDepositCycleLeaderboard({ cycleId = "", limit = 10, cu
        GROUP BY data->>'user_id'
      )
      SELECT
-       user_id,
-       user_name,
-       total_amount,
-       deposits_count,
-       tickets_count,
+       ranked.user_id,
+       COALESCE(NULLIF(users.full_name, ''), ranked.user_name) AS user_name,
+       COALESCE(NULLIF(users.nick, ''), '') AS user_nick,
+       COALESCE(NULLIF(users.avatar_emoji, ''), '') AS user_avatar,
+       COALESCE(NULLIF(users.profile_avatar_id, ''), '') AS profile_avatar_id,
+       COALESCE(NULLIF(users.profile_image_mode, ''), 'avatar') AS profile_image_mode,
+       CASE
+         WHEN COALESCE(users.profile_image_status, 'none') = 'approved'
+           THEN COALESCE(NULLIF(users.profile_image_url, ''), '')
+         ELSE ''
+       END AS profile_image_url,
+       COALESCE(NULLIF(users.profile_image_status, ''), 'none') AS profile_image_status,
+       ranked.total_amount,
+       ranked.deposits_count,
+       ranked.tickets_count,
        ROW_NUMBER() OVER (ORDER BY total_amount DESC, deposits_count DESC, user_id ASC) AS position
      FROM ranked
+     LEFT JOIN users ON users.id::text = ranked.user_id
      ORDER BY position ASC`,
     values
   );
@@ -2445,6 +2456,12 @@ export async function listDepositCycleLeaderboard({ cycleId = "", limit = 10, cu
   const rows = result.rows.map((row) => ({
     user_id: String(row.user_id || ""),
     user_name: String(row.user_name || ""),
+    user_nick: String(row.user_nick || ""),
+    user_avatar: String(row.user_avatar || ""),
+    profile_avatar_id: String(row.profile_avatar_id || ""),
+    profile_image_mode: String(row.profile_image_mode || "avatar"),
+    profile_image_url: String(row.profile_image_url || ""),
+    profile_image_status: String(row.profile_image_status || "none"),
     total: Number(row.total_amount || 0),
     deposits_count: Number(row.deposits_count || 0),
     tickets_count: Number(row.tickets_count || 0),

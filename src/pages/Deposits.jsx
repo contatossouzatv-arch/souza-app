@@ -144,15 +144,18 @@ export default function Deposits() {
 
   const getWinnerProfile = (winner) => {
     if (!winner) return null;
-    const profile = usersById[winner.user_id];
+    const profile = usersById[winner.user_id] || winner;
     const defaultAvatar =
       avatarOptions.find((item) => item.id === DEFAULT_AVATAR_ID) ||
       avatarOptions[0];
     const displayName = profile?.full_name || winner.user_name || "Participante";
-    const nickValue = profile?.nick || "";
+    const nickValue = profile?.nick || winner?.user_nick || "";
     const handle = nickValue ? `@${nickValue}` : "";
     const avatarSrc = getProfileAvatarSrc(profile, avatarSrcById, "");
-    const avatarFallback = getProfileAvatarFallback(profile, displayName.charAt(0).toUpperCase());
+    const avatarFallback = getProfileAvatarFallback(
+      profile,
+      winner?.user_avatar || displayName.charAt(0).toUpperCase()
+    );
 
     return {
       userId: profile?.id || winner.user_id || "",
@@ -243,7 +246,7 @@ export default function Deposits() {
   };
 
   const getParticipantProfileData = (entry) => {
-    const profile = usersById[entry?.user_id];
+    const profile = usersById[entry?.user_id] || entry;
     const defaultAvatar =
       avatarOptions.find((item) => item.id === DEFAULT_AVATAR_ID) || avatarOptions[0];
     const displayName = profile?.full_name || entry?.user_name || "Participante";

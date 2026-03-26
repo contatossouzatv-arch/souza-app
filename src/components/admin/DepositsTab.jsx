@@ -32,6 +32,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 
 function isAutomaticDailyChestDeposit(deposit) {
   return (
@@ -87,6 +88,7 @@ const EMPTY_INVALIDATE_FORM = {
 
 export default function DepositsTab() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [activeView, setActiveView] = useState("manual");
   const [selectedProofByDeposit, setSelectedProofByDeposit] = useState({});
@@ -104,15 +106,20 @@ export default function DepositsTab() {
       const response = await base44.adminEvents.depositCycles.summary();
       return response.items || [];
     },
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const activeCycle = cycles.find((item) => item.active);
 
   const { data: depositsResponse, isLoading } = useQuery({
     queryKey: ["admin-deposits-authoritative", activeCycle?.id],
-    queryFn: () => base44.deposits.adminList({ cycleId: activeCycle?.id || "" }),
+    queryFn: ({ signal }) => base44.deposits.adminList({ cycleId: activeCycle?.id || "", signal }),
     enabled: !!activeCycle,
     refetchOnWindowFocus: false,
+    staleTime: 30000,
+    retry: false,
   });
 
   const deposits = useMemo(() => {
@@ -131,6 +138,9 @@ export default function DepositsTab() {
     queryKey: ["admin-deposit-history", historyDeposit?.id],
     queryFn: () => base44.deposits.adminHistory(historyDeposit.id),
     enabled: !!historyDeposit?.id,
+    refetchOnWindowFocus: false,
+    staleTime: 30000,
+    retry: false,
   });
 
   const historyItems = historyResponse?.items || [];
@@ -189,12 +199,38 @@ export default function DepositsTab() {
 
   const approveMutation = useMutation({
     mutationFn: (depositId) => base44.deposits.approve(depositId),
-    onSuccess: invalidateAll,
+    onSuccess: () => {
+      invalidateAll();
+      toast({
+        title: "Depósito aprovado",
+        description: "A solicitação foi processada com sucesso.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Falha ao aprovar depósito",
+        description: error?.message || "A solicitação não foi concluída.",
+      });
+    },
   });
 
   const rejectMutation = useMutation({
     mutationFn: ({ depositId, reason }) => base44.deposits.reject(depositId, reason),
-    onSuccess: invalidateAll,
+    onSuccess: () => {
+      invalidateAll();
+      toast({
+        title: "Depósito rejeitado",
+        description: "A solicitação foi registrada com sucesso.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Falha ao rejeitar depósito",
+        description: error?.message || "A solicitação não foi concluída.",
+      });
+    },
   });
 
   const editMutation = useMutation({

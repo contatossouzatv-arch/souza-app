@@ -8,7 +8,7 @@ import { primeVideoPlayback, warmVideoAsset } from "@/lib/dailyEventMediaWarmup"
 import { base44 } from "@/api/base44Client";
 import { formatCountdownLabel } from "@/lib/dailyChest";
 
-export default function DailyChestEntry({ onPress }) {
+export default function DailyChestEntry({ onPress, loadState = false }) {
   const navigate = useNavigate();
   const openTimerRef = React.useRef(0);
   const overlayRef = React.useRef(null);
@@ -16,6 +16,7 @@ export default function DailyChestEntry({ onPress }) {
   const { data: chestState } = useQuery({
     queryKey: ["daily-chest-entry-state"],
     queryFn: () => base44.dailyChest.getState(),
+    enabled: loadState,
     staleTime: 15_000,
     refetchOnWindowFocus: false,
     retry: false,
@@ -65,8 +66,9 @@ export default function DailyChestEntry({ onPress }) {
   };
 
   const remaining = Math.max(0, Number(chestState?.slots?.remaining || 0));
-  const statusLabel =
-    remaining > 0
+  const statusLabel = !loadState
+    ? "Abra para conferir seus premios"
+    : remaining > 0
       ? `${remaining} disponivel${remaining > 1 ? "is" : ""}`
       : `Proximo gratis em ${formatCountdownLabel(chestState?.resetAt)}`;
 
@@ -95,7 +97,7 @@ export default function DailyChestEntry({ onPress }) {
                 </div>
                 <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-100">
                   <ShieldCheck className="h-3.5 w-3.5" />
-                  {remaining > 0 ? `${remaining} DISP.` : "ATIVO"}
+                  {!loadState ? "ENTRAR" : remaining > 0 ? `${remaining} DISP.` : "ATIVO"}
                 </span>
               </div>
             </div>

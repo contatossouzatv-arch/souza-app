@@ -921,8 +921,10 @@ export default function Profile() {
   const { data: discoverProfilesData } = useQuery({
     queryKey: ["profile-discover-profiles", user?.id],
     queryFn: () => base44.social.discover({ limit: 24, offset: 0 }),
-    enabled: !!user,
+    enabled: canLoadDeferredProfileQueries,
     staleTime: 60000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const simulatedBaseProfiles = useMemo(
@@ -1276,9 +1278,11 @@ export default function Profile() {
 
   const { data: profileHistory, isLoading: loadingProfileHistory } = useQuery({
     queryKey: ["profile-history-authoritative", user?.id],
-    queryFn: () => base44.gamification.profileHistory(),
+    queryFn: ({ signal }) => base44.gamification.profileHistory({ signal }),
     enabled: !!user && isPointsHistoryOpen,
     staleTime: 30000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const { data: mySocialState } = useQuery({
@@ -1294,6 +1298,8 @@ export default function Profile() {
     queryFn: () => base44.social.following(),
     enabled: !!user && isSocialListOpen,
     staleTime: 30000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const { data: myFollowerProfiles = [], isLoading: loadingFollowerProfiles } = useQuery({
@@ -1301,6 +1307,8 @@ export default function Profile() {
     queryFn: () => base44.social.followers(),
     enabled: !!user && isSocialListOpen,
     staleTime: 30000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const { data: dailyCheckInState } = useQuery({
@@ -1682,7 +1690,11 @@ export default function Profile() {
     }
     return Array.from(new Set(ids.map((item) => String(item || "").trim()).filter(Boolean)));
   }, [canLoadDeferredProfileQueries, engagedProfiles, selectedPublicProfileId]);
-  const { data: publicProfileBasicsPayload } = useQuery({
+  const {
+    data: publicProfileBasicsPayload,
+    isLoading: publicProfileBasicsLoading,
+    isFetching: publicProfileBasicsFetching,
+  } = useQuery({
     queryKey: ["public-profile-basics", publicProfileBasicIds.join(",")],
     queryFn: ({ signal }) =>
       base44.profile.publicBasics(
@@ -1706,6 +1718,18 @@ export default function Profile() {
     });
     return map;
   }, [publicProfileBasicsPayload?.items]);
+  const selectedPublicUserByHandle = useMemo(() => {
+    const normalizedHandle = String(selectedPublicProfileHandle || "").trim().replace(/^@+/, "").toLowerCase();
+    if (!normalizedHandle) return null;
+    return (
+      (publicProfileBasicsPayload?.items || []).find(
+        (item) => String(item?.nick || "").trim().toLowerCase() === normalizedHandle
+      ) || null
+    );
+  }, [publicProfileBasicsPayload?.items, selectedPublicProfileHandle]);
+  const isPublicProfileResolving =
+    isViewingPublicProfile &&
+    (publicProfileBasicsLoading || publicProfileBasicsFetching || (!selectedPublicProfileId && Boolean(selectedPublicProfileHandle) && !simulatedProfiles.length));
   const engagedProfileSocialQueries = useQueries({
     queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
       queryKey: ["social-target-state", user?.id, profile.id, "engaged-card"],
@@ -2011,7 +2035,6 @@ export default function Profile() {
     const container = checkInCarouselRef.current;
     if (!container) return;
     if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-    event.preventDefault();
     container.scrollLeft += event.deltaY;
   };
 
@@ -2071,6 +2094,7 @@ export default function Profile() {
   }, []);
 
   const selectedPublicUserById = publicProfileBasicsMap.get(String(selectedPublicProfileId || "")) || null;
+  const selectedPublicUser = selectedPublicUserById || selectedPublicUserByHandle || null;
 
   useEffect(() => {
     debugEffect("scroll-public-profile", {
@@ -2092,7 +2116,7 @@ export default function Profile() {
     if (!selectedPublicProfileHandle && !selectedPublicProfileId) return null;
     if (selectedPublicProfileId && competitionEntryByUserId[selectedPublicProfileId]) {
       const entry = competitionEntryByUserId[selectedPublicProfileId];
-      const resolvedProfile = selectedPublicUserById || realProfilesById[selectedPublicProfileId] || entry;
+      const resolvedProfile = selectedPublicUser || realProfilesById[selectedPublicProfileId] || entry;
       const avatarMatch = avatarOptions.find((item) => item.id === resolvedProfile.profile_avatar_id || item.id === entry.profile_avatar_id);
       return {
         id: entry.user_id,
@@ -2120,29 +2144,29 @@ export default function Profile() {
         likes: Number(entry.totalLikes || 0),
       };
     }
-    if (selectedPublicProfileId && selectedPublicUserById) {
+    if (selectedPublicUser) {
       return {
-        id: selectedPublicUserById.id,
-        nick: selectedPublicUserById.nick || "Usuário",
+        id: selectedPublicUser.id,
+        nick: selectedPublicUser.nick || "Usuário",
         handle:
-          selectedPublicUserById.handle ||
-          String(selectedPublicUserById.nick || "usuario")
+          selectedPublicUser.handle ||
+          String(selectedPublicUser.nick || "usuario")
             .toLowerCase()
             .replace(/\s+/g, "."),
-        avatarSrc: getProfileAvatarSrc(selectedPublicUserById, avatarSrcById, defaultAvatar) || defaultAvatar,
-        avatar_emoji: String(selectedPublicUserById.avatar_emoji || ""),
+        avatarSrc: getProfileAvatarSrc(selectedPublicUser, avatarSrcById, defaultAvatar) || defaultAvatar,
+        avatar_emoji: String(selectedPublicUser.avatar_emoji || ""),
         points: 0,
-        xpTotal: Math.max(0, Number(selectedPublicUserById.xp_total ?? selectedPublicUserById.xpTotal ?? 0)),
-        xp_total: Math.max(0, Number(selectedPublicUserById.xp_total ?? selectedPublicUserById.xpTotal ?? 0)),
+        xpTotal: Math.max(0, Number(selectedPublicUser.xp_total ?? selectedPublicUser.xpTotal ?? 0)),
+        xp_total: Math.max(0, Number(selectedPublicUser.xp_total ?? selectedPublicUser.xpTotal ?? 0)),
         tickets: 0,
         participations: 0,
         position: 0,
         totalWins: 0,
         totalApproved: 0,
         liveParticipations: 0,
-        following: Number(selectedPublicUserById.following || 0),
-        followers: Number(selectedPublicUserById.followers || 0),
-        likes: Number(selectedPublicUserById.likes || 0),
+        following: Number(selectedPublicUser.following || 0),
+        followers: Number(selectedPublicUser.followers || 0),
+        likes: Number(selectedPublicUser.likes || 0),
       };
     }
     const baseProfile = selectedPublicProfileHandle
@@ -2163,7 +2187,7 @@ export default function Profile() {
     competitionEntryByUserId,
     avatarOptions,
     realProfilesById,
-    selectedPublicUserById,
+    selectedPublicUser,
     avatarSrcById,
   ]);
 
@@ -3230,7 +3254,6 @@ export default function Profile() {
     if (!container) return;
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
       container.scrollLeft += event.deltaY;
-      event.preventDefault();
     }
   };
 
@@ -3289,7 +3312,6 @@ export default function Profile() {
     if (!container) return;
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
       container.scrollLeft += event.deltaY;
-      event.preventDefault();
     }
   };
 
@@ -3358,7 +3380,6 @@ export default function Profile() {
     if (!container) return;
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
       container.scrollLeft += event.deltaY;
-      event.preventDefault();
     }
   };
 
@@ -4839,6 +4860,10 @@ export default function Profile() {
         </DialogContent>
       </Dialog>
           </>
+        ) : isPublicProfileResolving ? (
+          <Card className="border-slate-800 bg-slate-900/70 p-6">
+            <TechLoader />
+          </Card>
         ) : (
           <Card className="border-slate-800 bg-slate-900/70 p-6 text-center text-slate-200">
             Perfil não encontrado.

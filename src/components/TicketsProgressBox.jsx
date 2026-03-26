@@ -82,6 +82,8 @@ export default function TicketsProgressBox({
       const response = await base44.platforms.summary();
       return response.activePlatforms || [];
     },
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: platformHistory = [] } = useQuery({
@@ -91,6 +93,8 @@ export default function TicketsProgressBox({
       return response.items || [];
     },
     enabled: !!user?.id,
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
   const depositsEnabled = settings.find((s) => s.key === "deposits_enabled")?.value === "true";

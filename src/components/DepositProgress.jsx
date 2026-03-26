@@ -43,6 +43,8 @@ export default function DepositProgress({ totalApproved, pendingAmount, user, on
       const response = await base44.platforms.summary();
       return response.activePlatforms || [];
     },
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: cashbackClaims = [] } = useQuery({
@@ -52,6 +54,8 @@ export default function DepositProgress({ totalApproved, pendingAmount, user, on
       return response.items || [];
     },
     enabled: !!user,
+    refetchOnWindowFocus: false,
+    staleTime: 30000,
   });
 
   const depositsEnabled = settings.find((s) => s.key === "deposits_enabled")?.value === "true";
