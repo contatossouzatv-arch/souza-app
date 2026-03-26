@@ -133,6 +133,7 @@ const PROFILE_AUTOPLAY_MEDIA_ENABLED = true;
 const PROFILE_DEBUG_ENABLED = false;
 const PROFILE_NON_CRITICAL_LOAD_DELAY_MS = 1800;
 const PROFILE_ENGAGED_QUERY_LIMIT = 3;
+const PROFILE_PUBLIC_ENRICHMENT_ENABLED = false;
 
 function profileDebugLog() {}
 
@@ -1665,7 +1666,7 @@ export default function Profile() {
     queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
       queryKey: ["public-profile-summary", profile.id, "engaged-card"],
       queryFn: () => base44.gamification.publicProfileSummary(profile.id),
-      enabled: canLoadDeferredProfileQueries && !!profile?.id,
+      enabled: PROFILE_PUBLIC_ENRICHMENT_ENABLED && canLoadDeferredProfileQueries && !!profile?.id,
       staleTime: 30000,
       refetchOnWindowFocus: false,
       retry: false,
@@ -1703,6 +1704,7 @@ export default function Profile() {
       queryKey: ["social-target-state", user?.id, profile.id, "engaged-card"],
       queryFn: () => base44.social.state(profile.id),
       enabled:
+        PROFILE_PUBLIC_ENRICHMENT_ENABLED &&
         canLoadDeferredProfileQueries &&
         !!profile?.id &&
         String(profile.id || "") !== String(user?.id || ""),
@@ -2204,7 +2206,11 @@ export default function Profile() {
       });
       return base44.social.state(selectedPublicProfile.id);
     },
-    enabled: canLoadDeferredProfileQueries && !!selectedPublicProfile?.id && isSelectedRealProfile,
+    enabled:
+      PROFILE_PUBLIC_ENRICHMENT_ENABLED &&
+      canLoadDeferredProfileQueries &&
+      !!selectedPublicProfile?.id &&
+      isSelectedRealProfile,
     staleTime: 15000,
     retry: false,
   });
@@ -2218,7 +2224,11 @@ export default function Profile() {
       });
       return base44.gamification.publicProfileSummary(selectedPublicProfile.id);
     },
-    enabled: canLoadDeferredProfileQueries && !!selectedPublicProfile?.id && isSelectedRealProfile,
+    enabled:
+      PROFILE_PUBLIC_ENRICHMENT_ENABLED &&
+      canLoadDeferredProfileQueries &&
+      !!selectedPublicProfile?.id &&
+      isSelectedRealProfile,
     staleTime: 30000,
     refetchOnWindowFocus: false,
     retry: false,

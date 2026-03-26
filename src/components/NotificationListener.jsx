@@ -12,6 +12,7 @@ export default function NotificationListener() {
   const [inAppNotifications, setInAppNotifications] = useState([]);
   const [lastChecked, setLastChecked] = useState(Date.now());
   const navigate = useNavigate();
+  const notificationsEnabled = false;
 
   const { data: notifications = [] } = useQuery({
     queryKey: ['push-notifications-check'],
@@ -19,6 +20,9 @@ export default function NotificationListener() {
       const response = await base44.notifications.recent({ limit: 50 });
       return response.items || [];
     },
+    enabled: notificationsEnabled,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   useEffect(() => {

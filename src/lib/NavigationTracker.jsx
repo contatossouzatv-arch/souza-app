@@ -9,6 +9,7 @@ export default function NavigationTracker() {
     const { isAuthenticated } = useAuth();
     const { Pages, mainPage } = pagesConfig;
     const mainPageKey = mainPage ?? Object.keys(Pages)[0];
+    const navigationLoggingEnabled = false;
 
     // Post navigation changes to parent window
     useEffect(() => {
@@ -39,12 +40,12 @@ export default function NavigationTracker() {
             pageName = matchedKey || null;
         }
 
-        if (isAuthenticated && pageName) {
+        if (navigationLoggingEnabled && isAuthenticated && pageName) {
             base44.appLogs.logUserInApp(pageName).catch(() => {
                 // Silently fail - logging shouldn't break the app
             });
         }
-    }, [location, isAuthenticated, Pages, mainPageKey]);
+    }, [location, isAuthenticated, Pages, mainPageKey, navigationLoggingEnabled]);
 
     return null;
 }

@@ -244,6 +244,7 @@ function GainToastContent({ groups }) {
 
 export default function MetricGainNotifier() {
   const { user, isAuthenticated } = useAuth();
+  const notifierQueriesEnabled = false;
   const initializedRef = React.useRef(false);
   const lastTotalsRef = React.useRef({ xp_total: 0, weekly_points: 0, engagement_points: 0 });
   const seenLedgerKeysRef = React.useRef(new Set());
@@ -253,7 +254,7 @@ export default function MetricGainNotifier() {
 const { data: profileMetrics } = useQuery({
   queryKey: ["profile-gamification-authoritative", user?.id],
   queryFn: () => base44.gamification.profileMetrics(),
-  enabled: Boolean(isAuthenticated && user?.id),
+  enabled: Boolean(notifierQueriesEnabled && isAuthenticated && user?.id),
   staleTime: 60_000,
   gcTime: 15 * 60 * 1000,
   refetchOnMount: false,
@@ -263,7 +264,7 @@ const { data: profileMetrics } = useQuery({
 const { data: profileHistory } = useQuery({
   queryKey: ["profile-history-authoritative", user?.id],
   queryFn: () => base44.gamification.profileHistory(),
-  enabled: Boolean(isAuthenticated && user?.id),
+  enabled: Boolean(notifierQueriesEnabled && isAuthenticated && user?.id),
   staleTime: 60_000,
   gcTime: 15 * 60 * 1000,
   refetchOnMount: false,
