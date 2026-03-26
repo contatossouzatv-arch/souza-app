@@ -9,6 +9,8 @@ const AUTH_REQUIRED_EVENT = "souza:auth-required";
 const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
 const AUTH_REQUEST_TIMEOUT_MS = 15000;
 const PROFILE_REQUEST_TIMEOUT_MS = 30000;
+const ADMIN_ACTION_TIMEOUT_MS = 45000;
+const RAFFLE_PARTICIPANT_TIMEOUT_MS = 30000;
 const AUTH_RECOVERABLE_RETRY_DELAY_MS = 1200;
 
 function logAuthClient(message, details) {
@@ -42,6 +44,23 @@ function resolveTimeoutMs(path = "", timeoutMs) {
     normalizedPath.startsWith("/api/profile/public/")
   ) {
     return PROFILE_REQUEST_TIMEOUT_MS;
+  }
+  if (
+    normalizedPath === "/api/entities/InstantRaffleParticipant/filter" ||
+    normalizedPath === "/api/entities/LiveDrawParticipant/filter" ||
+    normalizedPath === "/api/entities/GameCallParticipant/filter"
+  ) {
+    return RAFFLE_PARTICIPANT_TIMEOUT_MS;
+  }
+  if (
+    normalizedPath.includes("/api/admin/instant-raffles/participants/") ||
+    normalizedPath.includes("/api/admin/deposit-draws/winners/") ||
+    normalizedPath.endsWith("/approve") ||
+    normalizedPath.endsWith("/reject") ||
+    normalizedPath.endsWith("/validate") ||
+    normalizedPath.endsWith("/complete")
+  ) {
+    return ADMIN_ACTION_TIMEOUT_MS;
   }
   return DEFAULT_REQUEST_TIMEOUT_MS;
 }
