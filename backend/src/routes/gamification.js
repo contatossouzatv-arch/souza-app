@@ -2686,7 +2686,10 @@ router.get("/profile/public/:userId/summary", requireAuth, async (req, res) => {
 
 router.get("/profile/public-basics", requireAuth, async (req, res) => {
   try {
-    const items = await listPublicProfileBasics(String(req.query?.ids || "").split(","));
+    const items = await listPublicProfileBasics(
+      String(req.query?.ids || "").split(","),
+      String(req.query?.handles || "").split(",")
+    );
     return res.json({ items });
   } catch (error) {
     console.error("Failed to load public profile basics", error);

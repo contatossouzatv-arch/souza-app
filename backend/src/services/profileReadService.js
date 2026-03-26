@@ -1,6 +1,6 @@
 import { normalizeRecord, pool } from "../db/index.js";
 
-export async function listPublicProfileBasics(ids = []) {
+export async function listPublicProfileBasics(ids = [], handles = []) {
   const uniqueIds = Array.from(
     new Set(
       (Array.isArray(ids) ? ids : [])
@@ -8,16 +8,34 @@ export async function listPublicProfileBasics(ids = []) {
         .filter(Boolean)
     )
   ).slice(0, 50);
+  const uniqueHandles = Array.from(
+    new Set(
+      (Array.isArray(handles) ? handles : [])
+        .map((value) => String(value || "").trim().replace(/^@+/, "").toLowerCase())
+        .filter(Boolean)
+    )
+  ).slice(0, 50);
 
-  if (uniqueIds.length === 0) {
+  if (uniqueIds.length === 0 && uniqueHandles.length === 0) {
     return [];
+  }
+
+  const clauses = [];
+  const values = [];
+  if (uniqueIds.length > 0) {
+    values.push(uniqueIds);
+    clauses.push(`id = ANY($${values.length}::uuid[])`);
+  }
+  if (uniqueHandles.length > 0) {
+    values.push(uniqueHandles);
+    clauses.push(`LOWER(COALESCE(nick, '')) = ANY($${values.length}::text[])`);
   }
 
   const result = await pool.query(
     `SELECT id, full_name, nick, avatar_emoji, profile_avatar_id, profile_image_mode, profile_image_url, profile_image_status, account_status
        FROM users
-      WHERE id = ANY($1::uuid[])`,
-    [uniqueIds]
+      WHERE ${clauses.join(" OR ")}`,
+    values
   );
 
   const usersById = new Map(
@@ -39,8 +57,19 @@ export async function listPublicProfileBasics(ids = []) {
       ];
     })
   );
+  const usersByHandle = new Map(
+    result.rows
+      .map((row) => {
+        const nick = String(row?.nick || "").trim().toLowerCase();
+        return nick ? [nick, usersById.get(String(row.id))] : null;
+      })
+      .filter(Boolean)
+  );
 
-  return uniqueIds.map((id) => usersById.get(id)).filter(Boolean);
+  return [
+    ...uniqueIds.map((id) => usersById.get(id)).filter(Boolean),
+    ...uniqueHandles.map((handle) => usersByHandle.get(handle)).filter(Boolean),
+  ].filter((item, index, arr) => arr.findIndex((entry) => String(entry?.id || "") === String(item?.id || "")) === index);
 }
 
 export async function listProfileNotifications(userId, limit = 50) {

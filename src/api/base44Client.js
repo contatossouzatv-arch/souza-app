@@ -1404,12 +1404,16 @@ export const base44 = {
           body: JSON.stringify({ ids }),
         });
       },
-      publicBasics(ids = []) {
+      publicBasics(ids = [], handles = []) {
         const uniqueIds = Array.from(
           new Set((Array.isArray(ids) ? ids : []).map((item) => String(item || "").trim()).filter(Boolean))
         );
+        const uniqueHandles = Array.from(
+          new Set((Array.isArray(handles) ? handles : []).map((item) => String(item || "").trim().replace(/^@+/, "").toLowerCase()).filter(Boolean))
+        );
         const params = new URLSearchParams();
-        params.set("ids", uniqueIds.join(","));
+        if (uniqueIds.length > 0) params.set("ids", uniqueIds.join(","));
+        if (uniqueHandles.length > 0) params.set("handles", uniqueHandles.join(","));
         return request(`/api/profile/public-basics?${params.toString()}`);
       },
       platformHistory({ limit = 100 } = {}) {

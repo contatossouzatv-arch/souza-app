@@ -1684,8 +1684,14 @@ export default function Profile() {
   }, [canLoadDeferredProfileQueries, engagedProfiles, selectedPublicProfileId]);
   const { data: publicProfileBasicsPayload } = useQuery({
     queryKey: ["public-profile-basics", publicProfileBasicIds.join(",")],
-    queryFn: () => base44.profile.publicBasics(publicProfileBasicIds),
-    enabled: publicProfileBasicIds.length > 0 && (Boolean(selectedPublicProfileId) || canLoadDeferredProfileQueries),
+    queryFn: () =>
+      base44.profile.publicBasics(
+        publicProfileBasicIds,
+        selectedPublicProfileHandle ? [selectedPublicProfileHandle] : []
+      ),
+    enabled:
+      (publicProfileBasicIds.length > 0 || Boolean(selectedPublicProfileHandle)) &&
+      (Boolean(selectedPublicProfileId) || Boolean(selectedPublicProfileHandle) || canLoadDeferredProfileQueries),
     staleTime: 30000,
     refetchOnWindowFocus: false,
     retry: false,
