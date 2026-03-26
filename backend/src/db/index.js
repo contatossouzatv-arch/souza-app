@@ -401,6 +401,12 @@ export async function ensureDb() {
   await pool.query(
     "CREATE INDEX IF NOT EXISTS idx_entity_records_deposit_cycle_status_user ON entity_records(entity_name, ((data->>'cycle_id')), ((data->>'status')), ((data->>'user_id'))) WHERE entity_name = 'Deposit'"
   );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_entity_records_instant_raffle_participant_raffle_created ON entity_records(entity_name, ((data->>'raffle_id')), created_at DESC) WHERE entity_name = 'InstantRaffleParticipant'"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_entity_records_instant_raffle_participant_raffle_user ON entity_records(entity_name, ((data->>'raffle_id')), ((data->>'user_id'))) WHERE entity_name = 'InstantRaffleParticipant'"
+  );
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS deposit_ticket_counters (

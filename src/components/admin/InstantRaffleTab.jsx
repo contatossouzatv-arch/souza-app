@@ -53,11 +53,6 @@ export default function InstantRaffleTab() {
     queryFn: () => base44.entities.InstantRaffle.filter({ ended: true }, '-created_date', 10),
   });
 
-  const { data: raffleUsers = [] } = useQuery({
-    queryKey: ["instant-raffle-users-admin"],
-    queryFn: () => base44.entities.User.list(),
-  });
-
   const { data: historyParticipantsRaw = [] } = useQuery({
     queryKey: ['history-instant-participants', selectedHistoryRaffle?.id],
     queryFn: () => base44.entities.InstantRaffleParticipant.filter({ raffle_id: selectedHistoryRaffle.id }),
@@ -277,20 +272,10 @@ export default function InstantRaffleTab() {
     return Array.from(uniqueLosers.values());
   }, [participantsRaw]);
 
-  const usersById = React.useMemo(() => {
-    const map = new Map();
-    raffleUsers.forEach((item) => map.set(item.id, item));
-    return map;
-  }, [raffleUsers]);
-
   const renderUserAvatar = (participant, sizeClass = "h-10 w-10") => {
-    const linkedUser = usersById.get(participant.user_id);
-    const approvedImage =
-      linkedUser?.profile_image_mode === "photo" &&
-      linkedUser?.profile_image_status === "approved" &&
-      linkedUser?.profile_image_url
-        ? resolveAssetUrl(linkedUser.profile_image_url)
-        : null;
+    const approvedImage = participant?.user_profile_image_url
+      ? resolveAssetUrl(participant.user_profile_image_url)
+      : null;
 
     if (approvedImage) {
       return (
@@ -304,7 +289,7 @@ export default function InstantRaffleTab() {
 
     return (
       <div className={`${sizeClass} flex items-center justify-center rounded-full bg-white/15 text-lg`}>
-        {linkedUser?.avatar_emoji || participant.user_avatar || "U"}
+        {participant.user_avatar || "U"}
       </div>
     );
   };
