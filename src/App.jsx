@@ -123,6 +123,8 @@ const AppUnavailableState = ({ message, onRetry }) => (
   </div>
 );
 
+const AUTH_BOOT_FAILSAFE_MS = 18000;
+
 const needsOnboarding = (user) =>
   !user?.onboarding_completed || !user?.terms_accepted || !user?.privacy_accepted;
 
@@ -132,12 +134,14 @@ const AuthenticatedApp = () => {
   const [isBootReady, setIsBootReady] = useState(false);
   const [hasBootMinDurationElapsed, setHasBootMinDurationElapsed] = useState(false);
   const [bootProgress, setBootProgress] = useState(8);
+  const [hasAuthBootFailsafeElapsed, setHasAuthBootFailsafeElapsed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     console.info("[app-boot] warmup:start");
     setIsBootReady(false);
     setHasBootMinDurationElapsed(false);
+    setHasAuthBootFailsafeElapsed(false);
     setBootProgress(8);
     warmAppShell().finally(() => {
       if (!cancelled) {
@@ -157,6 +161,23 @@ const AuthenticatedApp = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isLoadingAuth) {
+      setHasAuthBootFailsafeElapsed(false);
+      return undefined;
+    }
+
+    const timerId = window.setTimeout(() => {
+      console.warn("[app-boot] auth:failsafe-elapsed", {
+        delayMs: AUTH_BOOT_FAILSAFE_MS,
+        path: `${location.pathname}${location.search}`,
+      });
+      setHasAuthBootFailsafeElapsed(true);
+    }, AUTH_BOOT_FAILSAFE_MS);
+
+    return () => window.clearTimeout(timerId);
+  }, [isLoadingAuth, location.pathname, location.search]);
+
   const bootTargetProgress = useMemo(() => {
     let target = 18;
     if (!isLoadingPublicSettings) target = 32;
@@ -172,12 +193,14 @@ const AuthenticatedApp = () => {
       isLoadingPublicSettings,
       isBootReady,
       hasBootMinDurationElapsed,
+      hasAuthBootFailsafeElapsed,
       isAuthenticated,
       authErrorType: authError?.type || null,
       path: `${location.pathname}${location.search}`,
     });
   }, [
     authError?.type,
+    hasAuthBootFailsafeElapsed,
     hasBootMinDurationElapsed,
     isAuthenticated,
     isBootReady,
@@ -186,6 +209,9 @@ const AuthenticatedApp = () => {
     location.pathname,
     location.search,
   ]);
+
+  const shouldShowAuthUnavailable =
+    authError?.type === 'auth_unreachable' || (isLoadingAuth && hasAuthBootFailsafeElapsed);
 
   const bootStatus = useMemo(() => {
     if (isLoadingPublicSettings) return "Sincronizando configurações públicas";
@@ -207,12 +233,17 @@ const AuthenticatedApp = () => {
     return () => window.clearInterval(intervalId);
   }, [bootTargetProgress]);
 
-  if (isLoadingPublicSettings || isLoadingAuth || !isBootReady || !hasBootMinDurationElapsed) {
+  if (!shouldShowAuthUnavailable && (isLoadingPublicSettings || isLoadingAuth || !isBootReady || !hasBootMinDurationElapsed)) {
     return <AppBootLoader progress={bootProgress} status={bootStatus} />;
   }
 
-  if (authError?.type === 'auth_unreachable') {
-    return <AppUnavailableState message={authError?.message} onRetry={checkAppState} />;
+  if (shouldShowAuthUnavailable) {
+    return (
+      <AppUnavailableState
+        message={authError?.message || "Nao foi possivel validar sua sessao agora. Tente novamente em instantes."}
+        onRetry={checkAppState}
+      />
+    );
   }
 
   if (authError?.type === 'user_not_registered') {
