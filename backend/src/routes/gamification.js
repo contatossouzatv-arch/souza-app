@@ -2631,9 +2631,20 @@ router.get("/profile/metrics", requireAuth, async (req, res) => {
       profileMetricsPromises.delete(String(userId || "").trim());
       await deleteCacheKey(`gamification:profile-metrics:${String(userId || "").trim()}`);
     }
-    const payload = await buildLightweightProfileMetrics(userId, {
-      forceFresh: shouldForceRefresh,
-    });
+    const payload = shouldForceRefresh
+      ? await buildLightweightProfileMetrics(userId, {
+          forceFresh: true,
+        })
+      : buildFallbackProfileMetricsFromState(userId, await buildGamificationState());
+
+    if (!shouldForceRefresh) {
+      profileMetricsCache.set(String(userId || "").trim(), {
+        value: payload,
+        expiresAt: Date.now() + PROFILE_METRICS_TTL_MS,
+      });
+      await setCacheJson(`gamification:profile-metrics:${String(userId || "").trim()}`, payload, PROFILE_METRICS_TTL_MS);
+    }
+
     return res.json(payload);
   } catch (error) {
     console.error("Failed to load lightweight profile metrics", {
@@ -2668,7 +2679,7 @@ router.get("/profile/public/:userId/summary", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Usuario invalido." });
     }
 
-    const payload = await buildLightweightProfileMetrics(targetUserId);
+    const payload = buildFallbackProfileMetricsFromState(targetUserId, await buildGamificationState());
     return res.json({
       metrics: payload.metrics || {},
       currentCompetitionEntry: payload.currentCompetitionEntry || null,

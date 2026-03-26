@@ -31,8 +31,10 @@ const avatarOptions = Object.entries(avatarModules)
   }))
   .sort((a, b) => a.id.localeCompare(b.id));
 
+const safeFind = (list, predicate) => (Array.isArray(list) ? list.find(predicate) : undefined);
+
 const DEFAULT_AVATAR_ID =
-  avatarOptions.find((item) => item.id.toLowerCase().includes("avatar padrao perfil sem foto"))?.id ||
+  safeFind(avatarOptions, (item) => item.id.toLowerCase().includes("avatar padrao perfil sem foto"))?.id ||
   avatarOptions[0]?.id ||
   "";
 
@@ -87,7 +89,7 @@ export default function Deposits() {
   const cycles = Array.isArray(depositsDashboardSummary?.cycles) ? depositsDashboardSummary.cycles : [];
   const drawWinners = Array.isArray(depositsDashboardSummary?.drawWinners) ? depositsDashboardSummary.drawWinners : [];
   const dashboardProfiles = Array.isArray(depositsDashboardSummary?.profiles) ? depositsDashboardSummary.profiles : [];
-  const activeCycle = cycles.find((c) => c.active);
+  const activeCycle = safeFind(cycles, (c) => c.active);
 
   const { data: leaderboardData, isLoading: leaderboardLoading } = useQuery({
     queryKey: ["deposit-cycle-leaderboard", activeCycle?.id],
@@ -118,7 +120,7 @@ export default function Deposits() {
 
   const getSettingValue = (key, defaultValue = "") => {
     const safeSettings = Array.isArray(settings) ? settings : [];
-    const setting = safeSettings.find((s) => s?.key === key);
+    const setting = safeFind(safeSettings, (s) => s?.key === key);
     return setting?.value || defaultValue;
   };
 
@@ -147,7 +149,7 @@ export default function Deposits() {
     if (!winner) return null;
     const profile = usersById[winner.user_id] || winner;
     const defaultAvatar =
-      avatarOptions.find((item) => item.id === DEFAULT_AVATAR_ID) ||
+      safeFind(avatarOptions, (item) => item.id === DEFAULT_AVATAR_ID) ||
       avatarOptions[0];
     const displayName = profile?.full_name || winner.user_name || "Participante";
     const nickValue = profile?.nick || winner?.user_nick || "";
@@ -249,7 +251,7 @@ export default function Deposits() {
   const getParticipantProfileData = (entry) => {
     const profile = usersById[entry?.user_id] || entry;
     const defaultAvatar =
-      avatarOptions.find((item) => item.id === DEFAULT_AVATAR_ID) || avatarOptions[0];
+      safeFind(avatarOptions, (item) => item.id === DEFAULT_AVATAR_ID) || avatarOptions[0];
     const displayName = profile?.full_name || entry?.user_name || "Participante";
     const nickValue = profile?.nick || entry?.user_nick || "";
     const handle = nickValue ? `@${nickValue}` : "";
@@ -620,7 +622,7 @@ export default function Deposits() {
             onClick={(event) => event.stopPropagation()}
           >
             {(() => {
-              const selectedCycle = endedCycles.find((item) => item.id === historyPopup.cycleId);
+              const selectedCycle = safeFind(endedCycles, (item) => item.id === historyPopup.cycleId);
               if (!selectedCycle) {
                 return (
                   <div className="text-center text-slate-300">

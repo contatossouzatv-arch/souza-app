@@ -16,8 +16,10 @@ import {
   rejectDepositRecord,
   updateDepositAdminRecord,
 } from "../db/index.js";
+import { getOrComputeCacheJson } from "../lib/cache.js";
 
 const router = Router();
+const DEPOSIT_LEADERBOARD_TTL_MS = 15000;
 
 function emitEntityChanged(req, entity, action, payload = {}) {
   req.app?.locals?.io?.emit("entity:changed", {
@@ -185,11 +187,17 @@ router.get("/deposits/dashboard-summary", requireAuth, async (_req, res) => {
 });
 
 router.get("/deposits/leaderboard", requireAuth, async (req, res) => {
-  const result = await listDepositCycleLeaderboard({
-    cycleId: String(req.query.cycleId || "").trim(),
-    limit: req.query.limit,
-    currentUserId: req.auth.sub,
-  });
+  const cycleId = String(req.query.cycleId || "").trim();
+  const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10) || 10));
+  const currentUserId = String(req.auth.sub || "").trim();
+  const cacheKey = `deposits:leaderboard:${cycleId || "all"}:${limit}:user:${currentUserId || "anon"}`;
+  const result = await getOrComputeCacheJson(cacheKey, DEPOSIT_LEADERBOARD_TTL_MS, () =>
+    listDepositCycleLeaderboard({
+      cycleId,
+      limit,
+      currentUserId,
+    })
+  );
   return res.json(result);
 });
 
