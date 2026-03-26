@@ -833,6 +833,15 @@ export default function Profile() {
   const location = useLocation();
   const profileDebugRenderCountRef = React.useRef(0);
   const profileDebugPrevEffectDepsRef = React.useRef({});
+  const selectedPublicProfileHandle = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("u") || "";
+  }, [location.search]);
+  const selectedPublicProfileId = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("user") || "";
+  }, [location.search]);
+  const isViewingPublicProfile = Boolean(selectedPublicProfileHandle || selectedPublicProfileId);
 
   const debugNavigate = React.useCallback(
     (target, options = undefined, reason = "unknown") => {
@@ -2025,18 +2034,6 @@ export default function Profile() {
   useEffect(() => {
     setProfileImageFallbackStep(0);
   }, [profileImageSrc, secondaryProfileImageSrc, selectedAvatar?.src]);
-
-  const selectedPublicProfileHandle = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get("u") || "";
-  }, [location.search]);
-
-  const selectedPublicProfileId = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get("user") || "";
-  }, [location.search]);
-
-  const isViewingPublicProfile = Boolean(selectedPublicProfileHandle || selectedPublicProfileId);
 
   profileDebugRenderCountRef.current += 1;
   profileDebugLog("render", {
