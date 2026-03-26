@@ -657,7 +657,16 @@ router.post("/google", loginRateLimiter, async (req, res) => {
     await auditEvent(req, "USER_LOGGED_IN", activeUser.id, { method: "google" });
     emitEntityChanged(req, "user", activeUser.id, "updated");
     return res.json(session);
-  } catch (_error) {
+  } catch (error) {
+    console.error("[auth-google] login failed", {
+      message: error?.message || "unknown",
+      name: error?.name || null,
+      code: error?.code || null,
+      origin: req.headers.origin || null,
+      host: req.headers.host || null,
+      hasCredential: Boolean(credential),
+      hasOtp: Boolean(String(otp || "").trim()),
+    });
     return res.status(401).json({ error: "Falha na autenticação Google" });
   }
 });
