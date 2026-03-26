@@ -1217,13 +1217,13 @@ export default function Profile() {
     refetch: refetchProfileGamification,
   } = useQuery({
     queryKey: ["profile-gamification-authoritative", user?.id],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       profileDebugLog("query:profile-gamification-authoritative", {
         loggedUserId: user?.id || "",
         pathname: location.pathname,
         search: location.search,
       });
-      return base44.gamification.profileMetrics();
+      return base44.gamification.profileMetrics({ signal });
     },
     enabled: !!user,
     staleTime: 120000,
@@ -1665,7 +1665,7 @@ export default function Profile() {
   const engagedProfileSummaryQueries = useQueries({
     queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
       queryKey: ["public-profile-summary", profile.id, "engaged-card"],
-      queryFn: () => base44.gamification.publicProfileSummary(profile.id),
+      queryFn: ({ signal }) => base44.gamification.publicProfileSummary(profile.id, { signal }),
       enabled: PROFILE_PUBLIC_ENRICHMENT_ENABLED && canLoadDeferredProfileQueries && !!profile?.id,
       staleTime: 30000,
       refetchOnWindowFocus: false,
@@ -1684,10 +1684,11 @@ export default function Profile() {
   }, [canLoadDeferredProfileQueries, engagedProfiles, selectedPublicProfileId]);
   const { data: publicProfileBasicsPayload } = useQuery({
     queryKey: ["public-profile-basics", publicProfileBasicIds.join(",")],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       base44.profile.publicBasics(
         publicProfileBasicIds,
-        selectedPublicProfileHandle ? [selectedPublicProfileHandle] : []
+        selectedPublicProfileHandle ? [selectedPublicProfileHandle] : [],
+        { signal }
       ),
     enabled:
       (publicProfileBasicIds.length > 0 || Boolean(selectedPublicProfileHandle)) &&
@@ -1708,7 +1709,7 @@ export default function Profile() {
   const engagedProfileSocialQueries = useQueries({
     queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
       queryKey: ["social-target-state", user?.id, profile.id, "engaged-card"],
-      queryFn: () => base44.social.state(profile.id),
+      queryFn: ({ signal }) => base44.social.state(profile.id, { signal }),
       enabled:
         PROFILE_PUBLIC_ENRICHMENT_ENABLED &&
         canLoadDeferredProfileQueries &&
@@ -2205,12 +2206,12 @@ export default function Profile() {
 
   const { data: selectedPublicSocialState } = useQuery({
     queryKey: ["social-target-state", user?.id, selectedPublicProfile?.id],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       profileDebugLog("query:social-target-state", {
         viewerUserId: user?.id || "",
         targetUserId: selectedPublicProfile?.id || "",
       });
-      return base44.social.state(selectedPublicProfile.id);
+      return base44.social.state(selectedPublicProfile.id, { signal });
     },
     enabled:
       PROFILE_PUBLIC_ENRICHMENT_ENABLED &&
@@ -2223,12 +2224,12 @@ export default function Profile() {
 
   const { data: selectedPublicProfileSummary } = useQuery({
     queryKey: ["public-profile-summary", selectedPublicProfile?.id],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       profileDebugLog("query:public-profile-summary", {
         targetUserId: selectedPublicProfile?.id || "",
         loggedUserId: user?.id || "",
       });
-      return base44.gamification.publicProfileSummary(selectedPublicProfile.id);
+      return base44.gamification.publicProfileSummary(selectedPublicProfile.id, { signal });
     },
     enabled:
       PROFILE_PUBLIC_ENRICHMENT_ENABLED &&

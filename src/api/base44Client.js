@@ -121,10 +121,19 @@ function buildUrl(path) {
 }
 
 async function fetchWithTimeout(path, options = {}) {
-  const { __timeoutMs, ...fetchOptions } = options;
+  const { __timeoutMs, signal: externalSignal, ...fetchOptions } = options;
   const timeoutMs = resolveTimeoutMs(path, __timeoutMs);
   const controller = new AbortController();
   const timerId = window.setTimeout(() => controller.abort(), timeoutMs);
+  const abortFromExternalSignal = () => controller.abort();
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      window.clearTimeout(timerId);
+      throw new DOMException("Aborted", "AbortError");
+    }
+    externalSignal.addEventListener("abort", abortFromExternalSignal, { once: true });
+  }
 
   try {
     return await fetch(buildUrl(path), {
@@ -133,6 +142,9 @@ async function fetchWithTimeout(path, options = {}) {
     });
   } catch (error) {
     if (isAbortError(error)) {
+      if (externalSignal?.aborted) {
+        throw error;
+      }
       const timeoutError = new Error(`Request timeout after ${timeoutMs}ms`);
       timeoutError.name = "TimeoutError";
       timeoutError.code = "ETIMEDOUT";
@@ -141,6 +153,9 @@ async function fetchWithTimeout(path, options = {}) {
     }
     throw error;
   } finally {
+    if (externalSignal) {
+      externalSignal.removeEventListener("abort", abortFromExternalSignal);
+    }
     window.clearTimeout(timerId);
   }
 }
@@ -336,6 +351,7 @@ async function request(path, options = {}) {
       credentials: "include",
     });
   } catch (error) {
+    if (isAbortError(error)) throw error;
     const elapsedMs = Math.round(performance.now() - startedAt);
     logRequestResult("network failure", {
       path,
@@ -413,6 +429,7 @@ async function requestBlob(path, options = {}) {
       credentials: "include",
     });
   } catch (error) {
+    if (isAbortError(error)) throw error;
     logRequestResult("blob network failure", {
       path,
       elapsedMs: Math.round(performance.now() - startedAt),
@@ -888,27 +905,27 @@ export const base44 = {
       });
     },
 
-    async my() {
-      return request("/api/deposits/my");
+    async my(options = {}) {
+      return request("/api/deposits/my", options);
     },
 
-    async dashboardSummary() {
-      return request("/api/deposits/dashboard-summary");
+    async dashboardSummary(options = {}) {
+      return request("/api/deposits/dashboard-summary", options);
     },
 
-    async leaderboard({ cycleId = "", limit } = {}) {
+    async leaderboard({ cycleId = "", limit, signal } = {}) {
       const params = new URLSearchParams();
       if (cycleId) params.set("cycleId", cycleId);
       if (limit) params.set("limit", String(limit));
-      return request(`/api/deposits/leaderboard${params.toString() ? `?${params.toString()}` : ""}`);
+      return request(`/api/deposits/leaderboard${params.toString() ? `?${params.toString()}` : ""}`, { signal });
     },
 
-    async adminList({ status = "", cycleId = "", limit } = {}) {
+    async adminList({ status = "", cycleId = "", limit, signal } = {}) {
       const params = new URLSearchParams();
       if (status) params.set("status", status);
       if (cycleId) params.set("cycleId", cycleId);
       if (limit) params.set("limit", String(limit));
-      return request(`/api/admin/deposits${params.toString() ? `?${params.toString()}` : ""}`);
+      return request(`/api/admin/deposits${params.toString() ? `?${params.toString()}` : ""}`, { signal });
     },
 
     async adminHistory(id) {
@@ -1095,16 +1112,16 @@ export const base44 = {
   },
 
   notifications: {
-    async recent({ limit = 50 } = {}) {
+    async recent({ limit = 50, signal } = {}) {
       const params = new URLSearchParams();
       params.set("limit", String(limit));
-      return request(`/api/notifications/recent?${params.toString()}`);
+      return request(`/api/notifications/recent?${params.toString()}`, { signal });
     },
   },
 
   platforms: {
-    async summary() {
-      return request("/api/platforms/summary");
+    async summary(options = {}) {
+      return request("/api/platforms/summary", options);
     },
   },
 
@@ -1404,7 +1421,7 @@ export const base44 = {
           body: JSON.stringify({ ids }),
         });
       },
-      publicBasics(ids = [], handles = []) {
+      publicBasics(ids = [], handles = [], options = {}) {
         const uniqueIds = Array.from(
           new Set((Array.isArray(ids) ? ids : []).map((item) => String(item || "").trim()).filter(Boolean))
         );
@@ -1414,7 +1431,7 @@ export const base44 = {
         const params = new URLSearchParams();
         if (uniqueIds.length > 0) params.set("ids", uniqueIds.join(","));
         if (uniqueHandles.length > 0) params.set("handles", uniqueHandles.join(","));
-        return request(`/api/profile/public-basics?${params.toString()}`);
+        return request(`/api/profile/public-basics?${params.toString()}`, options);
       },
       platformHistory({ limit = 100 } = {}) {
         const params = new URLSearchParams();
@@ -1537,8 +1554,8 @@ export const base44 = {
       });
     },
 
-    async state(targetUserId = "me") {
-      return request(`/api/social/state/${encodeURIComponent(targetUserId)}`);
+    async state(targetUserId = "me", options = {}) {
+      return request(`/api/social/state/${encodeURIComponent(targetUserId)}`, options);
     },
 
     async following() {
@@ -1623,11 +1640,11 @@ export const base44 = {
       const params = new URLSearchParams();
       if (options?.force) params.set("force", "true");
       const suffix = params.toString() ? `?${params.toString()}` : "";
-      return request(`/api/profile/metrics${suffix}`);
+      return request(`/api/profile/metrics${suffix}`, options);
     },
 
-    async publicProfileSummary(userId) {
-      return request(`/api/profile/public/${encodeURIComponent(userId)}/summary`);
+    async publicProfileSummary(userId, options = {}) {
+      return request(`/api/profile/public/${encodeURIComponent(userId)}/summary`, options);
     },
 
     async prizeGallery({ userId = "", limit = 3, offset = 0 } = {}) {

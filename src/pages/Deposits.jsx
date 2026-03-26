@@ -51,9 +51,9 @@ export default function Deposits() {
 
   const { data: deposits = [], refetch: refetchDeposits, isLoading: depositsLoading } = useQuery({
     queryKey: ["deposits", user?.id],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (!user) return [];
-      const response = await base44.deposits.my();
+      const response = await base44.deposits.my({ signal });
       return response.items || [];
     },
     enabled: !!user,
@@ -62,9 +62,9 @@ export default function Deposits() {
 
   const { data: allDeposits = [], isLoading: allDepositsLoading } = useQuery({
     queryKey: ["all-deposits"],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (user?.role === "admin") {
-        const response = await base44.deposits.adminList();
+        const response = await base44.deposits.adminList({ signal });
         return response.items || [];
       }
       return [];
@@ -75,7 +75,7 @@ export default function Deposits() {
 
   const { data: depositsDashboardSummary, isLoading: depositsDashboardLoading } = useQuery({
     queryKey: ["deposits-dashboard-summary"],
-    queryFn: () => base44.deposits.dashboardSummary(),
+    queryFn: ({ signal }) => base44.deposits.dashboardSummary({ signal }),
     enabled: !!user,
     staleTime: 60000,
   });
@@ -91,7 +91,7 @@ export default function Deposits() {
 
   const { data: leaderboardData, isLoading: leaderboardLoading } = useQuery({
     queryKey: ["deposit-cycle-leaderboard", activeCycle?.id],
-    queryFn: () => base44.deposits.leaderboard({ cycleId: activeCycle?.id, limit: 20 }),
+    queryFn: ({ signal }) => base44.deposits.leaderboard({ cycleId: activeCycle?.id, limit: 20, signal }),
     enabled: !!user && !!activeCycle?.id,
     staleTime: 30000,
   });
