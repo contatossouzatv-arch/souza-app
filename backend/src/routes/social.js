@@ -116,10 +116,11 @@ function buildHandle(nick = "", userId = "") {
 }
 
 function mapSocialProfile(row) {
-  const canExposeApprovedPhoto =
+  const approvedProfileImageUrl =
     String(row.profile_image_mode || "").toLowerCase() === "photo" &&
-    String(row.profile_image_status || "").toLowerCase() === "approved" &&
-    String(row.profile_image_url || "").trim();
+    String(row.profile_image_status || "").toLowerCase() === "approved"
+      ? String(row.profile_image_url || "").trim() || (row.id ? `/api/auth/profile-image/${row.id}` : "")
+      : "";
   return {
     id: row.id,
     nick: row.nick || row.full_name || "Usuário",
@@ -128,7 +129,7 @@ function mapSocialProfile(row) {
     profile_avatar_id: row.profile_avatar_id || "",
     profile_image_mode: row.profile_image_mode || "avatar",
     profile_image_status: row.profile_image_status || "none",
-    profile_image_url: canExposeApprovedPhoto ? String(row.profile_image_url || "").trim() : "",
+    profile_image_url: approvedProfileImageUrl,
     followers: Number(row.followers || 0),
     following: Number(row.following || 0),
     likes: Number(row.likes || 0),

@@ -125,7 +125,10 @@ async function listUsersBasicByIds(ids = []) {
     platform_id: String(row.platform_id || "").trim(),
     profile_avatar_id: String(row.profile_avatar_id || "").trim(),
     profile_image_mode: String(row.profile_image_mode || "").trim(),
-    profile_image_url: String(row.profile_image_url || "").trim(),
+    profile_image_url:
+      String(row.profile_image_status || "").trim().toLowerCase() === "approved"
+        ? String(row.profile_image_url || "").trim() || (row.id ? `/api/auth/profile-image/${row.id}` : "")
+        : "",
     profile_image_status: String(row.profile_image_status || "").trim(),
   }));
 }

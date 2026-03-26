@@ -1817,10 +1817,11 @@ async function buildLightweightProfileMetricsFresh(userId) {
            u.full_name,
            u.profile_avatar_id,
            u.profile_image_mode,
+           u.profile_image_status,
            CASE
              WHEN LOWER(COALESCE(u.profile_image_mode, 'avatar')) = 'photo'
               AND LOWER(COALESCE(u.profile_image_status, 'none')) = 'approved'
-             THEN COALESCE(u.profile_image_url, '')
+             THEN COALESCE(NULLIF(BTRIM(u.profile_image_url), ''), '/api/auth/profile-image/' || u.id::text)
              ELSE ''
            END AS profile_image_url
          FROM weekly w
@@ -1851,6 +1852,7 @@ async function buildLightweightProfileMetricsFresh(userId) {
     nick: String(row.nick || row.full_name || "Usuario"),
     profile_avatar_id: String(row.profile_avatar_id || ""),
     profile_image_mode: String(row.profile_image_mode || "avatar"),
+    profile_image_status: String(row.profile_image_status || "none"),
     profile_image_url: String(row.profile_image_url || ""),
     weekly_points: Number(row.weekly_points || 0),
     engagement_points: Number(row.engagement_points || 0),

@@ -41,6 +41,10 @@ export async function listPublicProfileBasics(ids = [], handles = []) {
   const usersById = new Map(
     result.rows.map((row) => {
       const user = row || {};
+      const approvedProfileImageUrl =
+        String(user.profile_image_status || "none") === "approved"
+          ? String(user.profile_image_url || "").trim() || (user.id ? `/api/auth/profile-image/${user.id}` : "")
+          : "";
       return [
         String(user.id),
         {
@@ -50,7 +54,7 @@ export async function listPublicProfileBasics(ids = [], handles = []) {
           avatar_emoji: user.avatar_emoji || "🎰",
           profile_avatar_id: user.profile_avatar_id || "",
           profile_image_mode: user.profile_image_mode || "avatar",
-          profile_image_url: user.profile_image_url || "",
+          profile_image_url: approvedProfileImageUrl,
           profile_image_status: user.profile_image_status || "none",
           account_status: user.account_status || "active",
         },

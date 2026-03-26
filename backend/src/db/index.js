@@ -2439,7 +2439,7 @@ export async function listDepositCycleLeaderboard({ cycleId = "", limit = 10, cu
        COALESCE(NULLIF(users.profile_image_mode, ''), 'avatar') AS profile_image_mode,
        CASE
          WHEN COALESCE(users.profile_image_status, 'none') = 'approved'
-           THEN COALESCE(NULLIF(users.profile_image_url, ''), '')
+           THEN COALESCE(NULLIF(users.profile_image_url, ''), '/api/auth/profile-image/' || users.id::text)
          ELSE ''
        END AS profile_image_url,
        COALESCE(NULLIF(users.profile_image_status, ''), 'none') AS profile_image_status,
