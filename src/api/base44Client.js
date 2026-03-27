@@ -195,14 +195,23 @@ export function resolveAssetUrl(rawUrl) {
     return safePath;
   };
 
+  const isProfileImagePath = (pathname = "") => {
+    const safePath = String(pathname || "").replace(/\\/g, "/");
+    return (
+      safePath.startsWith("/api/auth/profile-image/") ||
+      safePath.startsWith("/api/auth/profile-image-version/")
+    );
+  };
+
   try {
     if (value.startsWith("http://") || value.startsWith("https://")) {
       const parsed = new URL(value);
       const api = new URL(API_BASE_URL);
       const uploadLikePath =
         parsed.pathname.startsWith("/uploads/") || parsed.pathname.startsWith("/api/uploads/");
+      const profileImagePath = isProfileImagePath(parsed.pathname);
 
-      if (uploadLikePath && parsed.host !== api.host) {
+      if ((uploadLikePath || profileImagePath) && parsed.host !== api.host) {
         parsed.protocol = api.protocol;
         parsed.host = api.host;
         parsed.pathname = normalizeUploadPath(parsed.pathname);

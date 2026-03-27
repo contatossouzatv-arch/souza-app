@@ -1270,7 +1270,7 @@ export default function Profile() {
     Boolean(user) &&
     !isViewingPublicProfile &&
     shouldLoadCoreProfileData &&
-    activePrivateTab === PROFILE_PRIVATE_TABS.OVERVIEW;
+    isOverviewTabActive;
   const {
     data: profileCompetitionBoardData,
     isFetching: fetchingProfileCompetitionBoard,
