@@ -25,13 +25,29 @@ function isStrongSecret(value) {
 
 function assertProductionEnv(condition, message) {
   if (!condition && isProd) {
-    throw new Error(message);
+    const error = new Error(message);
+    console.error("[startup] invalid production environment", {
+      message,
+      nodeEnv,
+    });
+    throw error;
+  }
+}
+
+function assertRequiredEnv(condition, message) {
+  if (!condition) {
+    const error = new Error(message);
+    console.error("[startup] missing required environment", {
+      message,
+      nodeEnv,
+    });
+    throw error;
   }
 }
 
 export const env = {
   nodeEnv,
-  port: Number(process.env.PORT || 3001),
+  port: Number(process.env.PORT || 8080),
   origin: rawOrigin,
   origins: rawOrigin.split(",").map((v) => v.trim()).filter(Boolean),
   databaseUrl: process.env.DATABASE_URL || "",
@@ -102,9 +118,7 @@ export function isAllowedOrigin(origin) {
   return false;
 }
 
-if (!env.databaseUrl) {
-  throw new Error("DATABASE_URL is required");
-}
+assertRequiredEnv(Boolean(env.databaseUrl), "DATABASE_URL is required");
 
 assertProductionEnv(env.origin !== "*", "ORIGIN cannot be '*' in production");
 assertProductionEnv(env.origins.length > 0, "ORIGIN must list at least one allowed origin in production");

@@ -8,6 +8,14 @@ import { createApp } from "./app.js";
 import { ensureDb, ensureDevAdmin, seedDefaults } from "./db/index.js";
 
 async function bootstrap() {
+  console.log("[startup] bootstrap:start", {
+    nodeEnv: env.nodeEnv,
+    port: env.port,
+    host: "0.0.0.0",
+    hasRedis: Boolean(env.redisUrl),
+    hasDatabaseUrl: Boolean(env.databaseUrl),
+  });
+
   await ensureDb();
   if (env.nodeEnv !== "production") {
     const adminPasswordHash = await bcrypt.hash(env.adminPassword, 10);
@@ -31,15 +39,22 @@ async function bootstrap() {
     },
   });
 
+  let socketAdapterMode = "memory";
   if (env.redisUrl) {
-    const pubClient = new Redis(env.redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: false });
-    const subClient = pubClient.duplicate();
-    await Promise.all([pubClient.ping(), subClient.ping()]);
-    io.adapter(createAdapter(pubClient, subClient));
-    console.log("Socket.IO adapter: redis");
-  } else {
-    console.log("Socket.IO adapter: memory");
+    try {
+      const pubClient = new Redis(env.redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: false });
+      const subClient = pubClient.duplicate();
+      await Promise.all([pubClient.ping(), subClient.ping()]);
+      io.adapter(createAdapter(pubClient, subClient));
+      socketAdapterMode = "redis";
+    } catch (error) {
+      console.error("[startup] redis adapter init failed, falling back to memory", {
+        message: error?.message || "Unknown Redis startup error",
+        stack: error?.stack || null,
+      });
+    }
   }
+  console.log(`Socket.IO adapter: ${socketAdapterMode}`);
 
   const app = createApp(io);
   const server = http.createServer(app);
@@ -49,12 +64,23 @@ async function bootstrap() {
     socket.emit("server:ready", { ok: true, now: new Date().toISOString() });
   });
 
-  server.listen(env.port, "0.0.0.0", () => {
-    console.log(`API running on http://localhost:${env.port}`);
+  const host = "0.0.0.0";
+  console.log("[startup] server:listen", {
+    port: env.port,
+    host,
+  });
+  server.listen(env.port, host, () => {
+    console.log("[startup] server:ready", {
+      port: env.port,
+      host,
+    });
   });
 }
 
 bootstrap().catch((error) => {
-  console.error("Failed to bootstrap backend", error);
+  console.error("[startup] bootstrap:failed", {
+    message: error?.message || "Unknown startup error",
+    stack: error?.stack || null,
+  });
   process.exit(1);
 });
