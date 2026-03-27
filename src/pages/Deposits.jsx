@@ -60,7 +60,12 @@ export default function Deposits() {
       return response.items || [];
     },
     enabled: !!user,
-    staleTime: 30000,
+    staleTime: 120000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   const { data: allDeposits = [], isLoading: allDepositsLoading } = useQuery({
@@ -73,14 +78,24 @@ export default function Deposits() {
       return [];
     },
     enabled: !!user,
-    staleTime: 30000,
+    staleTime: 120000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   const { data: depositsDashboardSummary, isLoading: depositsDashboardLoading } = useQuery({
     queryKey: ["deposits-dashboard-summary"],
     queryFn: ({ signal }) => base44.deposits.dashboardSummary({ signal }),
     enabled: !!user,
-    staleTime: 60000,
+    staleTime: 180000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   const { data: settings = [], isLoading: settingsLoading } = useAppSettings({
@@ -96,7 +111,12 @@ export default function Deposits() {
     queryKey: ["deposit-cycle-leaderboard", activeCycle?.id],
     queryFn: ({ signal }) => base44.deposits.leaderboard({ cycleId: activeCycle?.id, limit: 20, signal }),
     enabled: !!user && !!activeCycle?.id,
-    staleTime: 30000,
+    staleTime: 120000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   const cycleApprovedDeposits = deposits.filter(

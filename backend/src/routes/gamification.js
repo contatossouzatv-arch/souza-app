@@ -1771,14 +1771,15 @@ function extractProfileCompetitionBoardPayload(payload = {}) {
   };
 }
 
-async function buildLightweightProfileMetricsFresh(userId) {
+async function buildLightweightProfileMetricsFresh(userId, options = {}) {
+  const includeCompetitionBoard = options?.includeCompetitionBoard !== false;
   const [{ badgeRules, weeklyConfig, dailyCheckInConfig }, settingsMap] = await Promise.all([
     loadGamificationRules(),
     listAppSettingsMap(),
   ]);
   const cycle = await ensureActiveWeeklyCycle(weeklyConfig);
 
-  const [balanceRows, summaryRows, leaderboardRows] = await Promise.all([
+  const queryTasks = [
     pool.query(
       `SELECT metric_key, cycle_key, amount
          FROM user_metric_balances
@@ -1839,48 +1840,55 @@ async function buildLightweightProfileMetricsFresh(userId) {
          CROSS JOIN social`,
       [userId]
     ),
-    pool.query(
-      `WITH weekly AS (
-         SELECT user_id, amount
-           FROM user_metric_balances
-          WHERE metric_key = 'weekly_points'
-            AND cycle_key = $1
-            AND amount > 0
-       ),
-       engagement AS (
-         SELECT user_id, amount
-           FROM user_metric_balances
-          WHERE metric_key = 'engagement_points'
-            AND cycle_key = ''
-       ),
-       ranked AS (
-         SELECT
-           w.user_id,
-           w.amount AS weekly_points,
-           COALESCE(e.amount, 0) AS engagement_points,
-           ROW_NUMBER() OVER (ORDER BY w.amount DESC, COALESCE(e.amount, 0) DESC, u.nick ASC, u.id ASC) AS position,
-           u.nick,
-           u.full_name,
-           u.profile_avatar_id,
-           u.profile_image_mode,
-           u.profile_image_status,
-           CASE
-             WHEN LOWER(COALESCE(u.profile_image_mode, 'avatar')) = 'photo'
-              AND LOWER(COALESCE(u.profile_image_status, 'none')) = 'approved'
-             THEN COALESCE(NULLIF(BTRIM(u.profile_image_url), ''), '/api/auth/profile-image/' || u.id::text)
-             ELSE ''
-           END AS profile_image_url
-         FROM weekly w
-         JOIN users u ON u.id = w.user_id
-         LEFT JOIN engagement e ON e.user_id = w.user_id
-       )
-       SELECT *
-         FROM ranked
-        WHERE position <= 20 OR user_id = $2
-        ORDER BY position ASC`,
-      [String(cycle?.cycle_key || ""), userId]
-    ),
-  ]);
+  ];
+
+  if (includeCompetitionBoard) {
+    queryTasks.push(
+      pool.query(
+        `WITH weekly AS (
+           SELECT user_id, amount
+             FROM user_metric_balances
+            WHERE metric_key = 'weekly_points'
+              AND cycle_key = $1
+              AND amount > 0
+         ),
+         engagement AS (
+           SELECT user_id, amount
+             FROM user_metric_balances
+            WHERE metric_key = 'engagement_points'
+              AND cycle_key = ''
+         ),
+         ranked AS (
+           SELECT
+             w.user_id,
+             w.amount AS weekly_points,
+             COALESCE(e.amount, 0) AS engagement_points,
+             ROW_NUMBER() OVER (ORDER BY w.amount DESC, COALESCE(e.amount, 0) DESC, u.nick ASC, u.id ASC) AS position,
+             u.nick,
+             u.full_name,
+             u.profile_avatar_id,
+             u.profile_image_mode,
+             u.profile_image_status,
+             CASE
+               WHEN LOWER(COALESCE(u.profile_image_mode, 'avatar')) = 'photo'
+                AND LOWER(COALESCE(u.profile_image_status, 'none')) = 'approved'
+               THEN COALESCE(NULLIF(BTRIM(u.profile_image_url), ''), '/api/auth/profile-image/' || u.id::text)
+               ELSE ''
+             END AS profile_image_url
+           FROM weekly w
+           JOIN users u ON u.id = w.user_id
+           LEFT JOIN engagement e ON e.user_id = w.user_id
+         )
+         SELECT *
+           FROM ranked
+          WHERE position <= 20 OR user_id = $2
+          ORDER BY position ASC`,
+        [String(cycle?.cycle_key || ""), userId]
+      )
+    );
+  }
+
+  const [balanceRows, summaryRows, leaderboardRowsResult = { rows: [] }] = await Promise.all(queryTasks);
 
   const pointsRules = {
     ...DEFAULT_POINTS_RULES,
@@ -1893,7 +1901,7 @@ async function buildLightweightProfileMetricsFresh(userId) {
   const summaryRow = summaryRows?.rows?.[0] || {};
 
   const weeklyCycleKey = String(cycle?.cycle_key || "");
-  const leaderboardEntries = (leaderboardRows?.rows || []).map((row) => ({
+  const leaderboardEntries = (leaderboardRowsResult?.rows || []).map((row) => ({
     user_id: row.user_id,
     nick: String(row.nick || row.full_name || "Usuario"),
     profile_avatar_id: String(row.profile_avatar_id || ""),
@@ -1969,9 +1977,12 @@ async function buildLightweightProfileMetrics(userId, options = {}) {
   }
 
   const forceFresh = options?.forceFresh === true;
+  const includeCompetitionBoard = options?.includeCompetitionBoard !== false;
   const now = Date.now();
-  const cached = profileMetricsCache.get(safeUserId);
-  const sharedCacheKey = `gamification:profile-metrics:${safeUserId}`;
+  const cacheScope = includeCompetitionBoard ? "full" : "summary";
+  const localCacheKey = `${safeUserId}:${cacheScope}`;
+  const cached = profileMetricsCache.get(localCacheKey);
+  const sharedCacheKey = `gamification:profile-metrics:${safeUserId}:${cacheScope}`;
 
   if (!forceFresh && cached && now < cached.expiresAt) {
     return cached.value;
@@ -1988,13 +1999,13 @@ async function buildLightweightProfileMetrics(userId, options = {}) {
     }
   }
 
-  if (!forceFresh && profileMetricsPromises.has(safeUserId)) {
-    return profileMetricsPromises.get(safeUserId);
+  if (!forceFresh && profileMetricsPromises.has(localCacheKey)) {
+    return profileMetricsPromises.get(localCacheKey);
   }
 
-  const buildPromise = buildLightweightProfileMetricsFresh(safeUserId)
+  const buildPromise = buildLightweightProfileMetricsFresh(safeUserId, { includeCompetitionBoard })
     .then(async (payload) => {
-      profileMetricsCache.set(safeUserId, {
+      profileMetricsCache.set(localCacheKey, {
         value: payload,
         expiresAt: Date.now() + PROFILE_METRICS_TTL_MS,
       });
@@ -2002,14 +2013,14 @@ async function buildLightweightProfileMetrics(userId, options = {}) {
       return payload;
     })
     .catch((error) => {
-      profileMetricsCache.delete(safeUserId);
+      profileMetricsCache.delete(localCacheKey);
       throw error;
     })
     .finally(() => {
-      profileMetricsPromises.delete(safeUserId);
+      profileMetricsPromises.delete(localCacheKey);
     });
 
-  profileMetricsPromises.set(safeUserId, buildPromise);
+  profileMetricsPromises.set(localCacheKey, buildPromise);
   return buildPromise;
 }
 
@@ -2734,6 +2745,7 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
     const payload = extractProfileSummaryPayload(
       await buildLightweightProfileMetrics(userId, {
         forceFresh: shouldForceRefresh,
+        includeCompetitionBoard: false,
       })
     );
 
@@ -2766,6 +2778,7 @@ router.get("/profile/competition-board", requireAuth, async (req, res) => {
     const payload = extractProfileCompetitionBoardPayload(
       await buildLightweightProfileMetrics(userId, {
         forceFresh: shouldForceRefresh,
+        includeCompetitionBoard: true,
       })
     );
 

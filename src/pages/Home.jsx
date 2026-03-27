@@ -47,9 +47,12 @@ export default function Home() {
     queryKey: ["inicio-feed-summary"],
     queryFn: () => base44.home.feedSummary(),
     enabled: Boolean(user?.id) && !isLoadingAuth,
-    staleTime: 30000,
+    staleTime: 120000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
-    retry: 2,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   const posts = feedSummary?.posts || [];
@@ -63,9 +66,12 @@ export default function Home() {
     queryKey: ["inicio-summary"],
     queryFn: () => base44.home.summary(),
     enabled: Boolean(user?.id) && !isLoadingAuth,
-    staleTime: 120000,
+    staleTime: 300000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
-    retry: 2,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   const winnerUserIds = useMemo(
@@ -84,8 +90,11 @@ export default function Home() {
     queryKey: ["inicio-winner-users", winnerUserIds.join(",")],
     queryFn: () => base44.profile.publicBasics(winnerUserIds),
     enabled: winnerUserIds.length > 0,
-    staleTime: 300000,
+    staleTime: 600000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: false,
   });
 

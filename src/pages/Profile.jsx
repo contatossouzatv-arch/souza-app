@@ -1272,7 +1272,11 @@ export default function Profile() {
       return base44.gamification.profileSummary({ signal });
     },
     enabled: !!user && !isViewingPublicProfile && shouldLoadCoreProfileData,
-    staleTime: 120000,
+    staleTime: 180000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: false,
   });
   const shouldLoadCompetitionBoard =
@@ -1289,7 +1293,11 @@ export default function Profile() {
     queryKey: ["profile-competition-board-authoritative", user?.id],
     queryFn: ({ signal }) => base44.gamification.profileCompetitionBoard({ signal }),
     enabled: false && shouldLoadCompetitionBoard,
-    staleTime: 120000,
+    staleTime: 180000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: false,
   });
   const profileGamification = useMemo(() => ({
@@ -1385,8 +1393,11 @@ export default function Profile() {
     queryKey: ["profile-history-authoritative", user?.id],
     queryFn: ({ signal }) => base44.gamification.profileHistory({ signal }),
     enabled: !!user && isPointsHistoryOpen,
-    staleTime: 30000,
+    staleTime: 120000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: false,
   });
 
@@ -1394,8 +1405,11 @@ export default function Profile() {
     queryKey: ["social-my-state", user?.id],
     queryFn: () => base44.social.state("me"),
     enabled: canLoadDeferredProfileQueries && !isViewingPublicProfile && hasResolvedAuthBootstrap,
-    staleTime: 30000,
+    staleTime: 120000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: false,
   });
 
@@ -1403,8 +1417,11 @@ export default function Profile() {
     queryKey: ["social-following-list", user?.id],
     queryFn: () => base44.social.following(),
     enabled: !!user && isSocialListOpen,
-    staleTime: 30000,
+    staleTime: 300000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: false,
   });
 
@@ -1412,8 +1429,11 @@ export default function Profile() {
     queryKey: ["social-follower-list", user?.id],
     queryFn: () => base44.social.followers(),
     enabled: !!user && isSocialListOpen,
-    staleTime: 30000,
+    staleTime: 300000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: false,
   });
 
@@ -1421,8 +1441,11 @@ export default function Profile() {
     queryKey: ["daily-checkin-state", user?.id],
     queryFn: () => base44.social.checkInState(),
     enabled: canLoadDeferredProfileQueries && !isViewingPublicProfile && hasResolvedAuthBootstrap,
-    staleTime: 30000,
+    staleTime: 120000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: false,
   });
 
@@ -1814,8 +1837,11 @@ export default function Profile() {
       isViewingPublicProfile &&
       (publicProfileBasicIds.length > 0 || Boolean(selectedPublicProfileHandle)) &&
       (Boolean(selectedPublicProfileId) || Boolean(selectedPublicProfileHandle) || canLoadDeferredPublicProfileQueries),
-    staleTime: 30000,
+    staleTime: 180000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: 3,
   });
   const publicProfileBasicsMap = useMemo(() => {

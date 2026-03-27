@@ -165,14 +165,24 @@ export default function SettingsPage() {
       return response.items || [];
     },
     enabled: !!user?.id,
-    staleTime: 30000,
+    staleTime: 300000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   const { data: profileImagesData } = useQuery({
     queryKey: ["my-profile-images", user?.id],
     queryFn: () => base44.auth.listMyProfileImages(),
     enabled: !!user?.id,
-    staleTime: 30000,
+    staleTime: 300000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   const photoPreviewMetrics = useMemo(() => {

@@ -42,7 +42,12 @@ export default function Dashboard() {
     queryKey: ["dashboard-dynamics-summary"],
     queryFn: () => base44.dynamics.summary(),
     enabled: !!user,
-    staleTime: 45000,
+    staleTime: 120000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   React.useEffect(() => {
