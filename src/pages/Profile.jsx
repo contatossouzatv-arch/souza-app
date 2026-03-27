@@ -1835,12 +1835,21 @@ export default function Profile() {
       ) || null
     );
   }, [publicProfileBasicsPayload?.items, selectedPublicProfileHandle]);
+  const hasResolvedPublicProfileCandidate =
+    Boolean(selectedPublicProfileId && publicProfileBasicsMap.get(String(selectedPublicProfileId || ""))) ||
+    Boolean(selectedPublicUserByHandle) ||
+    Boolean(selectedPublicProfileId && competitionEntryByUserId[selectedPublicProfileId]) ||
+    Boolean(
+      (selectedPublicProfileHandle
+        ? simulatedProfiles.find((profile) => profile.handle === selectedPublicProfileHandle)
+        : simulatedProfiles.find((profile) => profile.id === selectedPublicProfileId)) || null
+    );
   const isPublicProfileResolving =
     isViewingPublicProfile &&
     (isLoadingAuth ||
       publicProfileBasicsLoading ||
       publicProfileBasicsFetching ||
-      (!selectedPublicProfile && !publicProfileBasicsError) ||
+      (!hasResolvedPublicProfileCandidate && !publicProfileBasicsError) ||
       (!selectedPublicProfileId && Boolean(selectedPublicProfileHandle) && !simulatedProfiles.length));
   const publicProfileLookupStatus = Number(publicProfileBasicsError?.status || 0);
   const hasPublicProfileLookupError =
