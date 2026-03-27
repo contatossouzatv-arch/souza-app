@@ -32,6 +32,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [hasResolvedAuthBootstrap, setHasResolvedAuthBootstrap] = useState(false);
   const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(false);
   const [authError, setAuthError] = useState(null);
   const [appPublicSettings] = useState(null);
@@ -89,6 +90,7 @@ export const AuthProvider = ({ children }) => {
       }
     } finally {
       console.info('[auth-bootstrap] checkAppState:finish');
+      setHasResolvedAuthBootstrap(true);
       if (!background) {
         setIsLoadingAuth(false);
       }
@@ -121,6 +123,7 @@ export const AuthProvider = ({ children }) => {
         type: 'auth_required',
         message: event?.detail?.message || 'Authentication required',
       });
+      setHasResolvedAuthBootstrap(true);
       setIsLoadingAuth(false);
     };
 
@@ -147,6 +150,7 @@ export const AuthProvider = ({ children }) => {
         user,
         isAuthenticated,
         isLoadingAuth,
+        hasResolvedAuthBootstrap,
         isLoadingPublicSettings,
         authError,
         appPublicSettings,

@@ -2781,7 +2781,7 @@ router.get("/profile/competition-board", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/profile/public/:userId/summary", requireAuth, async (req, res) => {
+router.get("/profile/public/:userId/summary", async (req, res) => {
   try {
     const targetUserId = String(req.params.userId || "").trim();
     if (!targetUserId) {
@@ -2806,7 +2806,7 @@ router.get("/profile/public/:userId/summary", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/profile/public-basics", requireAuth, async (req, res) => {
+router.get("/profile/public-basics", async (req, res) => {
   try {
     const items = await listPublicProfileBasics(
       String(req.query?.ids || "").split(","),
@@ -2917,10 +2917,13 @@ router.get("/profile/history", requireAuth, async (req, res) => {
   });
 });
 
-router.get("/profile/prize-gallery", requireAuth, async (req, res) => {
+router.get("/profile/prize-gallery", async (req, res) => {
   try {
     const requestedUserId = String(req.query?.userId || "").trim();
-    const userId = requestedUserId || String(req.auth.sub || "").trim();
+    const userId = requestedUserId || String(req.auth?.sub || "").trim();
+    if (!userId) {
+      return res.status(400).json({ error: "Usuario invalido." });
+    }
     const limit = clampInt(req.query?.limit, 3, 1, 24);
     const offset = clampInt(req.query?.offset, 0, 0, 2000);
     const payload = await getOrComputeCacheJson(

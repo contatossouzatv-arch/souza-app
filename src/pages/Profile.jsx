@@ -788,7 +788,7 @@ export default function Profile() {
     moved: false,
   });
   const { toast } = useToast();
-  const { user: authUser, isLoadingAuth } = useAuth();
+  const { user: authUser, isLoadingAuth, hasResolvedAuthBootstrap } = useAuth();
   const [user, setUser] = useState(null);
   const [privatePhotoPreview, setPrivatePhotoPreview] = useState("");
   const [isPrivatePhotoLoading, setIsPrivatePhotoLoading] = useState(false);
@@ -960,10 +960,10 @@ export default function Profile() {
     setActivePrivateTab("overview");
   }, [isViewingPublicProfile, user?.id]);
 
-  const { data: discoverProfilesData } = useQuery({
+  const { data: discoverProfilesData, isLoading: discoverProfilesLoading, isFetching: discoverProfilesFetching } = useQuery({
     queryKey: ["profile-discover-profiles", user?.id],
     queryFn: () => base44.social.discover({ limit: 12, offset: 0 }),
-    enabled: !!user && loadDiscoverProfiles,
+    enabled: !!user && hasResolvedAuthBootstrap && loadDiscoverProfiles,
     staleTime: 60000,
     refetchOnWindowFocus: false,
     retry: false,
@@ -1318,17 +1318,30 @@ export default function Profile() {
     loadNonCriticalProfileData &&
     hasProfileGamification &&
     !isProfileGamificationUnavailable;
+  const canLoadDeferredPublicProfileQueries =
+    Boolean(user) &&
+    loadNonCriticalProfileData;
 
   useEffect(() => {
     setLoadDiscoverProfiles(false);
-    if (!canLoadDeferredProfileQueries || !isEngagementTabActive) return undefined;
+    const shouldLoadForPrivateProfile = canLoadDeferredProfileQueries && isEngagementTabActive;
+    const shouldLoadForPublicProfile = isViewingPublicProfile && canLoadDeferredPublicProfileQueries;
+    if (!shouldLoadForPrivateProfile && !shouldLoadForPublicProfile) return undefined;
 
     const timerId = window.setTimeout(() => {
       setLoadDiscoverProfiles(true);
     }, PROFILE_NON_CRITICAL_LOAD_DELAY_MS + 600);
 
     return () => window.clearTimeout(timerId);
-  }, [canLoadDeferredProfileQueries, isEngagementTabActive, location.pathname, location.search, user?.id]);
+  }, [
+    canLoadDeferredProfileQueries,
+    canLoadDeferredPublicProfileQueries,
+    isEngagementTabActive,
+    isViewingPublicProfile,
+    location.pathname,
+    location.search,
+    user?.id,
+  ]);
 
   useEffect(() => {
     setLoadNonCriticalProfileData(false);
@@ -1379,7 +1392,7 @@ export default function Profile() {
   const { data: mySocialState } = useQuery({
     queryKey: ["social-my-state", user?.id],
     queryFn: () => base44.social.state("me"),
-    enabled: canLoadDeferredProfileQueries,
+    enabled: canLoadDeferredProfileQueries && !isViewingPublicProfile && hasResolvedAuthBootstrap,
     staleTime: 30000,
     refetchOnWindowFocus: false,
     retry: false,
@@ -1406,7 +1419,7 @@ export default function Profile() {
   const { data: dailyCheckInState } = useQuery({
     queryKey: ["daily-checkin-state", user?.id],
     queryFn: () => base44.social.checkInState(),
-    enabled: canLoadDeferredProfileQueries,
+    enabled: canLoadDeferredProfileQueries && !isViewingPublicProfile && hasResolvedAuthBootstrap,
     staleTime: 30000,
     refetchOnWindowFocus: false,
     retry: false,
@@ -1797,10 +1810,9 @@ export default function Profile() {
         { signal }
       ),
     enabled:
-      !isLoadingAuth &&
       isViewingPublicProfile &&
       (publicProfileBasicIds.length > 0 || Boolean(selectedPublicProfileHandle)) &&
-      (Boolean(selectedPublicProfileId) || Boolean(selectedPublicProfileHandle) || canLoadDeferredProfileQueries),
+      (Boolean(selectedPublicProfileId) || Boolean(selectedPublicProfileHandle) || canLoadDeferredPublicProfileQueries),
     staleTime: 30000,
     refetchOnWindowFocus: false,
     retry: 2,
@@ -1840,6 +1852,7 @@ export default function Profile() {
       queryFn: ({ signal }) => base44.social.state(profile.id, { signal }),
       enabled:
         !isLoadingAuth &&
+        hasResolvedAuthBootstrap &&
         Boolean(user?.id) &&
         canLoadDeferredProfileQueries &&
         !!profile?.id &&
@@ -2365,8 +2378,9 @@ export default function Profile() {
     },
     enabled:
       !isLoadingAuth &&
+      hasResolvedAuthBootstrap &&
       Boolean(user?.id) &&
-      canLoadDeferredProfileQueries &&
+      canLoadDeferredPublicProfileQueries &&
       !!selectedPublicProfile?.id &&
       isSelectedRealProfile,
     staleTime: 30000,
@@ -2385,7 +2399,7 @@ export default function Profile() {
     },
     enabled:
       PROFILE_PUBLIC_ENRICHMENT_ENABLED &&
-      canLoadDeferredProfileQueries &&
+      canLoadDeferredPublicProfileQueries &&
       !!selectedPublicProfile?.id &&
       isSelectedRealProfile,
     staleTime: 30000,
@@ -4978,7 +4992,12 @@ export default function Profile() {
                   </div>
                 );
               })}
-              {!otherProfiles.length ? (
+              {!otherProfiles.length && (discoverProfilesLoading || discoverProfilesFetching || loadDiscoverProfiles) ? (
+                <div className="w-full rounded-2xl border border-slate-700 bg-slate-950/70 p-4 text-center text-sm text-slate-300">
+                  Carregando outros perfis...
+                </div>
+              ) : null}
+              {!otherProfiles.length && !(discoverProfilesLoading || discoverProfilesFetching || loadDiscoverProfiles) ? (
                 <div className="w-full rounded-2xl border border-dashed border-slate-700 bg-slate-950/70 p-4 text-center text-sm text-slate-300">
                   Sem novas recomendações por agora. Volte depois para descobrir novos perfis.
                 </div>
