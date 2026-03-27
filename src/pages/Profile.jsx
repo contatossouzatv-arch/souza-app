@@ -1273,7 +1273,7 @@ export default function Profile() {
     },
     enabled: !!user && !isViewingPublicProfile && shouldLoadCoreProfileData,
     staleTime: 120000,
-    retry: 1,
+    retry: false,
   });
   const shouldLoadCompetitionBoard =
     Boolean(user) &&
@@ -1288,9 +1288,9 @@ export default function Profile() {
   } = useQuery({
     queryKey: ["profile-competition-board-authoritative", user?.id],
     queryFn: ({ signal }) => base44.gamification.profileCompetitionBoard({ signal }),
-    enabled: shouldLoadCompetitionBoard,
+    enabled: false && shouldLoadCompetitionBoard,
     staleTime: 120000,
-    retry: 1,
+    retry: false,
   });
   const profileGamification = useMemo(() => ({
     ...(profileSummaryData || {}),

@@ -270,6 +270,13 @@ export async function ensureDb() {
     )
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS idx_user_metric_balances_metric ON user_metric_balances(metric_key, cycle_key)");
+  await pool.query("CREATE INDEX IF NOT EXISTS idx_user_metric_balances_user ON user_metric_balances(user_id)");
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_user_metric_balances_user_metric_cycle ON user_metric_balances(user_id, metric_key, cycle_key)"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_user_metric_balances_weekly_ranking ON user_metric_balances(metric_key, cycle_key, amount DESC, user_id)"
+  );
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS weekly_cycles (
@@ -424,6 +431,9 @@ export async function ensureDb() {
     "CREATE INDEX IF NOT EXISTS idx_entity_records_prize_gallery_user_claimed ON entity_records(entity_name, ((data->>'user_id')), ((data->>'claimed_at'))) WHERE entity_name = 'UserPrizeGalleryItem'"
   );
   await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_entity_records_prize_gallery_user ON entity_records(entity_name, ((data->>'user_id'))) WHERE entity_name = 'UserPrizeGalleryItem'"
+  );
+  await pool.query(
     "CREATE INDEX IF NOT EXISTS idx_entity_records_app_settings_key ON entity_records(((data->>'key'))) WHERE entity_name = 'AppSettings'"
   );
   await pool.query(
@@ -434,6 +444,9 @@ export async function ensureDb() {
   );
   await pool.query(
     "CREATE INDEX IF NOT EXISTS idx_entity_records_instant_raffle_participant_raffle_user ON entity_records(entity_name, ((data->>'raffle_id')), ((data->>'user_id'))) WHERE entity_name = 'InstantRaffleParticipant'"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_entity_records_participation_user ON entity_records(entity_name, ((data->>'user_id'))) WHERE entity_name IN ('LiveDrawParticipant', 'GameCallParticipant', 'InstantRaffleParticipant', 'DailyChestXpGrant')"
   );
 
   await pool.query(`
