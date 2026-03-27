@@ -67,7 +67,9 @@ export default function Layout({ children }) {
   const isAdminPanel = pathname === createPageUrl("AdminPanel");
   const isMainGamePage = pathname === MAIN_GAME_ROUTE_PATH;
   const isDailyChestPage = pathname === DAILY_CHEST_ROUTE_PATH;
+  const [isDailyChestLoadReady, setIsDailyChestLoadReady] = React.useState(false);
   const shouldLoadDailyChestState =
+    isDailyChestLoadReady &&
     !isLoadingAuth &&
     Boolean(user?.id) &&
     (
@@ -76,6 +78,28 @@ export default function Layout({ children }) {
     );
   const showDailyChestEntry =
     FEATURE_FLAGS.DAILY_CHEST_3D_ENABLED && !isAdminPanel && !isMainGamePage && !isDailyChestPage;
+
+  React.useEffect(() => {
+    setIsDailyChestLoadReady(false);
+    if (
+      isLoadingAuth ||
+      !user?.id ||
+      !(
+        pathname === createPageUrl("Home").toLowerCase() ||
+        pathname === createPageUrl("Dashboard").toLowerCase()
+      )
+    ) {
+      return undefined;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setIsDailyChestLoadReady(true);
+    }, 1800);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [isLoadingAuth, pathname, user?.id]);
 
   React.useEffect(() => {
     const audio = new Audio(mainMenuClickSound);

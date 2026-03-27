@@ -95,7 +95,7 @@ export default function SettingsPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user: authUser, isLoadingAuth } = useAuth();
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => authUser || null);
   const [privatePhotoPreview, setPrivatePhotoPreview] = useState("");
   const [isPrivatePreviewLoading, setIsPrivatePreviewLoading] = useState(false);
   const [selectedPhotoFile, setSelectedPhotoFile] = useState(null);

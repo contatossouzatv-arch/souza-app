@@ -415,6 +415,15 @@ export async function ensureDb() {
     "CREATE INDEX IF NOT EXISTS idx_entity_records_entity_user_status ON entity_records(entity_name, ((data->>'user_id')), ((data->>'status')))"
   );
   await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_entity_records_feed_post_like_post_id ON entity_records(entity_name, ((data->>'post_id'))) WHERE entity_name = 'FeedPostLike'"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_entity_records_feed_post_like_user_post ON entity_records(entity_name, ((data->>'user_id')), ((data->>'post_id'))) WHERE entity_name = 'FeedPostLike'"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_entity_records_prize_gallery_user_claimed ON entity_records(entity_name, ((data->>'user_id')), ((data->>'claimed_at'))) WHERE entity_name = 'UserPrizeGalleryItem'"
+  );
+  await pool.query(
     "CREATE INDEX IF NOT EXISTS idx_entity_records_app_settings_key ON entity_records(((data->>'key'))) WHERE entity_name = 'AppSettings'"
   );
   await pool.query(

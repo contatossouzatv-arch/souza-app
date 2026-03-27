@@ -128,16 +128,7 @@ export default function Deposits() {
   const cashbackEndDate = getSettingValue("cashback_end_date");
   const depositantDrawEndDate = activeCycle?.draw_date || getSettingValue("depositant_draw_end_date");
 
-  const isLoading =
-    isLoadingAuth ||
-    !user ||
-    depositsLoading ||
-    allDepositsLoading ||
-    settingsLoading ||
-    depositsDashboardLoading ||
-    (Boolean(activeCycle?.id) && leaderboardLoading);
-
-  if (isLoading) {
+  if (isLoadingAuth || !user) {
     return <TechLoader />;
   }
 
@@ -298,7 +289,14 @@ export default function Deposits() {
           <h2 className="text-sm font-bold uppercase tracking-wide text-cyan-200">Sorteio dos Depositantes</h2>
         </div>
 
-        {!activeCycle ? (
+        {depositsDashboardLoading ? (
+          <div className="rounded-lg border border-cyan-600/40 bg-cyan-900/20 px-3 py-5 text-center">
+            <p className="text-sm font-bold text-cyan-200">CARREGANDO CICLO ATUAL</p>
+            <p className="mt-1 text-xs text-cyan-100/80">
+              Os dados do sorteio estão sincronizando agora.
+            </p>
+          </div>
+        ) : !activeCycle ? (
           <div className="rounded-lg border border-cyan-600/40 bg-cyan-900/20 px-3 py-5 text-center">
             <p className="text-sm font-bold text-cyan-200">AGUARDANDO NOVO CICLO</p>
             <p className="mt-1 text-xs text-cyan-100/80">
@@ -309,6 +307,16 @@ export default function Deposits() {
           <>
             <div className="mb-4 space-y-2">
               <h4 className="text-center text-xs font-bold uppercase tracking-wide text-slate-300">Top 3 Atual</h4>
+              {leaderboardLoading ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <div
+                      key={`deposit-leaderboard-loading-${index}`}
+                      className="h-[92px] rounded-lg border border-slate-700/70 bg-slate-900/50"
+                    />
+                  ))}
+                </div>
+              ) : (
               <div className="grid grid-cols-3 gap-2">
             <div className="min-w-0 rounded-lg border border-yellow-600/50 bg-yellow-900/30 p-3 text-center">
               <div className="text-xs font-bold text-yellow-300">Premio de R$ 500</div>
@@ -398,6 +406,7 @@ export default function Deposits() {
               ) : null}
             </div>
           </div>
+              )}
             <div className="rounded-lg border border-indigo-600/50 bg-indigo-900/30 p-2 text-center">
               <p className="text-xs text-indigo-200">+ 5 sorteios de R$ 200 entre todos os participantes</p>
             </div>
@@ -442,15 +451,27 @@ export default function Deposits() {
         activeCycle={activeCycle}
       />
 
-      <DepositHistory />
+      {depositsLoading ? (
+        <Card className="border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-400">
+          Carregando seu histórico de depósitos...
+        </Card>
+      ) : (
+        <DepositHistory />
+      )}
 
-      <TicketsDisplay
-        deposits={deposits}
-        allDeposits={allDeposits}
-        currentUserId={user?.id}
-        promoEndDate={depositantDrawEndDate}
-        showSummaryInCard={false}
-      />
+      {allDepositsLoading ? (
+        <Card className="border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-400">
+          Carregando seus bilhetes e ranking do ciclo...
+        </Card>
+      ) : (
+        <TicketsDisplay
+          deposits={deposits}
+          allDeposits={allDeposits}
+          currentUserId={user?.id}
+          promoEndDate={depositantDrawEndDate}
+          showSummaryInCard={false}
+        />
+      )}
 
       <Card className="border-purple-500/35 bg-gradient-to-br from-purple-950/50 via-slate-900 to-indigo-950/40 p-4 shadow-[0_10px_30px_rgba(147,51,234,0.18)]">
         <div className="mb-4 flex items-center justify-center gap-2">

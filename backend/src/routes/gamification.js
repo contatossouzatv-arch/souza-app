@@ -3234,7 +3234,7 @@ router.get("/home/feed-summary", requireAuth, async (req, res) => {
       `gamification:home-feed-summary:${userId}`,
       HOME_FEED_SUMMARY_TTL_MS,
       async () => {
-        const [postsResult, recentInventory, countRows, likedRows] = await Promise.all([
+        const [postsResult, recentInventoryResult] = await Promise.all([
           pool.query(
             `SELECT id, data, created_at, updated_at
                FROM entity_records
@@ -3247,42 +3247,68 @@ router.get("/home/feed-summary", requireAuth, async (req, res) => {
               .filter((item) => ["validated", "applied"].includes(String(item.claim_status || "").trim().toLowerCase()))
               .slice(0, 40)
           ),
-          pool.query(
-            `SELECT COALESCE(data->>'post_id', '') AS post_id, COUNT(*)::int AS like_count
-               FROM entity_records
-              WHERE entity_name = 'FeedPostLike'
-              GROUP BY COALESCE(data->>'post_id', '')`
-          ),
-          pool.query(
-            `SELECT COALESCE(data->>'post_id', '') AS post_id
-               FROM entity_records
-              WHERE entity_name = 'FeedPostLike'
-                AND COALESCE(data->>'user_id', '') = $1`,
-            [userId]
-          ),
         ]);
 
         const posts = postsResult.rows.map(normalizeEntityRecordRow);
+        const recentInventory = recentInventoryResult;
+        const targetPostIds = [
+          ...posts.map((post) => `notice-${post.id}`),
+          ...recentInventory.map((item) => `winner-${item.id}`),
+        ].filter(Boolean);
         const winnerUserIds = Array.from(new Set(recentInventory.map((item) => item.user_id).filter(Boolean)));
-        let usersById = new Map();
-        if (winnerUserIds.length > 0) {
-          const userRows = await pool.query(
-            `SELECT id, nick, full_name, avatar_emoji, profile_avatar_id, profile_image_mode, profile_image_url, profile_image_status
-               FROM users
-              WHERE id = ANY($1::uuid[])`,
-            [winnerUserIds]
-          );
-          usersById = new Map(userRows.rows.map((row) => [row.id, row]));
+        const [userRowsResult, countRowsResult, likedRowsResult] = await Promise.allSettled([
+          winnerUserIds.length > 0
+            ? pool.query(
+                `SELECT id, nick, full_name, avatar_emoji, profile_avatar_id, profile_image_mode, profile_image_url, profile_image_status
+                   FROM users
+                  WHERE id = ANY($1::uuid[])`,
+                [winnerUserIds]
+              )
+            : Promise.resolve({ rows: [] }),
+          targetPostIds.length > 0
+            ? pool.query(
+                `SELECT COALESCE(data->>'post_id', '') AS post_id, COUNT(*)::int AS like_count
+                   FROM entity_records
+                  WHERE entity_name = 'FeedPostLike'
+                    AND COALESCE(data->>'post_id', '') = ANY($1::text[])
+                  GROUP BY COALESCE(data->>'post_id', '')`,
+                [targetPostIds]
+              )
+            : Promise.resolve({ rows: [] }),
+          targetPostIds.length > 0
+            ? pool.query(
+                `SELECT COALESCE(data->>'post_id', '') AS post_id
+                   FROM entity_records
+                  WHERE entity_name = 'FeedPostLike'
+                    AND COALESCE(data->>'user_id', '') = $1
+                    AND COALESCE(data->>'post_id', '') = ANY($2::text[])`,
+                [userId, targetPostIds]
+              )
+            : Promise.resolve({ rows: [] }),
+        ]);
+
+        if (countRowsResult.status === "rejected") {
+          console.error("Failed to load feed like counts", countRowsResult.reason);
+        }
+        if (likedRowsResult.status === "rejected") {
+          console.error("Failed to load user feed likes", likedRowsResult.reason);
+        }
+        if (userRowsResult.status === "rejected") {
+          console.error("Failed to load feed winner users", userRowsResult.reason);
         }
 
-        const counts = countRows.rows.reduce((acc, row) => {
+        const usersById = new Map(
+          (userRowsResult.status === "fulfilled" ? userRowsResult.value.rows : []).map((row) => [row.id, row])
+        );
+
+        const counts = (countRowsResult.status === "fulfilled" ? countRowsResult.value.rows : []).reduce((acc, row) => {
           const postId = String(row.post_id || "").trim();
           if (!postId) return acc;
           acc[postId] = Number(row.like_count || 0);
           return acc;
         }, {});
 
-        const likedPostIds = likedRows.rows
+        const likedPostIds = (likedRowsResult.status === "fulfilled" ? likedRowsResult.value.rows : [])
           .map((row) => String(row.post_id || "").trim())
           .filter(Boolean);
 

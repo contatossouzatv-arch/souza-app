@@ -1,10 +1,14 @@
 import { Router } from "express";
 import { createEntity, createSecurityEvent, findUserById, listEntity, pool } from "../db/index.js";
+import { deleteCacheKey, getOrComputeCacheJson } from "../lib/cache.js";
 import { requireAuth } from "../middleware/auth.js";
 import { refreshGamificationState } from "./gamification.js";
 
 const router = Router();
 const DAILY_CHECKIN_CONFIG_KEY = "daily_checkin_config_v1";
+const SOCIAL_STATE_TTL_MS = 15_000;
+const SOCIAL_RELATION_LIST_TTL_MS = 15_000;
+const SOCIAL_DISCOVER_TTL_MS = 15_000;
 
 const SAO_PAULO_TIMEZONE = "America/Sao_Paulo";
 const dayKeyFormatter = new Intl.DateTimeFormat("en-CA", {
@@ -137,6 +141,38 @@ function mapSocialProfile(row) {
     isLiked: Boolean(row.is_liked),
     created_at: row.created_at ? toIso(row.created_at) : null,
   };
+}
+
+function buildSocialStateCacheKey(viewerUserId, targetUserId) {
+  return `social:state:${String(viewerUserId || "").trim()}:${String(targetUserId || "").trim()}`;
+}
+
+function buildSocialRelationListCacheKey(type, userId) {
+  return `social:${String(type || "").trim()}:${String(userId || "").trim()}`;
+}
+
+function buildSocialDiscoverCacheKey(userId, { limit = 12, offset = 0, sort = "recent" } = {}) {
+  return `social:discover:${String(userId || "").trim()}:${Number(limit || 12)}:${Number(offset || 0)}:${String(sort || "recent").trim().toLowerCase()}`;
+}
+
+async function invalidateSocialCaches(viewerUserId, targetUserId) {
+  const viewerId = String(viewerUserId || "").trim();
+  const targetId = String(targetUserId || "").trim();
+  const keys = [
+    buildSocialStateCacheKey(viewerId, viewerId),
+    buildSocialStateCacheKey(viewerId, targetId),
+    buildSocialStateCacheKey(targetId, viewerId),
+    buildSocialStateCacheKey(targetId, targetId),
+    buildSocialRelationListCacheKey("following", viewerId),
+    buildSocialRelationListCacheKey("followers", viewerId),
+    buildSocialRelationListCacheKey("following", targetId),
+    buildSocialRelationListCacheKey("followers", targetId),
+    buildSocialDiscoverCacheKey(viewerId, { limit: 12, offset: 0, sort: "recent" }),
+    buildSocialDiscoverCacheKey(viewerId, { limit: 12, offset: 0, sort: "priority" }),
+    buildSocialDiscoverCacheKey(viewerId, { limit: 24, offset: 0, sort: "priority" }),
+  ].filter(Boolean);
+
+  await Promise.all(keys.map((key) => deleteCacheKey(key)));
 }
 
 function normalizeListLimit(value, fallback = 12, max = 60) {
@@ -500,7 +536,11 @@ router.get("/social/state/:targetUserId", requireAuth, async (req, res) => {
 
   const client = await pool.connect();
   try {
-    const state = await buildSocialState(client, viewerUserId, targetUserId);
+    const state = await getOrComputeCacheJson(
+      buildSocialStateCacheKey(viewerUserId, targetUserId),
+      SOCIAL_STATE_TTL_MS,
+      () => buildSocialState(client, viewerUserId, targetUserId)
+    );
     res.json(state);
   } finally {
     client.release();
@@ -510,7 +550,11 @@ router.get("/social/state/:targetUserId", requireAuth, async (req, res) => {
 router.get("/social/following/my", requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
-    const items = await listRelationProfiles(client, "following", req.auth.sub);
+    const items = await getOrComputeCacheJson(
+      buildSocialRelationListCacheKey("following", req.auth.sub),
+      SOCIAL_RELATION_LIST_TTL_MS,
+      () => listRelationProfiles(client, "following", req.auth.sub)
+    );
     res.json(items);
   } finally {
     client.release();
@@ -520,7 +564,11 @@ router.get("/social/following/my", requireAuth, async (req, res) => {
 router.get("/social/followers/my", requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
-    const items = await listRelationProfiles(client, "followers", req.auth.sub);
+    const items = await getOrComputeCacheJson(
+      buildSocialRelationListCacheKey("followers", req.auth.sub),
+      SOCIAL_RELATION_LIST_TTL_MS,
+      () => listRelationProfiles(client, "followers", req.auth.sub)
+    );
     res.json(items);
   } finally {
     client.release();
@@ -533,7 +581,11 @@ router.get("/social/discover", requireAuth, async (req, res) => {
     const limit = normalizeListLimit(req.query?.limit, 12, 60);
     const offset = normalizeListOffset(req.query?.offset);
     const sort = String(req.query?.sort || "recent").toLowerCase();
-    const result = await listDiscoverProfiles(client, req.auth.sub, { limit, offset, sort });
+    const result = await getOrComputeCacheJson(
+      buildSocialDiscoverCacheKey(req.auth.sub, { limit, offset, sort }),
+      SOCIAL_DISCOVER_TTL_MS,
+      () => listDiscoverProfiles(client, req.auth.sub, { limit, offset, sort })
+    );
     res.json(result);
   } finally {
     client.release();
@@ -648,6 +700,7 @@ async function upsertFollowState(req, res, active) {
     emitEntityChanged(req, "ProfileNotification", targetUserId, active && applied ? "created" : "updated");
     emitEntityChanged(req, "gamification", userId, "updated");
     emitEntityChanged(req, "gamification", targetUserId, "updated");
+    await invalidateSocialCaches(userId, targetUserId);
     await refreshGamificationState();
 
     return res.json({ ok: true, state, alreadyProcessed: !applied });
@@ -767,6 +820,7 @@ async function upsertLikeState(req, res, active) {
     emitEntityChanged(req, "ProfileNotification", targetUserId, active && applied ? "created" : "updated");
     emitEntityChanged(req, "gamification", userId, "updated");
     emitEntityChanged(req, "gamification", targetUserId, "updated");
+    await invalidateSocialCaches(userId, targetUserId);
     await refreshGamificationState();
 
     return res.json({ ok: true, state, alreadyProcessed: !applied });

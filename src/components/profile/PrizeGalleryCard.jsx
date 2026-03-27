@@ -328,12 +328,42 @@ export default function PrizeGalleryCard({
   const galleryBatchSize = 12;
   const [selectedItem, setSelectedItem] = React.useState(null);
   const [isGalleryOpen, setIsGalleryOpen] = React.useState(false);
+  const [shouldLoadPreview, setShouldLoadPreview] = React.useState(false);
+  const cardRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!userId) {
+      setShouldLoadPreview(false);
+      return;
+    }
+
+    const node = cardRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      setShouldLoadPreview(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry?.isIntersecting) return;
+        setShouldLoadPreview(true);
+        observer.disconnect();
+      },
+      { rootMargin: "240px 0px" }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [userId]);
 
   const { data: previewResponse = null, isLoading: isLoadingPreview } = useQuery({
     queryKey: ["user-prize-gallery-preview", userId],
     queryFn: () => base44.gamification.prizeGallery({ userId, limit: previewBatchSize, offset: 0 }),
-    enabled: Boolean(userId),
-    staleTime: 30000,
+    enabled: Boolean(userId) && shouldLoadPreview,
+    staleTime: 120000,
+    refetchOnWindowFocus: false,
+    retry: 1,
   });
   const {
     data: pagedGallery = null,
@@ -346,7 +376,9 @@ export default function PrizeGalleryCard({
     queryFn: ({ pageParam = 0 }) => base44.gamification.prizeGallery({ userId, limit: galleryBatchSize, offset: pageParam }),
     enabled: Boolean(userId) && isGalleryOpen,
     initialPageParam: 0,
-    staleTime: 30000,
+    staleTime: 120000,
+    refetchOnWindowFocus: false,
+    retry: 1,
     getNextPageParam: (lastPage) => (lastPage?.hasMore ? lastPage.nextOffset : undefined),
   });
 
@@ -420,7 +452,7 @@ export default function PrizeGalleryCard({
 
   return (
     <>
-      <Card className="border-slate-800 bg-slate-900/70 p-4">
+      <Card ref={cardRef} className="border-slate-800 bg-slate-900/70 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">{title}</h2>
@@ -431,7 +463,13 @@ export default function PrizeGalleryCard({
           </div>
         </div>
 
-        {isLoadingPreview ? (
+        {!shouldLoadPreview ? (
+          <div className="mt-4 rounded-3xl border border-dashed border-slate-700 bg-slate-950/60 p-5 text-center">
+            <Sparkles className="mx-auto h-8 w-8 text-cyan-300/70" />
+            <p className="mt-3 text-sm font-semibold text-white">Preparando sua galeria...</p>
+            <p className="mt-1 text-xs leading-5 text-slate-400">Os prêmios aparecem assim que esta seção entra em foco.</p>
+          </div>
+        ) : isLoadingPreview ? (
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {Array.from({ length: previewBatchSize }).map((_, index) => (
               <div key={`prize-gallery-preview-skeleton-${index}`} className="overflow-hidden rounded-[1.45rem] border border-white/8 bg-slate-900/80">

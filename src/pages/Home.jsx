@@ -38,22 +38,34 @@ export default function Home() {
   const [highlightPostId, setHighlightPostId] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const { data: feedSummary = null, isLoading } = useQuery({
+  const {
+    data: feedSummary = null,
+    isLoading: isLoadingFeedSummary,
+    isFetching: isFetchingFeedSummary,
+    error: feedSummaryError,
+  } = useQuery({
     queryKey: ["inicio-feed-summary"],
     queryFn: () => base44.home.feedSummary(),
     enabled: Boolean(user?.id) && !isLoadingAuth,
     staleTime: 30000,
+    refetchOnWindowFocus: false,
+    retry: 2,
   });
 
   const posts = feedSummary?.posts || [];
   const winnerFeed = feedSummary?.winnerFeed || { items: [] };
   const feedLikes = feedSummary?.feedLikes || { counts: {}, likedPostIds: [] };
 
-  const { data: homeSummary } = useQuery({
+  const {
+    data: homeSummary,
+    isLoading: isLoadingHomeSummary,
+  } = useQuery({
     queryKey: ["inicio-summary"],
     queryFn: () => base44.home.summary(),
     enabled: Boolean(user?.id) && !isLoadingAuth,
     staleTime: 120000,
+    refetchOnWindowFocus: false,
+    retry: 2,
   });
 
   const winnerUserIds = useMemo(
@@ -73,6 +85,7 @@ export default function Home() {
     queryFn: () => base44.profile.publicBasics(winnerUserIds),
     enabled: winnerUserIds.length > 0,
     staleTime: 300000,
+    refetchOnWindowFocus: false,
     retry: false,
   });
 
@@ -318,7 +331,7 @@ export default function Home() {
     }
   };
 
-  if (isLoading) {
+  if (isLoadingAuth) {
     return (
       <div className="space-y-3">
         <Card className="border-slate-800 bg-slate-900/70 p-5 text-slate-300">Carregando avisos...</Card>
@@ -399,6 +412,10 @@ export default function Home() {
               </button>
             ))}
           </div>
+        ) : isLoadingHomeSummary ? (
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-400">
+            Carregando perfis recentes...
+          </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/60 p-4 text-sm text-slate-400">
             Os próximos perfis cadastrados vão aparecer aqui.
@@ -409,10 +426,24 @@ export default function Home() {
       {feedItems.length === 0 ? (
         <Card className="border-slate-800 bg-slate-900/70 p-6 text-center">
           <BellRing className="mx-auto mb-2 h-6 w-6 text-cyan-300" />
-          <p className="font-semibold text-white">Sem avisos publicados</p>
-          <p className="text-sm text-slate-400 mt-1">
-            Quando você enviar post/aviso no admin, eles aparecem aqui automaticamente.
-          </p>
+          {isLoadingFeedSummary || isFetchingFeedSummary ? (
+            <>
+              <p className="font-semibold text-white">Carregando avisos...</p>
+              <p className="text-sm text-slate-400 mt-1">O feed inicial ainda está sincronizando.</p>
+            </>
+          ) : feedSummaryError ? (
+            <>
+              <p className="font-semibold text-white">Não foi possível carregar os avisos agora</p>
+              <p className="text-sm text-slate-400 mt-1">Tente novamente em instantes.</p>
+            </>
+          ) : (
+            <>
+              <p className="font-semibold text-white">Sem avisos publicados</p>
+              <p className="text-sm text-slate-400 mt-1">
+                Quando você enviar post/aviso no admin, eles aparecem aqui automaticamente.
+              </p>
+            </>
+          )}
         </Card>
       ) : (
         <>

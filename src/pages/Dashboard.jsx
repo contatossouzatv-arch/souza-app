@@ -73,9 +73,7 @@ export default function Dashboard() {
     show: { opacity: 1, y: 0 },
   };
 
-  const isLoading = isLoadingAuth || !user || dynamicsLoading;
-
-  if (isLoading) {
+  if (isLoadingAuth || !user) {
     return <TechLoader />;
   }
 
@@ -100,7 +98,29 @@ export default function Dashboard() {
           <p className="text-sm text-slate-400">Entre nas dinamicas ativas e acompanhe os resultados ao vivo.</p>
         </motion.div>
 
-        {hasActiveDynamics ? (
+        {dynamicsLoading ? (
+          <>
+            <motion.div variants={itemVariants}>
+              <Card className="border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-400">
+                Carregando sorteios e dinâmicas...
+              </Card>
+            </motion.div>
+
+            <motion.div variants={itemVariants}>
+              <DeferredDashboardSection active={showHeavySections}>
+                <PrizeGalleryCard
+                  userId={user.id}
+                  title="Seus Premios"
+                  subtitle="Aqui voce acompanha sua colecao pessoal de premios ja ganhos e registrados no app."
+                  emptyTitle="Sua colecao de premios ainda esta vazia"
+                  emptySubtitle="Quando voce ganhar e resgatar recompensas, elas vao aparecer aqui automaticamente."
+                  countLabel="na colecao"
+                  privateView={true}
+                />
+              </DeferredDashboardSection>
+            </motion.div>
+          </>
+        ) : hasActiveDynamics ? (
           <>
             <motion.div variants={itemVariants}>
               <InstantRaffleBox user={user} summary={instantSummary} />

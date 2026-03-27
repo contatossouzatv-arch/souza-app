@@ -17,7 +17,7 @@ export default function DailyChestEntry({ onPress, loadState = false }) {
     queryKey: ["daily-chest-entry-state"],
     queryFn: () => base44.dailyChest.getState(),
     enabled: loadState,
-    staleTime: 15_000,
+    staleTime: 60_000,
     refetchOnWindowFocus: false,
     retry: false,
   });

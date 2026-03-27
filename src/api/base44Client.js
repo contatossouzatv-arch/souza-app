@@ -46,6 +46,8 @@ function resolveTimeoutMs(path = "", timeoutMs) {
     normalizedPath === "/api/profile/summary?force=true" ||
     normalizedPath === "/api/profile/competition-board" ||
     normalizedPath === "/api/profile/competition-board?force=true" ||
+    normalizedPath === "/api/profile/public-basics" ||
+    normalizedPath.startsWith("/api/profile/public-basics?") ||
     normalizedPath.startsWith("/api/profile/public/")
   ) {
     return PROFILE_REQUEST_TIMEOUT_MS;
@@ -57,6 +59,22 @@ function resolveTimeoutMs(path = "", timeoutMs) {
     (normalizedPath.includes("/api/admin/instant-raffles/") && normalizedPath.includes("/participants"))
   ) {
     return RAFFLE_PARTICIPANT_TIMEOUT_MS;
+  }
+  if (
+    normalizedPath === "/api/home/summary" ||
+    normalizedPath === "/api/home/feed-summary" ||
+    normalizedPath.startsWith("/api/home/feed-summary?") ||
+    normalizedPath === "/api/dynamics/summary" ||
+    normalizedPath === "/api/deposits/dashboard-summary" ||
+    normalizedPath === "/api/deposits/leaderboard" ||
+    normalizedPath.startsWith("/api/deposits/leaderboard?") ||
+    normalizedPath === "/api/profile/platform-history" ||
+    normalizedPath.startsWith("/api/profile/platform-history?") ||
+    normalizedPath === "/api/profile/prize-gallery" ||
+    normalizedPath.startsWith("/api/profile/prize-gallery?") ||
+    normalizedPath.startsWith("/api/social/state/")
+  ) {
+    return 25000;
   }
   if (
     normalizedPath.includes("/api/admin/instant-raffles/participants/") ||

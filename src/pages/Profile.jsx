@@ -1380,7 +1380,8 @@ export default function Profile() {
     queryKey: ["social-my-state", user?.id],
     queryFn: () => base44.social.state("me"),
     enabled: canLoadDeferredProfileQueries,
-    staleTime: 15000,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     retry: false,
   });
 
@@ -1406,7 +1407,8 @@ export default function Profile() {
     queryKey: ["daily-checkin-state", user?.id],
     queryFn: () => base44.social.checkInState(),
     enabled: canLoadDeferredProfileQueries,
-    staleTime: 15000,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     retry: false,
   });
 
@@ -1766,7 +1768,7 @@ export default function Profile() {
       queryKey: ["public-profile-summary", profile.id, "engaged-card"],
       queryFn: ({ signal }) => base44.gamification.publicProfileSummary(profile.id, { signal }),
       enabled: PROFILE_PUBLIC_ENRICHMENT_ENABLED && canLoadDeferredProfileQueries && !!profile?.id,
-      staleTime: 30000,
+      staleTime: 60000,
       refetchOnWindowFocus: false,
       retry: false,
     })),
@@ -1785,6 +1787,7 @@ export default function Profile() {
     data: publicProfileBasicsPayload,
     isLoading: publicProfileBasicsLoading,
     isFetching: publicProfileBasicsFetching,
+    error: publicProfileBasicsError,
   } = useQuery({
     queryKey: ["public-profile-basics", publicProfileBasicIds.join(","), String(selectedPublicProfileHandle || "").trim().toLowerCase()],
     queryFn: ({ signal }) =>
@@ -1795,12 +1798,12 @@ export default function Profile() {
       ),
     enabled:
       !isLoadingAuth &&
-      Boolean(user?.id) &&
+      isViewingPublicProfile &&
       (publicProfileBasicIds.length > 0 || Boolean(selectedPublicProfileHandle)) &&
       (Boolean(selectedPublicProfileId) || Boolean(selectedPublicProfileHandle) || canLoadDeferredProfileQueries),
     staleTime: 30000,
     refetchOnWindowFocus: false,
-    retry: false,
+    retry: 2,
   });
   const publicProfileBasicsMap = useMemo(() => {
     const map = new Map();
@@ -1826,6 +1829,11 @@ export default function Profile() {
       publicProfileBasicsLoading ||
       publicProfileBasicsFetching ||
       (!selectedPublicProfileId && Boolean(selectedPublicProfileHandle) && !simulatedProfiles.length));
+  const hasPublicProfileLookupError =
+    isViewingPublicProfile &&
+    !isPublicProfileResolving &&
+    Boolean(publicProfileBasicsError) &&
+    !(publicProfileBasicsPayload?.items || []).length;
   const engagedProfileSocialQueries = useQueries({
     queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
       queryKey: ["social-target-state", user?.id, profile.id, "engaged-card"],
@@ -1836,7 +1844,7 @@ export default function Profile() {
         canLoadDeferredProfileQueries &&
         !!profile?.id &&
         String(profile.id || "") !== String(user?.id || ""),
-      staleTime: 15000,
+      staleTime: 30000,
       refetchOnWindowFocus: false,
       retry: false,
     })),
@@ -2361,7 +2369,8 @@ export default function Profile() {
       canLoadDeferredProfileQueries &&
       !!selectedPublicProfile?.id &&
       isSelectedRealProfile,
-    staleTime: 15000,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     retry: false,
   });
 
@@ -5042,6 +5051,10 @@ export default function Profile() {
         ) : isPublicProfileResolving ? (
           <Card className="border-slate-800 bg-slate-900/70 p-6">
             <TechLoader />
+          </Card>
+        ) : hasPublicProfileLookupError ? (
+          <Card className="border-slate-800 bg-slate-900/70 p-6 text-center text-slate-200">
+            Não foi possível carregar esse perfil agora. Tente novamente.
           </Card>
         ) : (
           <Card className="border-slate-800 bg-slate-900/70 p-6 text-center text-slate-200">
