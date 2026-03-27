@@ -1,17 +1,16 @@
 ﻿import { Pool } from "pg";
 import { env } from "../config/env.js";
 
-function shouldUseDatabaseSsl() {
-  const rawUrl = String(env.databaseUrl || "");
-  return env.nodeEnv === "production" || /sslmode=require/i.test(rawUrl) || String(process.env.DB_SSL || "").toLowerCase() === "true";
-}
+const useSsl =
+  process.env.NODE_ENV === "production" ||
+  /sslmode=require/i.test(String(env.databaseUrl || ""));
 
 export const pool = new Pool({
   connectionString: env.databaseUrl,
   max: Math.max(1, Number(env.dbPoolMax || 10)),
   idleTimeoutMillis: Math.max(1000, Number(env.dbIdleTimeoutMs || 30000)),
   connectionTimeoutMillis: Math.max(1000, Number(env.dbConnectionTimeoutMs || 5000)),
-  ssl: shouldUseDatabaseSsl() ? { rejectUnauthorized: false } : undefined,
+  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
 });
 
 const SLOW_QUERY_THRESHOLD_MS = 200;
