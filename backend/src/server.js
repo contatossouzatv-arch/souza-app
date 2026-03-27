@@ -7,11 +7,9 @@ import { env, isAllowedOrigin } from "./config/env.js";
 import { createApp } from "./app.js";
 import { ensureDb, ensureDevAdmin, seedDefaults } from "./db/index.js";
 
-async function bootstrap() {
-  console.log("[startup] bootstrap:start", {
+async function bootstrapRuntime(io) {
+  console.log("[startup] runtime-bootstrap:start", {
     nodeEnv: env.nodeEnv,
-    port: env.port,
-    host: "0.0.0.0",
     hasRedis: Boolean(env.redisUrl),
     hasDatabaseUrl: Boolean(env.databaseUrl),
   });
@@ -27,17 +25,6 @@ async function bootstrap() {
     });
   }
   await seedDefaults();
-
-  const appPlaceholder = http.createServer();
-  const io = new Server(appPlaceholder, {
-    cors: {
-      origin(origin, callback) {
-        if (isAllowedOrigin(origin)) return callback(null, true);
-        return callback(new Error("Not allowed by CORS"));
-      },
-      credentials: true,
-    },
-  });
 
   let socketAdapterMode = "memory";
   if (env.redisUrl) {
@@ -55,6 +42,31 @@ async function bootstrap() {
     }
   }
   console.log(`Socket.IO adapter: ${socketAdapterMode}`);
+  console.log("[startup] runtime-bootstrap:ready");
+}
+
+async function bootstrap() {
+  const port = Number(process.env.PORT || 8080);
+  const host = "0.0.0.0";
+
+  console.log("[startup] bootstrap:start", {
+    nodeEnv: env.nodeEnv,
+    port,
+    host,
+    hasRedis: Boolean(env.redisUrl),
+    hasDatabaseUrl: Boolean(env.databaseUrl),
+  });
+
+  const appPlaceholder = http.createServer();
+  const io = new Server(appPlaceholder, {
+    cors: {
+      origin(origin, callback) {
+        if (isAllowedOrigin(origin)) return callback(null, true);
+        return callback(new Error("Not allowed by CORS"));
+      },
+      credentials: true,
+    },
+  });
 
   const app = createApp(io);
   const server = http.createServer(app);
@@ -64,15 +76,24 @@ async function bootstrap() {
     socket.emit("server:ready", { ok: true, now: new Date().toISOString() });
   });
 
-  const host = "0.0.0.0";
   console.log("[startup] server:listen", {
-    port: env.port,
+    port,
     host,
   });
-  server.listen(env.port, host, () => {
+  server.listen(port, host, () => {
     console.log("[startup] server:ready", {
-      port: env.port,
+      port,
       host,
+    });
+  });
+
+  bootstrapRuntime(io).catch((error) => {
+    console.error("[startup] runtime-bootstrap:failed", {
+      message: error?.message || "Unknown startup error",
+      stack: error?.stack || null,
+    });
+    server.close(() => {
+      process.exit(1);
     });
   });
 }
