@@ -1279,7 +1279,8 @@ export default function Profile() {
     Boolean(user) &&
     !isViewingPublicProfile &&
     shouldLoadCoreProfileData &&
-    isOverviewTabActive;
+    isOverviewTabActive &&
+    !Array.isArray(profileSummaryData?.competitionBoard?.entries);
   const {
     data: profileCompetitionBoardData,
     isFetching: fetchingProfileCompetitionBoard,

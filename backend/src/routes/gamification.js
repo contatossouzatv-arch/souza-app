@@ -1752,7 +1752,7 @@ function extractProfileSummaryPayload(payload = {}) {
     competitionBoard: {
       config: competitionBoard?.config || DEFAULT_PROFILE_COMPETITION_CONFIG,
       cycle: competitionBoard?.cycle || { remainingMs: 0, progressPct: 0 },
-      entries: [],
+      entries: Array.isArray(competitionBoard?.entries) ? competitionBoard.entries : [],
       rewardLabel: competitionBoard?.rewardLabel || "",
     },
   };
@@ -2731,13 +2731,11 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
       await deleteCacheKey(`gamification:profile-metrics:${safeUserId}`);
     }
 
-    const payload = shouldForceRefresh
-      ? extractProfileSummaryPayload(
-          await buildLightweightProfileMetrics(userId, {
-            forceFresh: true,
-          })
-        )
-      : extractProfileSummaryPayload(buildFallbackProfileMetricsFromState(userId, await buildGamificationState()));
+    const payload = extractProfileSummaryPayload(
+      await buildLightweightProfileMetrics(userId, {
+        forceFresh: shouldForceRefresh,
+      })
+    );
 
     return res.json(payload);
   } catch (error) {
@@ -2765,13 +2763,11 @@ router.get("/profile/competition-board", requireAuth, async (req, res) => {
       await deleteCacheKey(`gamification:profile-metrics:${safeUserId}`);
     }
 
-    const payload = shouldForceRefresh
-      ? extractProfileCompetitionBoardPayload(
-          await buildLightweightProfileMetrics(userId, {
-            forceFresh: true,
-          })
-        )
-      : extractProfileCompetitionBoardPayload(buildFallbackProfileMetricsFromState(userId, await buildGamificationState()));
+    const payload = extractProfileCompetitionBoardPayload(
+      await buildLightweightProfileMetrics(userId, {
+        forceFresh: shouldForceRefresh,
+      })
+    );
 
     return res.json(payload);
   } catch (error) {
