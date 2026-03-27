@@ -43,7 +43,7 @@ import {
   signAccessToken,
 } from "../auth.js";
 import { env } from "../config/env.js";
-import { getCloudinaryConfig, uploadToCloudinary } from "../lib/cloudinary.js";
+import { deleteFromCloudinaryByUrl, getCloudinaryConfig, uploadToCloudinary } from "../lib/cloudinary.js";
 import { sendPasswordResetEmail } from "../lib/mailer.js";
 import { privateUploadsDir, uploadsDir } from "../lib/paths.js";
 
@@ -301,6 +301,10 @@ function evaluateImageModeration(originalname = "") {
 function removePublicFileByUrl(url) {
   const value = String(url || "");
   if (!value) return;
+  if (isExternalHttpUrl(value)) {
+    Promise.resolve(deleteFromCloudinaryByUrl(value)).catch(() => {});
+    return;
+  }
   const marker = "/uploads/profile/";
   const idx = value.indexOf(marker);
   if (idx === -1) return;
@@ -1441,6 +1445,17 @@ router.get("/profile-image-version/:imageId", async (req, res) => {
   const version = await getUserProfileImageVersion(req.params.imageId);
   if (!version?.data) {
     return res.status(404).json({ error: "Imagem nao encontrada." });
+  }
+
+  if (version.user_id) {
+    const linkedUser = await findUserPrivateById(version.user_id);
+    if (
+      linkedUser &&
+      String(linkedUser.profile_image_status || "").toLowerCase() === "approved" &&
+      isExternalHttpUrl(linkedUser.profile_image_url)
+    ) {
+      return res.redirect(linkedUser.profile_image_url);
+    }
   }
 
   res.setHeader("Content-Type", version.mime_type || "image/jpeg");
