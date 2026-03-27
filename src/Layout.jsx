@@ -70,8 +70,10 @@ export default function Layout({ children }) {
   const shouldLoadDailyChestState =
     !isLoadingAuth &&
     Boolean(user?.id) &&
-    pathname === createPageUrl("Home").toLowerCase() ||
-    (!isLoadingAuth && Boolean(user?.id) && pathname === createPageUrl("Dashboard").toLowerCase());
+    (
+      pathname === createPageUrl("Home").toLowerCase() ||
+      pathname === createPageUrl("Dashboard").toLowerCase()
+    );
   const showDailyChestEntry =
     FEATURE_FLAGS.DAILY_CHEST_3D_ENABLED && !isAdminPanel && !isMainGamePage && !isDailyChestPage;
 

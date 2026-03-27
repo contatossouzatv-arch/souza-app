@@ -106,8 +106,7 @@ export const AuthProvider = ({ children }) => {
       });
       setUser(cachedUser);
       setIsAuthenticated(true);
-      setIsLoadingAuth(false);
-      checkAppState({ background: true });
+      checkAppState();
     } else {
       checkAppState();
     }

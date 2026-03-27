@@ -2328,7 +2328,7 @@ export default function Profile() {
       const response = await base44.profile.notifications({ limit: 50 });
       return response?.items || [];
     },
-    enabled: Boolean(user?.id) && !isViewingPublicProfile && canLoadDeferredProfileQueries,
+    enabled: Boolean(user?.id) && !isLoadingAuth && !isViewingPublicProfile && canLoadDeferredProfileQueries,
     staleTime: 15000,
     refetchOnWindowFocus: false,
     retry: false,

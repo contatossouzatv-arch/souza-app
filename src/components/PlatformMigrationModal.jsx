@@ -7,11 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/use-toast";
 import { AlertCircle, Check, ExternalLink, ShieldCheck } from "lucide-react";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function PlatformMigrationModal({ user, onVisibilityChange, onConfirmed }) {
   const queryClient = useQueryClient();
   const [platformId, setPlatformId] = useState("");
   const [loading, setLoading] = useState(false);
+  const { isLoadingAuth } = useAuth();
 
   const { data: platforms = [] } = useQuery({
     queryKey: ["current-platform-modal"],
@@ -26,7 +28,7 @@ export default function PlatformMigrationModal({ user, onVisibilityChange, onCon
       const response = await base44.adminEvents.profile.platformHistory();
       return response.items || [];
     },
-    enabled: Boolean(user?.id),
+    enabled: Boolean(user?.id) && !isLoadingAuth,
   });
 
   const currentPlatform = platforms[0] || null;

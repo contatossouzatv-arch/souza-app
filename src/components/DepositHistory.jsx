@@ -31,7 +31,7 @@ export default function DepositHistory() {
       const response = await base44.deposits.my();
       return response.items || [];
     },
-    enabled: Boolean(user?.id),
+    enabled: Boolean(user?.id) && !isLoadingAuth,
     refetchOnWindowFocus: false,
     staleTime: 30000,
   });
@@ -42,7 +42,7 @@ export default function DepositHistory() {
       const response = await base44.deposits.dashboardSummary();
       return response.cycles || [];
     },
-    enabled: Boolean(user?.id),
+    enabled: Boolean(user?.id) && !isLoadingAuth,
     refetchOnWindowFocus: false,
     staleTime: 60000,
   });
