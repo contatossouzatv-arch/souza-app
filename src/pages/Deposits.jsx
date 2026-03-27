@@ -18,6 +18,7 @@ import LegalLinksBar from "@/components/LegalLinksBar";
 import { useAuth } from "@/lib/AuthContext";
 import { getProfileAvatarFallback, getProfileAvatarSrc } from "@/lib/profileMedia";
 import { useAppSettings } from "@/hooks/useAppSettings";
+import { resolveCurrentDepositCycle, resolveEndedDepositCycles } from "@/lib/depositCycles";
 
 const avatarModules = import.meta.glob("../../assets-para-app/avatar/*.png", {
   eager: true,
@@ -89,7 +90,7 @@ export default function Deposits() {
   const cycles = Array.isArray(depositsDashboardSummary?.cycles) ? depositsDashboardSummary.cycles : [];
   const drawWinners = Array.isArray(depositsDashboardSummary?.drawWinners) ? depositsDashboardSummary.drawWinners : [];
   const dashboardProfiles = Array.isArray(depositsDashboardSummary?.profiles) ? depositsDashboardSummary.profiles : [];
-  const activeCycle = safeFind(cycles, (c) => c.active);
+  const activeCycle = resolveCurrentDepositCycle(cycles);
 
   const { data: leaderboardData, isLoading: leaderboardLoading } = useQuery({
     queryKey: ["deposit-cycle-leaderboard", activeCycle?.id],
@@ -192,7 +193,7 @@ export default function Deposits() {
     }
   };
 
-  const endedCycles = cycles.filter((c) => !c.active);
+  const endedCycles = resolveEndedDepositCycles(cycles);
 
   const getCycleTop3 = (cycleId) => {
     const cycleRankingMap = {};

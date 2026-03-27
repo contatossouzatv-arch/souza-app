@@ -20,6 +20,7 @@ import { getOrComputeCacheJson } from "../lib/cache.js";
 
 const router = Router();
 const DEPOSIT_LEADERBOARD_TTL_MS = 15000;
+const DEPOSIT_DASHBOARD_SUMMARY_TTL_MS = 10000;
 
 function emitEntityChanged(req, entity, action, payload = {}) {
   req.app?.locals?.io?.emit("entity:changed", {
@@ -167,26 +168,29 @@ router.get("/deposits/my", requireAuth, async (req, res) => {
 });
 
 router.get("/deposits/dashboard-summary", requireAuth, async (_req, res) => {
-  const [cycles, drawWinners] = await Promise.all([
-    listDepositCycles(),
-    listDepositDrawWinners(),
-  ]);
+  const result = await getOrComputeCacheJson("deposits:dashboard-summary", DEPOSIT_DASHBOARD_SUMMARY_TTL_MS, async () => {
+    const [cycles, drawWinners] = await Promise.all([
+      listDepositCycles(),
+      listDepositDrawWinners(),
+    ]);
 
-  const userIds = [
-    ...drawWinners.map((item) => item.user_id),
-    ...cycles.flatMap((cycle) => [
-      cycle.first_place_user_id,
-      cycle.second_place_user_id,
-      cycle.third_place_user_id,
-    ]),
-  ];
+    const userIds = [
+      ...drawWinners.map((item) => item.user_id),
+      ...cycles.flatMap((cycle) => [
+        cycle.first_place_user_id,
+        cycle.second_place_user_id,
+        cycle.third_place_user_id,
+      ]),
+    ];
 
-  const profiles = await listUsersBasicByIds(userIds);
-  return res.json({
-    cycles,
-    drawWinners,
-    profiles,
+    const profiles = await listUsersBasicByIds(userIds);
+    return {
+      cycles,
+      drawWinners,
+      profiles,
+    };
   });
+  return res.json(result);
 });
 
 router.get("/deposits/leaderboard", requireAuth, async (req, res) => {

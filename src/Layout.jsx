@@ -58,7 +58,7 @@ const navItems = [
 ];
 
 export default function Layout({ children }) {
-  const { user, checkAppState } = useAuth();
+  const { user, checkAppState, isLoadingAuth } = useAuth();
   const location = useLocation();
   const menuClickAudioRef = React.useRef(null);
   const [platformModalVisible, setPlatformModalVisible] = React.useState(false);
@@ -68,8 +68,10 @@ export default function Layout({ children }) {
   const isMainGamePage = pathname === MAIN_GAME_ROUTE_PATH;
   const isDailyChestPage = pathname === DAILY_CHEST_ROUTE_PATH;
   const shouldLoadDailyChestState =
+    !isLoadingAuth &&
+    Boolean(user?.id) &&
     pathname === createPageUrl("Home").toLowerCase() ||
-    pathname === createPageUrl("Dashboard").toLowerCase();
+    (!isLoadingAuth && Boolean(user?.id) && pathname === createPageUrl("Dashboard").toLowerCase());
   const showDailyChestEntry =
     FEATURE_FLAGS.DAILY_CHEST_3D_ENABLED && !isAdminPanel && !isMainGamePage && !isDailyChestPage;
 

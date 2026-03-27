@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Clock, DollarSign, CheckCircle2, XCircle, AlertCircle, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { resolveCurrentDepositCycle } from "@/lib/depositCycles";
 
 function formatBrazilDate(input) {
   if (!input) return "Data indisponível";
@@ -19,8 +20,6 @@ function toAmount(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
 }
-
-const safeFind = (list, predicate) => (Array.isArray(list) ? list.find(predicate) : undefined);
 
 export default function DepositHistory() {
   const [showOlderDeposits, setShowOlderDeposits] = useState(false);
@@ -38,7 +37,7 @@ export default function DepositHistory() {
   });
 
   const { data: cycles = [], isLoading: cyclesLoading } = useQuery({
-    queryKey: ["deposits-dashboard-summary"],
+    queryKey: ["deposits-dashboard-cycles"],
     queryFn: async () => {
       const response = await base44.deposits.dashboardSummary();
       return response.cycles || [];
@@ -48,7 +47,7 @@ export default function DepositHistory() {
     staleTime: 60000,
   });
 
-  const activeCycle = safeFind(cycles, (cycle) => cycle.active);
+  const activeCycle = resolveCurrentDepositCycle(cycles);
   const cycleDeposits = activeCycle ? deposits.filter((deposit) => deposit.cycle_id === activeCycle.id) : [];
 
   const getStatusIcon = (status) => {

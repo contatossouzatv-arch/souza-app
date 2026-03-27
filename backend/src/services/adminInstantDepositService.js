@@ -693,17 +693,26 @@ export const depositDrawAdmin = {
     try {
       await client.query("BEGIN");
       const cycles = await listEntityRecordsForUpdate(client, "DepositantDrawCycle", {});
+      const currentActiveCycles = cycles.filter((item) => Boolean(item?.active));
+      const now = new Date().toISOString();
+      for (const existingCycle of currentActiveCycles) {
+        await updateEntityRecordData(client, "DepositantDrawCycle", existingCycle.id, {
+          ...existingCycle,
+          active: false,
+          updated_date: now,
+        });
+      }
       const nextCycleNumber =
         cycles.reduce((maxValue, item) => Math.max(maxValue, Number(item?.cycle_number || 0)), 0) + 1;
 
       const cycle = await createEntityRecordData(client, "DepositantDrawCycle", {
         cycle_number: nextCycleNumber,
-        start_date: new Date().toISOString(),
+        start_date: now,
         draw_date: drawDate || null,
         active: true,
         raffle_completed: false,
-        created_date: new Date().toISOString(),
-        updated_date: new Date().toISOString(),
+        created_date: now,
+        updated_date: now,
       });
 
       const processingEvent = await createEvent(client, {

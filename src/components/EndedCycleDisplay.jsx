@@ -4,18 +4,19 @@ import { Trophy, CheckCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { motion, AnimatePresence } from "framer-motion";
+import { resolveEndedDepositCycles } from "@/lib/depositCycles";
 
 export default function EndedCycleDisplay({ currentUserId }) {
   const [expandedCycle, setExpandedCycle] = useState(null);
 
   const { data: depositsDashboardSummary = null } = useQuery({
-    queryKey: ["all-ended-cycles"],
+    queryKey: ["deposits-dashboard-summary"],
     queryFn: () => base44.deposits.dashboardSummary(),
   });
 
   const allCycles = depositsDashboardSummary?.cycles || [];
   const raffleWinners = depositsDashboardSummary?.drawWinners || [];
-  const endedCycles = allCycles.filter((cycle) => !cycle.active);
+  const endedCycles = resolveEndedDepositCycles(allCycles);
 
   const getCycleRaffleWinners = (cycleId) => {
     return raffleWinners.filter((winner) => winner.cycle_id === cycleId);

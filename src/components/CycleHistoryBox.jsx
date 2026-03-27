@@ -4,12 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { History, ChevronDown, ChevronUp, Calendar, Ticket, TrendingUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { resolveEndedDepositCycles } from "@/lib/depositCycles";
 
 export default function CycleHistoryBox({ currentUserId }) {
   const [expandedCycle, setExpandedCycle] = useState(null);
 
   const { data: cycles = [] } = useQuery({
-    queryKey: ["cycle-history"],
+    queryKey: ["deposits-dashboard-cycles"],
     queryFn: async () => {
       const response = await base44.deposits.dashboardSummary();
       return response.cycles || [];
@@ -24,7 +25,7 @@ export default function CycleHistoryBox({ currentUserId }) {
     },
   });
 
-  const endedCycles = cycles.filter((cycle) => !cycle.active);
+  const endedCycles = resolveEndedDepositCycles(cycles);
 
   const getCycleData = (cycle) => {
     const cycleDeposits = myDeposits.filter(

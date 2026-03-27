@@ -5,8 +5,7 @@ import { Ticket, Trophy, ChevronDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { useAppSettings } from "@/hooks/useAppSettings";
-
-const safeFind = (list, predicate) => (Array.isArray(list) ? list.find(predicate) : undefined);
+import { resolveCurrentDepositCycle } from "@/lib/depositCycles";
 
 export default function TicketsDisplay({
   deposits,
@@ -20,7 +19,7 @@ export default function TicketsDisplay({
   const { data: settings = [] } = useAppSettings();
 
   const { data: cycles = [] } = useQuery({
-    queryKey: ["deposit-cycles-user"],
+    queryKey: ["deposits-dashboard-cycles"],
     queryFn: async () => {
       const response = await base44.deposits.dashboardSummary();
       return response.cycles || [];
@@ -28,8 +27,8 @@ export default function TicketsDisplay({
   });
 
   const safeSettings = Array.isArray(settings) ? settings : [];
-  const depositantDrawActive = safeFind(safeSettings, (s) => s.key === "depositant_draw_active")?.value === "true";
-  const activeCycle = safeFind(cycles, (c) => c.active);
+  const depositantDrawActive = safeSettings.find((s) => s.key === "depositant_draw_active")?.value === "true";
+  const activeCycle = resolveCurrentDepositCycle(cycles);
 
   const approvedDeposits = deposits.filter(
     (d) => d.status === "approved" && (!activeCycle || d.cycle_id === activeCycle.id)

@@ -10,6 +10,7 @@ import RichTextMessage from "@/components/RichTextMessage";
 import LegalLinksBar from "@/components/LegalLinksBar";
 import { createPageUrl } from "@/utils";
 import { getProfileAvatarSrc } from "@/lib/profileMedia";
+import { useAuth } from "@/lib/AuthContext";
 import defaultAvatar from "../../assets-para-app/avatar/avatar padrao perfil sem foto.png";
 
 const avatarModules = import.meta.glob("../../assets-para-app/avatar/*.png", {
@@ -28,6 +29,7 @@ const FEED_PAGE_SIZE = 8;
 export default function Home() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user, isLoadingAuth } = useAuth();
   const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
   const loadMoreRef = useRef(null);
   const postRefs = useRef({});
@@ -39,6 +41,7 @@ export default function Home() {
   const { data: feedSummary = null, isLoading } = useQuery({
     queryKey: ["inicio-feed-summary"],
     queryFn: () => base44.home.feedSummary(),
+    enabled: Boolean(user?.id) && !isLoadingAuth,
     staleTime: 30000,
   });
 
@@ -49,6 +52,7 @@ export default function Home() {
   const { data: homeSummary } = useQuery({
     queryKey: ["inicio-summary"],
     queryFn: () => base44.home.summary(),
+    enabled: Boolean(user?.id) && !isLoadingAuth,
     staleTime: 120000,
   });
 
@@ -214,28 +218,33 @@ export default function Home() {
   const likePostMutation = useMutation({
     mutationFn: (postId) => base44.gamification.likeFeedPost(postId),
     onMutate: async (postId) => {
-      await queryClient.cancelQueries({ queryKey: ["inicio-feed-likes"] });
-      const previous = queryClient.getQueryData(["inicio-feed-likes"]);
-      queryClient.setQueryData(["inicio-feed-likes"], (current = { counts: {}, likedPostIds: [] }) => {
-        const likedPostIds = Array.isArray(current.likedPostIds) ? current.likedPostIds : [];
-        if (likedPostIds.includes(postId)) return current;
+      await queryClient.cancelQueries({ queryKey: ["inicio-feed-summary"] });
+      const previous = queryClient.getQueryData(["inicio-feed-summary"]);
+      queryClient.setQueryData(["inicio-feed-summary"], (current) => {
+        const safeCurrent = current && typeof current === "object" ? current : {};
+        const currentFeedLikes = safeCurrent.feedLikes && typeof safeCurrent.feedLikes === "object"
+          ? safeCurrent.feedLikes
+          : { counts: {}, likedPostIds: [] };
+        const likedPostIds = Array.isArray(currentFeedLikes.likedPostIds) ? currentFeedLikes.likedPostIds : [];
+        if (likedPostIds.includes(postId)) return safeCurrent;
         return {
-          counts: {
-            ...(current.counts || {}),
-            [postId]: Number(current.counts?.[postId] || 0) + 1,
+          ...safeCurrent,
+          feedLikes: {
+            counts: {
+              ...(currentFeedLikes.counts || {}),
+              [postId]: Number(currentFeedLikes.counts?.[postId] || 0) + 1,
+            },
+            likedPostIds: [...likedPostIds, postId],
           },
-          likedPostIds: [...likedPostIds, postId],
         };
       });
       return { previous };
     },
     onError: (_error, _postId, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(["inicio-feed-likes"], context.previous);
-      }
+      queryClient.setQueryData(["inicio-feed-summary"], context?.previous ?? null);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["inicio-feed-likes"] });
+      queryClient.invalidateQueries({ queryKey: ["inicio-feed-summary"] });
     },
   });
 

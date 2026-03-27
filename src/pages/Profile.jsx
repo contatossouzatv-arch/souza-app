@@ -133,8 +133,8 @@ const PROFILE_AUTOPLAY_MEDIA_ENABLED = true;
 const PROFILE_DEBUG_ENABLED = false;
 const PROFILE_CORE_LOAD_DELAY_MS = 180;
 const PROFILE_NON_CRITICAL_LOAD_DELAY_MS = 1800;
-const PROFILE_ENGAGED_QUERY_LIMIT = 3;
-const PROFILE_PUBLIC_ENRICHMENT_ENABLED = false;
+const PROFILE_ENGAGED_QUERY_LIMIT = 5;
+const PROFILE_PUBLIC_ENRICHMENT_ENABLED = true;
 const PROFILE_PRIVATE_TABS = [
   { id: "overview", label: "Resumo" },
   { id: "engagement", label: "Engajamento" },
@@ -394,6 +394,15 @@ function preloadBadgeVisual(achievement, timeoutMs = 9000) {
   }
 
   return Promise.resolve();
+}
+
+function normalizePublicHandleValue(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/^@+/, "")
+    .toLowerCase()
+    .replace(/\s+/g, ".")
+    .replace(/[^a-z0-9._]/g, "");
 }
 
 const SmartVideo = React.memo(function SmartVideo({
@@ -1777,7 +1786,7 @@ export default function Profile() {
     isLoading: publicProfileBasicsLoading,
     isFetching: publicProfileBasicsFetching,
   } = useQuery({
-    queryKey: ["public-profile-basics", publicProfileBasicIds.join(",")],
+    queryKey: ["public-profile-basics", publicProfileBasicIds.join(","), String(selectedPublicProfileHandle || "").trim().toLowerCase()],
     queryFn: ({ signal }) =>
       base44.profile.publicBasics(
         publicProfileBasicIds,
@@ -1785,6 +1794,8 @@ export default function Profile() {
         { signal }
       ),
     enabled:
+      !isLoadingAuth &&
+      Boolean(user?.id) &&
       (publicProfileBasicIds.length > 0 || Boolean(selectedPublicProfileHandle)) &&
       (Boolean(selectedPublicProfileId) || Boolean(selectedPublicProfileHandle) || canLoadDeferredProfileQueries),
     staleTime: 30000,
@@ -1801,23 +1812,27 @@ export default function Profile() {
     return map;
   }, [publicProfileBasicsPayload?.items]);
   const selectedPublicUserByHandle = useMemo(() => {
-    const normalizedHandle = String(selectedPublicProfileHandle || "").trim().replace(/^@+/, "").toLowerCase();
+    const normalizedHandle = normalizePublicHandleValue(selectedPublicProfileHandle);
     if (!normalizedHandle) return null;
     return (
       (publicProfileBasicsPayload?.items || []).find(
-        (item) => String(item?.nick || "").trim().toLowerCase() === normalizedHandle
+        (item) => normalizePublicHandleValue(item?.handle || item?.nick || "") === normalizedHandle
       ) || null
     );
   }, [publicProfileBasicsPayload?.items, selectedPublicProfileHandle]);
   const isPublicProfileResolving =
     isViewingPublicProfile &&
-    (publicProfileBasicsLoading || publicProfileBasicsFetching || (!selectedPublicProfileId && Boolean(selectedPublicProfileHandle) && !simulatedProfiles.length));
+    (isLoadingAuth ||
+      publicProfileBasicsLoading ||
+      publicProfileBasicsFetching ||
+      (!selectedPublicProfileId && Boolean(selectedPublicProfileHandle) && !simulatedProfiles.length));
   const engagedProfileSocialQueries = useQueries({
     queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
       queryKey: ["social-target-state", user?.id, profile.id, "engaged-card"],
       queryFn: ({ signal }) => base44.social.state(profile.id, { signal }),
       enabled:
-        PROFILE_PUBLIC_ENRICHMENT_ENABLED &&
+        !isLoadingAuth &&
+        Boolean(user?.id) &&
         canLoadDeferredProfileQueries &&
         !!profile?.id &&
         String(profile.id || "") !== String(user?.id || ""),
@@ -2341,7 +2356,8 @@ export default function Profile() {
       return base44.social.state(selectedPublicProfile.id, { signal });
     },
     enabled:
-      PROFILE_PUBLIC_ENRICHMENT_ENABLED &&
+      !isLoadingAuth &&
+      Boolean(user?.id) &&
       canLoadDeferredProfileQueries &&
       !!selectedPublicProfile?.id &&
       isSelectedRealProfile,

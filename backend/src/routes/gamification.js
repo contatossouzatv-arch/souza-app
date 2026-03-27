@@ -989,11 +989,7 @@ async function ensureActiveWeeklyCycle(config) {
 }
 
 function createUserSnapshot(user) {
-  const approvedProfileImageUrl =
-    String(user.profile_image_mode || "").toLowerCase() === "photo" &&
-    String(user.profile_image_status || "").toLowerCase() === "approved"
-      ? String(user.profile_image_url || "").trim()
-      : "";
+  const approvedProfileImageUrl = getApprovedProfileImageUrl(user);
   return {
     user_id: user.id,
     nick: String(user.nick || user.full_name || "Usuário"),
@@ -1022,6 +1018,13 @@ function createUserSnapshot(user) {
     metricBreakdown: {},
     metricBreakdownMeta: {},
   };
+}
+
+function getApprovedProfileImageUrl(user) {
+  return String(user?.profile_image_mode || "").toLowerCase() === "photo" &&
+    String(user?.profile_image_status || "").toLowerCase() === "approved"
+    ? String(user?.profile_image_url || "").trim() || (user?.id ? `/api/auth/profile-image/${user.id}` : "")
+    : "";
 }
 
 function addMetric(state, metricKey, amount, sourceEvent, occurredAt = null, metadata = {}) {
@@ -3208,11 +3211,7 @@ router.get("/feed/wins", requireAuth, async (_req, res) => {
         user_avatar: user?.avatar_emoji || "",
         profile_avatar_id: user?.profile_avatar_id || "",
         profile_image_mode: user?.profile_image_mode || "avatar",
-        profile_image_url:
-          String(user?.profile_image_mode || "").toLowerCase() === "photo" &&
-          String(user?.profile_image_status || "").toLowerCase() === "approved"
-            ? String(user?.profile_image_url || "").trim()
-            : "",
+        profile_image_url: getApprovedProfileImageUrl(user),
         source_type: item.source_type || "",
         source_label: mapPrizeSourceLabel(item.source_type),
         reward_label: buildPrizeRewardLabel(item),
@@ -3300,11 +3299,7 @@ router.get("/home/feed-summary", requireAuth, async (req, res) => {
                 user_avatar: user?.avatar_emoji || "",
                 profile_avatar_id: user?.profile_avatar_id || "",
                 profile_image_mode: user?.profile_image_mode || "avatar",
-                profile_image_url:
-                  String(user?.profile_image_mode || "").toLowerCase() === "photo" &&
-                  String(user?.profile_image_status || "").toLowerCase() === "approved"
-                    ? String(user?.profile_image_url || "").trim()
-                    : "",
+                profile_image_url: getApprovedProfileImageUrl(user),
                 source_type: item.source_type || "",
                 source_label: mapPrizeSourceLabel(item.source_type),
                 reward_label: buildPrizeRewardLabel(item),
@@ -3429,6 +3424,8 @@ router.post("/feed/likes/:postId", requireAuth, async (req, res) => {
         AND COALESCE(data->>'post_id', '') = $1`,
     [postId]
   );
+
+  await deleteCacheKey(`gamification:home-feed-summary:${userId}`);
 
   return res.json({
     ok: true,
