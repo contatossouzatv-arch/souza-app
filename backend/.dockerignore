@@ -1,0 +1,7 @@
+node_modules
+npm-debug.log
+.env
+uploads
+private_uploads
+Dockerfile*
+docker-compose.yml
