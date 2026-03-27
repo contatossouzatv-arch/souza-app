@@ -1,16 +1,11 @@
 ﻿import { Pool } from "pg";
 import { env } from "../config/env.js";
 
-const useSsl =
-  process.env.NODE_ENV === "production" ||
-  /sslmode=require/i.test(String(env.databaseUrl || ""));
-
 export const pool = new Pool({
-  connectionString: env.databaseUrl,
-  max: Math.max(1, Number(env.dbPoolMax || 10)),
-  idleTimeoutMillis: Math.max(1000, Number(env.dbIdleTimeoutMs || 30000)),
-  connectionTimeoutMillis: Math.max(1000, Number(env.dbConnectionTimeoutMs || 5000)),
-  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
 
 const SLOW_QUERY_THRESHOLD_MS = 200;
