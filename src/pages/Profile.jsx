@@ -2037,6 +2037,8 @@ export default function Profile() {
     position: 0,
     weekly_points: 0,
   };
+  const canRenderProfileOverviewFallback = Boolean(user?.id);
+  const canRenderCompetitionFallback = Boolean(currentCompetitionEntry?.user_id || user?.id);
   const competitionTimeLeft = formatTimeLeft(competitionRemainingMsLive);
   const competitionInstructions = String(competitionBoard.config.instructions || "")
     .split(/\r?\n/)
@@ -5277,7 +5279,7 @@ export default function Profile() {
                 subtitle: "Preparando ranking, pontos e premiação do ciclo.",
                 rows: 4,
               })
-            : isProfileGamificationUnavailable
+            : isProfileGamificationUnavailable && !canRenderCompetitionFallback
             ? renderGamificationUnavailableCard({
                 title: "Top Semanal",
                 subtitle: "Não foi possível carregar o ranking do ciclo agora.",
@@ -5482,7 +5484,7 @@ export default function Profile() {
           rows: 2,
           compact: true,
         })
-      ) : isProfileGamificationUnavailable ? (
+      ) : isProfileGamificationUnavailable && !canRenderProfileOverviewFallback ? (
         renderGamificationUnavailableCard({
           title: "Resumo Publico",
           subtitle: "Não foi possível carregar o resumo do perfil agora.",
@@ -5490,6 +5492,11 @@ export default function Profile() {
       ) : (
         <Card className="border-slate-800 bg-slate-900/70 p-4">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Resumo Publico</h2>
+          {isProfileGamificationUnavailable ? (
+            <p className="mb-3 text-xs text-amber-300">
+              Mostrando dados parciais enquanto o resumo completo estabiliza.
+            </p>
+          ) : null}
           <div className="grid grid-cols-3 gap-2">
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
               <p className="text-xs text-slate-400">Bilhetes</p>

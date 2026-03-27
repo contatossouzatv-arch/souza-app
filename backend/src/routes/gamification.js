@@ -1787,57 +1787,31 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
       [userId]
     ),
     pool.query(
-      `WITH wins AS (
-         SELECT COUNT(*)::int AS total_wins
-           FROM entity_records
-          WHERE entity_name = 'UserPrizeGalleryItem'
-            AND COALESCE(data->>'user_id', '') = $1
-       ),
-       deposits AS (
-         SELECT
-           COALESCE(SUM(
+      `SELECT
+         COUNT(*) FILTER (WHERE entity_name = 'LiveDrawParticipant')::int AS live_participations,
+         COUNT(*) FILTER (WHERE entity_name = 'GameCallParticipant')::int AS game_participations,
+         COUNT(*) FILTER (WHERE entity_name = 'InstantRaffleParticipant')::int AS instant_participations
+       FROM entity_records
+       WHERE entity_name IN ('LiveDrawParticipant', 'GameCallParticipant', 'InstantRaffleParticipant')
+         AND COALESCE(data->>'user_id', '') = $1`,
+      [userId]
+    ),
+    pool.query(
+      `SELECT
+         COALESCE(
+           SUM(
              CASE
-               WHEN COALESCE(data->>'status', '') <> 'approved' THEN 0
                WHEN REPLACE(REGEXP_REPLACE(COALESCE(data->>'amount', ''), '[^0-9,.-]', '', 'g'), ',', '.') ~ '^-?[0-9]+(\\.[0-9]+)?$'
                THEN REPLACE(REGEXP_REPLACE(COALESCE(data->>'amount', ''), '[^0-9,.-]', '', 'g'), ',', '.')::numeric
                ELSE 0
              END
-           ), 0) AS total_approved,
-           COUNT(*) FILTER (WHERE COALESCE(data->>'status', '') = 'approved')::int AS deposit_count,
-           COALESCE(SUM(
-             CASE
-               WHEN COALESCE(data->>'status', '') <> 'approved' THEN 0
-               WHEN jsonb_typeof(data->'ticket_numbers') = 'array' THEN jsonb_array_length(data->'ticket_numbers')
-               WHEN COALESCE(data->>'tickets_count', '') ~ '^[0-9]+$' THEN (data->>'tickets_count')::int
-               ELSE 0
-             END
-           ), 0)::int AS total_tickets
-         FROM entity_records
-         WHERE entity_name = 'Deposit'
-           AND COALESCE(data->>'user_id', '') = $1
-       ),
-       participations AS (
-         SELECT
-           COUNT(*) FILTER (WHERE entity_name = 'LiveDrawParticipant')::int AS live_participations,
-           COUNT(*) FILTER (WHERE entity_name = 'GameCallParticipant')::int AS game_participations,
-           COUNT(*) FILTER (WHERE entity_name = 'InstantRaffleParticipant')::int AS instant_participations,
-           COUNT(*) FILTER (WHERE entity_name = 'DailyChestXpGrant')::int AS chest_rewards
-         FROM entity_records
-         WHERE entity_name IN ('LiveDrawParticipant', 'GameCallParticipant', 'InstantRaffleParticipant', 'DailyChestXpGrant')
-           AND COALESCE(data->>'user_id', '') = $1
-       ),
-       social AS (
-         SELECT
-           (SELECT COUNT(*)::int FROM daily_checkins WHERE user_id = $1) AS total_checkins,
-           (SELECT COUNT(*)::int FROM user_follows WHERE target_user_id = $1 AND active = true) AS total_followers,
-           (SELECT COUNT(*)::int FROM user_follows WHERE follower_user_id = $1 AND active = true) AS following_count,
-           (SELECT COUNT(*)::int FROM profile_likes WHERE target_user_id = $1 AND active = true) AS total_likes
-       )
-       SELECT *
-         FROM wins
-         CROSS JOIN deposits
-         CROSS JOIN participations
-         CROSS JOIN social`,
+           ),
+           0
+         ) AS total_approved
+       FROM entity_records
+       WHERE entity_name = 'Deposit'
+         AND COALESCE(data->>'user_id', '') = $1
+         AND COALESCE(data->>'status', '') = 'approved'`,
       [userId]
     ),
   ];
@@ -1888,7 +1862,7 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
     );
   }
 
-  const [balanceRows, summaryRows, leaderboardRowsResult = { rows: [] }] = await Promise.all(queryTasks);
+  const [balanceRows, participationRows, approvedDepositRows, leaderboardRowsResult = { rows: [] }] = await Promise.all(queryTasks);
 
   const pointsRules = {
     ...DEFAULT_POINTS_RULES,
@@ -1898,7 +1872,8 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
   const balanceMap = new Map(
     balanceRows.rows.map((row) => [`${row.metric_key}::${row.cycle_key || ""}`, Number(row.amount || 0)])
   );
-  const summaryRow = summaryRows?.rows?.[0] || {};
+  const participationRow = participationRows?.rows?.[0] || {};
+  const approvedDepositRow = approvedDepositRows?.rows?.[0] || {};
 
   const weeklyCycleKey = String(cycle?.cycle_key || "");
   const leaderboardEntries = (leaderboardRowsResult?.rows || []).map((row) => ({
@@ -1924,25 +1899,25 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
 
   const metrics = {
     position: Number(currentCompetitionEntry.position || 0),
-    totalApproved: Number(summaryRow.total_approved || 0),
-    totalTickets: Number(summaryRow.total_tickets || 0),
+    totalApproved: Number(approvedDepositRow.total_approved || 0),
+    totalTickets: Number(balanceMap.get("tickets_active::") || 0),
     totalParticipations:
-      Number(summaryRow.live_participations || 0) +
-      Number(summaryRow.game_participations || 0) +
-      Number(summaryRow.instant_participations || 0),
-    totalWins: Number(summaryRow.total_wins || 0),
-    liveParticipations: Number(summaryRow.live_participations || 0),
-    totalFollowers: Number(summaryRow.total_followers || 0),
-    totalLikes: Number(summaryRow.total_likes || 0),
-    totalCheckins: Number(summaryRow.total_checkins || 0),
-    followingCount: Number(summaryRow.following_count || 0),
+      Number(participationRow.live_participations || 0) +
+      Number(participationRow.game_participations || 0) +
+      Number(participationRow.instant_participations || 0),
+    totalWins: Number(balanceMap.get("prize_counts::") || 0),
+    liveParticipations: Number(participationRow.live_participations || 0),
+    totalFollowers: Number(balanceMap.get("social_followers::") || 0),
+    totalLikes: Number(balanceMap.get("social_likes::") || 0),
+    totalCheckins: Number(balanceMap.get("daily_checkins::") || 0),
+    followingCount: Number(balanceMap.get("social_following::") || 0),
     points: Number(balanceMap.get("engagement_points::") || 0),
     progress: Math.min(
       100,
       Math.round(
-        ((Number(summaryRow.live_participations || 0) +
-          Number(summaryRow.game_participations || 0) +
-          Number(summaryRow.instant_participations || 0)) /
+        ((Number(participationRow.live_participations || 0) +
+          Number(participationRow.game_participations || 0) +
+          Number(participationRow.instant_participations || 0)) /
           Math.max(1, Number(pointsRules.progress_target_participations || 25))) *
           100
       )
@@ -1951,8 +1926,8 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
     xp_total: Number(balanceMap.get("xp_total::") || 0),
     weeklyPoints: Number(balanceMap.get(`weekly_points::${weeklyCycleKey}`) || 0),
     weekly_points: Number(balanceMap.get(`weekly_points::${weeklyCycleKey}`) || 0),
-    chestRewards: Number(summaryRow.chest_rewards || 0),
-    prizeCounts: Number(summaryRow.total_wins || 0),
+    chestRewards: Number(balanceMap.get("chest_rewards::") || 0),
+    prizeCounts: Number(balanceMap.get("prize_counts::") || 0),
   };
 
   const achievements = computeAchievements(metrics, badgeRules);
