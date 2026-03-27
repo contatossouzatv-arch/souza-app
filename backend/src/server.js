@@ -92,9 +92,6 @@ async function bootstrap() {
       message: error?.message || "Unknown startup error",
       stack: error?.stack || null,
     });
-    server.close(() => {
-      process.exit(1);
-    });
   });
 }
 
