@@ -5643,6 +5643,7 @@ export default function Profile() {
           emptySubtitle="Os prêmios resgatados no Baú Diário e nas próximas experiências vão aparecer aqui automaticamente."
           countLabel="na coleção"
           privateView={true}
+          eagerPreview={true}
         />
       </Suspense>) : null}
 

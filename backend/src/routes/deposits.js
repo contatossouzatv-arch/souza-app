@@ -16,7 +16,8 @@ import {
   rejectDepositRecord,
   updateDepositAdminRecord,
 } from "../db/index.js";
-import { getOrComputeCacheJson } from "../lib/cache.js";
+import { deleteCacheByPrefix, deleteCacheKey, getOrComputeCacheJson } from "../lib/cache.js";
+import { scheduleGamificationRefresh } from "./gamification.js";
 
 const router = Router();
 const DEPOSIT_LEADERBOARD_TTL_MS = 15000;
@@ -104,6 +105,17 @@ function normalizeAdminPatchPayload(body = {}) {
       : [];
   }
   return patch;
+}
+
+async function refreshDepositReadModels({ refreshGamification = false } = {}) {
+  await Promise.all([
+    deleteCacheKey("deposits:dashboard-summary"),
+    deleteCacheByPrefix("deposits:leaderboard:"),
+  ]);
+
+  if (refreshGamification) {
+    scheduleGamificationRefresh({ persistDerived: true });
+  }
 }
 
 async function listDepositCycles() {
@@ -298,6 +310,7 @@ router.post("/admin/deposits/:id/approve", requireAuth, requireAdmin, asyncHandl
     user_id: result?.deposit?.user_id || "",
     reason: "deposit_approved",
   });
+  await refreshDepositReadModels({ refreshGamification: true });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
 }));
@@ -336,6 +349,7 @@ router.patch("/admin/deposits/:id", requireAuth, requireAdmin, asyncHandler(asyn
     user_id: result?.deposit?.user_id || "",
     status: result?.deposit?.status || "",
   });
+  await refreshDepositReadModels();
 
   return res.status(result.idempotent ? 200 : 200).json(result);
 }));
@@ -379,6 +393,7 @@ router.post("/admin/deposits/:id/adjust-tickets", requireAuth, requireAdmin, asy
     user_id: result?.deposit?.user_id || "",
     reason: "deposit_tickets_adjusted",
   });
+  await refreshDepositReadModels({ refreshGamification: true });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
 }));
@@ -416,6 +431,7 @@ router.post("/admin/deposits/:id/reject", requireAuth, requireAdmin, asyncHandle
     user_id: result?.deposit?.user_id || "",
     status: result?.deposit?.status || "rejected",
   });
+  await refreshDepositReadModels();
 
   return res.status(result.idempotent ? 200 : 201).json(result);
 }));
@@ -457,6 +473,7 @@ router.post("/admin/deposits/:id/invalidate", requireAuth, requireAdmin, asyncHa
     user_id: result?.deposit?.user_id || "",
     reason: "deposit_invalidated",
   });
+  await refreshDepositReadModels({ refreshGamification: true });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
 }));
@@ -498,6 +515,7 @@ router.delete("/admin/deposits/:id", requireAuth, requireAdmin, asyncHandler(asy
     user_id: result?.deposit?.user_id || "",
     reason: "deposit_deleted",
   });
+  await refreshDepositReadModels({ refreshGamification: true });
 
   return res.status(200).json(result);
 }));

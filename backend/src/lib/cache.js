@@ -104,6 +104,37 @@ export async function deleteCacheKey(key) {
   }
 }
 
+export async function deleteCacheByPrefix(prefix) {
+  const normalizedPrefix = String(prefix || "");
+  if (!normalizedPrefix) return;
+
+  for (const key of memoryStore.keys()) {
+    if (String(key).startsWith(normalizedPrefix)) {
+      memoryStore.delete(key);
+    }
+  }
+
+  const client = getRedisClient();
+  if (!client) return;
+
+  try {
+    await client.connect().catch(() => {});
+    let cursor = "0";
+    do {
+      const [nextCursor, keys] = await client.scan(cursor, "MATCH", `${normalizedPrefix}*`, "COUNT", 100);
+      cursor = String(nextCursor || "0");
+      if (Array.isArray(keys) && keys.length > 0) {
+        await client.del(keys);
+      }
+    } while (cursor !== "0");
+  } catch (error) {
+    console.warn("[cache] redis delete by prefix failed", {
+      prefix: normalizedPrefix,
+      message: error?.message || "unknown",
+    });
+  }
+}
+
 export async function getOrComputeCacheJson(key, ttlMs, producer) {
   const cached = await getCacheJson(key);
   if (cached !== MISS) return cached;

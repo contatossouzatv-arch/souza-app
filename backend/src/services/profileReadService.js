@@ -1,4 +1,9 @@
 import { normalizeRecord, pool } from "../db/index.js";
+import { deleteCacheByPrefix, getOrComputeCacheJson } from "../lib/cache.js";
+
+const PUBLIC_PROFILE_BASICS_TTL_MS = 60000;
+const PROFILE_NOTIFICATIONS_TTL_MS = 15000;
+const PLATFORM_HISTORY_TTL_MS = 20000;
 
 export async function listPublicProfileBasics(ids = [], handles = []) {
   const uniqueIds = Array.from(
@@ -31,15 +36,19 @@ export async function listPublicProfileBasics(ids = [], handles = []) {
     clauses.push(`LOWER(COALESCE(nick, '')) = ANY($${values.length}::text[])`);
   }
 
-  const result = await pool.query(
-    `SELECT id, full_name, nick, avatar_emoji, profile_avatar_id, profile_image_mode, profile_image_url, profile_image_status, account_status
-       FROM users
-      WHERE ${clauses.join(" OR ")}`,
-    values
-  );
+  const cacheKey = `profile-read:public-basics:${uniqueIds.join(",")}:${uniqueHandles.join(",")}`;
+  const resultRows = await getOrComputeCacheJson(cacheKey, PUBLIC_PROFILE_BASICS_TTL_MS, async () => {
+    const result = await pool.query(
+      `SELECT id, full_name, nick, avatar_emoji, profile_avatar_id, profile_image_mode, profile_image_url, profile_image_status, account_status
+         FROM users
+        WHERE ${clauses.join(" OR ")}`,
+      values
+    );
+    return result.rows || [];
+  });
 
   const usersById = new Map(
-    result.rows.map((row) => {
+    resultRows.map((row) => {
       const user = row || {};
       const approvedProfileImageUrl =
         String(user.profile_image_status || "none") === "approved"
@@ -62,7 +71,7 @@ export async function listPublicProfileBasics(ids = [], handles = []) {
     })
   );
   const usersByHandle = new Map(
-    result.rows
+    resultRows
       .map((row) => {
         const nick = String(row?.nick || "").trim().toLowerCase();
         return nick ? [nick, usersById.get(String(row.id))] : null;
@@ -77,17 +86,26 @@ export async function listPublicProfileBasics(ids = [], handles = []) {
 }
 
 export async function listProfileNotifications(userId, limit = 50) {
-  const result = await pool.query(
-    `SELECT id, data, created_at, updated_at
-       FROM entity_records
-      WHERE entity_name = 'ProfileNotification'
-        AND COALESCE(data->>'user_id', '') = $1
-      ORDER BY created_at DESC
-      LIMIT $2`,
-    [userId, limit]
+  const normalizedUserId = String(userId || "").trim();
+  const safeLimit = Math.max(1, Math.min(100, Number(limit || 50)));
+  const rows = await getOrComputeCacheJson(
+    `profile-read:notifications:${normalizedUserId}:${safeLimit}`,
+    PROFILE_NOTIFICATIONS_TTL_MS,
+    async () => {
+      const result = await pool.query(
+        `SELECT id, data, created_at, updated_at
+           FROM entity_records
+          WHERE entity_name = 'ProfileNotification'
+            AND COALESCE(data->>'user_id', '') = $1
+          ORDER BY created_at DESC
+          LIMIT $2`,
+        [normalizedUserId, safeLimit]
+      );
+      return result.rows || [];
+    }
   );
 
-  return result.rows.map(normalizeRecord);
+  return rows.map(normalizeRecord);
 }
 
 export async function listPlatformHistory(userId, limit = 100) {
@@ -97,20 +115,28 @@ export async function listPlatformHistory(userId, limit = 100) {
   }
 
   const safeLimit = Math.max(1, Math.min(200, Number(limit || 100)));
-  const result = await pool.query(
-    `SELECT id, data, created_at, updated_at
-       FROM entity_records
-      WHERE entity_name = 'PlatformHistory'
-        AND COALESCE(data->>'user_id', '') = $1
-      ORDER BY created_at DESC
-      LIMIT $2`,
-    [normalizedUserId, safeLimit]
+  const rows = await getOrComputeCacheJson(
+    `profile-read:platform-history:${normalizedUserId}:${safeLimit}`,
+    PLATFORM_HISTORY_TTL_MS,
+    async () => {
+      const result = await pool.query(
+        `SELECT id, data, created_at, updated_at
+           FROM entity_records
+          WHERE entity_name = 'PlatformHistory'
+            AND COALESCE(data->>'user_id', '') = $1
+          ORDER BY created_at DESC
+          LIMIT $2`,
+        [normalizedUserId, safeLimit]
+      );
+      return result.rows || [];
+    }
   );
 
-  return result.rows.map(normalizeRecord);
+  return rows.map(normalizeRecord);
 }
 
 export async function markProfileNotificationsRead(userId, ids = []) {
+  const normalizedUserId = String(userId || "").trim();
   const uniqueIds = Array.from(
     new Set(
       (Array.isArray(ids) ? ids : [])
@@ -133,8 +159,10 @@ export async function markProfileNotificationsRead(userId, ids = []) {
         AND id = ANY($1::uuid[])
         AND COALESCE(data->>'user_id', '') = $2
     RETURNING id, data, created_at, updated_at`,
-    [uniqueIds, userId]
+    [uniqueIds, normalizedUserId]
   );
+
+  await deleteCacheByPrefix(`profile-read:notifications:${normalizedUserId}:`);
 
   return {
     updated: Number(result.rowCount || 0),

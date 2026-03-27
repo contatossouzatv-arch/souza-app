@@ -20,6 +20,29 @@ import { appendNavigationLog } from "./db/index.js";
 import { genericUploadsDir, uploadsDir } from "./lib/paths.js";
 import { getHttpMetricsSnapshot, recordHttpMetric } from "./lib/httpMetrics.js";
 
+const SLOW_HTTP_THRESHOLD_MS = 700;
+
+function normalizeMetricPath(req) {
+  const basePath = String(req.baseUrl || "").trim();
+  const routePath =
+    typeof req.route?.path === "string"
+      ? req.route.path
+      : Array.isArray(req.route?.path)
+        ? req.route.path.join("|")
+        : "";
+  const normalized = `${basePath}${routePath}`.trim();
+  if (normalized) {
+    return normalized.replace(/\/+/g, "/");
+  }
+
+  const rawPath = String(req.path || req.originalUrl || "").split("?")[0].trim();
+  if (!rawPath) return "unknown";
+
+  return rawPath
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi, ":uuid")
+    .replace(/\/\d+(?=\/|$)/g, "/:id");
+}
+
 function buildCors() {
   if (env.origin === "*") {
     return cors({ origin: true, credentials: false });
@@ -70,8 +93,10 @@ function buildRateLimiter({ windowMs, limit, prefix = "ratelimit:" } = {}) {
   });
 }
 
-function shouldLogRouteTiming(path = "") {
+function shouldLogRouteTiming(path = "", durationMs = 0, status = 200) {
   const normalized = String(path || "").trim();
+  if (Number(status || 0) >= 400) return true;
+  if (Number(durationMs || 0) >= SLOW_HTTP_THRESHOLD_MS) return true;
   return [
     "/health",
     "/api/auth/login",
@@ -112,8 +137,9 @@ export function createApp(io) {
   app.options(/.*/, buildCors());
   app.use((req, res, next) => {
     req._startedAtMs = Date.now();
+    const shouldLogStart = shouldLogRouteTiming(req.path);
 
-    if (shouldLogRouteTiming(req.path)) {
+    if (shouldLogStart) {
       console.info("[http] request:start", {
         method: req.method,
         path: req.originalUrl,
@@ -123,21 +149,27 @@ export function createApp(io) {
         hasAuthorizationHeader: Boolean(req.headers.authorization),
         userAgent: String(req.headers["user-agent"] || "").slice(0, 160),
       });
+    }
 
-      res.on("finish", () => {
-        const durationMs = Date.now() - req._startedAtMs;
-        recordHttpMetric(req.path, res.statusCode, durationMs);
+    res.on("finish", () => {
+      const durationMs = Date.now() - req._startedAtMs;
+      const metricPath = normalizeMetricPath(req);
+      recordHttpMetric(metricPath, res.statusCode, durationMs, {
+        slowThresholdMs: SLOW_HTTP_THRESHOLD_MS,
+      });
+      if (shouldLogStart || shouldLogRouteTiming(metricPath, durationMs, res.statusCode)) {
         console.info("[http] request:finish", {
           method: req.method,
           path: req.originalUrl,
+          metricPath,
           status: res.statusCode,
           durationMs,
           origin: req.headers.origin || null,
           hasCookieHeader: Boolean(req.headers.cookie),
           hasAuthorizationHeader: Boolean(req.headers.authorization),
         });
-      });
-    }
+      }
+    });
 
     next();
   });

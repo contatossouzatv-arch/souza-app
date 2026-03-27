@@ -19,7 +19,14 @@ import {
   markProfileNotificationsRead,
 } from "../services/profileReadService.js";
 import { getCurrentPlatform, listActivePlatforms } from "../services/platformReadService.js";
-import { deleteCacheKey, getCacheJson, getOrComputeCacheJson, setCacheJson, cacheMiss } from "../lib/cache.js";
+import {
+  deleteCacheByPrefix,
+  deleteCacheKey,
+  getCacheJson,
+  getOrComputeCacheJson,
+  setCacheJson,
+  cacheMiss,
+} from "../lib/cache.js";
 
 const router = Router();
 
@@ -35,6 +42,8 @@ const PROFILE_METRICS_TTL_MS = 45000;
 const WINNERS_HISTORY_TTL_MS = 60000;
 const HOME_SUMMARY_TTL_MS = 120000;
 const HOME_FEED_SUMMARY_TTL_MS = 30000;
+const HOME_FEED_SHARED_TTL_MS = 30000;
+const WEEKLY_LEADERBOARD_TTL_MS = 15000;
 const PUBLIC_UI_CONFIG_TTL_MS = 60000;
 const PUBLIC_PROFILE_SUMMARY_TTL_MS = 30000;
 const PROFILE_PRIZE_GALLERY_TTL_MS = 20000;
@@ -481,6 +490,144 @@ function invalidateGamificationStateCache() {
   };
   profileMetricsCache = new Map();
   profileMetricsPromises = new Map();
+  void Promise.all([
+    deleteCacheKey("gamification:home-summary"),
+    deleteCacheKey("gamification:home-feed-shared"),
+    deleteCacheKey("gamification:feed:wins"),
+    deleteCacheKey("gamification:leaderboards:weekly"),
+    deleteCacheByPrefix("gamification:home-feed-summary:"),
+    deleteCacheByPrefix("gamification:profile-metrics:"),
+    deleteCacheByPrefix("gamification:public-profile-summary:"),
+    deleteCacheByPrefix("gamification:profile-prize-gallery:"),
+    deleteCacheByPrefix("gamification:profile-public-directory:"),
+  ]).catch((error) => {
+    console.error("Failed to invalidate gamification read caches", error);
+  });
+}
+
+async function buildCachedWeeklyCompetitionBoard() {
+  return getOrComputeCacheJson("gamification:leaderboards:weekly", WEEKLY_LEADERBOARD_TTL_MS, async () => {
+    const state = await buildGamificationState();
+    return buildCompetitionBoard(state.leaderboardEntries, state.cycle, state.weeklyConfig);
+  });
+}
+
+async function buildHomeFeedSharedPayload() {
+  return getOrComputeCacheJson("gamification:home-feed-shared", HOME_FEED_SHARED_TTL_MS, async () => {
+    const [postsResult, recentInventoryResult] = await Promise.all([
+      pool.query(
+        `SELECT id, data, created_at, updated_at
+           FROM entity_records
+          WHERE entity_name = 'PushNotification'
+          ORDER BY created_at DESC
+          LIMIT 30`
+      ),
+      listEntity("UserPrizeGalleryItem", "-claimed_at", 120).then((items) =>
+        items
+          .filter((item) => ["validated", "applied"].includes(String(item.claim_status || "").trim().toLowerCase()))
+          .slice(0, 40)
+      ),
+    ]);
+
+    const posts = postsResult.rows.map(normalizeEntityRecordRow);
+    const recentInventory = recentInventoryResult;
+    const targetPostIds = [
+      ...posts.map((post) => `notice-${post.id}`),
+      ...recentInventory.map((item) => `winner-${item.id}`),
+    ].filter(Boolean);
+    const winnerUserIds = Array.from(new Set(recentInventory.map((item) => item.user_id).filter(Boolean)));
+    const [userRowsResult, countRowsResult] = await Promise.allSettled([
+      winnerUserIds.length > 0
+        ? pool.query(
+            `SELECT id, nick, full_name, avatar_emoji, profile_avatar_id, profile_image_mode, profile_image_url, profile_image_status
+               FROM users
+              WHERE id = ANY($1::uuid[])`,
+            [winnerUserIds]
+          )
+        : Promise.resolve({ rows: [] }),
+      targetPostIds.length > 0
+        ? pool.query(
+            `SELECT COALESCE(data->>'post_id', '') AS post_id, COUNT(*)::int AS like_count
+               FROM entity_records
+              WHERE entity_name = 'FeedPostLike'
+                AND COALESCE(data->>'post_id', '') = ANY($1::text[])
+              GROUP BY COALESCE(data->>'post_id', '')`,
+            [targetPostIds]
+          )
+        : Promise.resolve({ rows: [] }),
+    ]);
+
+    if (countRowsResult.status === "rejected") {
+      console.error("Failed to load shared feed like counts", countRowsResult.reason);
+    }
+    if (userRowsResult.status === "rejected") {
+      console.error("Failed to load shared feed winner users", userRowsResult.reason);
+    }
+
+    const usersById = new Map(
+      (userRowsResult.status === "fulfilled" ? userRowsResult.value.rows : []).map((row) => [row.id, row])
+    );
+
+    const counts = (countRowsResult.status === "fulfilled" ? countRowsResult.value.rows : []).reduce((acc, row) => {
+      const postId = String(row.post_id || "").trim();
+      if (!postId) return acc;
+      acc[postId] = Number(row.like_count || 0);
+      return acc;
+    }, {});
+
+    return {
+      posts,
+      targetPostIds,
+      winnerFeed: {
+        items: recentInventory.map((item) => {
+          const user = usersById.get(item.user_id) || null;
+          return {
+            id: item.id,
+            user_id: item.user_id,
+            user_name: user?.full_name || item.metadata?.user_name || "Participante",
+            user_nick: user?.nick || item.metadata?.user_nick || "",
+            user_avatar: user?.avatar_emoji || "",
+            profile_avatar_id: user?.profile_avatar_id || "",
+            profile_image_mode: user?.profile_image_mode || "avatar",
+            profile_image_url: getApprovedProfileImageUrl(user),
+            source_type: item.source_type || "",
+            source_label: mapPrizeSourceLabel(item.source_type),
+            reward_label: buildPrizeRewardLabel(item),
+            reward_type: item.reward_type || "",
+            reward_amount: Number(item.reward_amount || 0),
+            reward_unit: item.reward_unit || "",
+            title: item.title || "",
+            subtitle: item.subtitle || "",
+            rarity: item.rarity || "rare",
+            claimed_at: item.claimed_at || item.created_date || item.updated_date || null,
+          };
+        }),
+      },
+      feedLikes: {
+        counts,
+      },
+    };
+  });
+}
+
+async function buildUserFeedLikeState(userId, targetPostIds) {
+  return getOrComputeCacheJson(`gamification:home-feed-summary:${userId}`, HOME_FEED_SUMMARY_TTL_MS, async () => {
+    const likedRows =
+      targetPostIds.length > 0
+        ? await pool.query(
+            `SELECT COALESCE(data->>'post_id', '') AS post_id
+               FROM entity_records
+              WHERE entity_name = 'FeedPostLike'
+                AND COALESCE(data->>'user_id', '') = $1
+                AND COALESCE(data->>'post_id', '') = ANY($2::text[])`,
+            [userId, targetPostIds]
+          )
+        : { rows: [] };
+
+    return {
+      likedPostIds: likedRows.rows.map((row) => String(row.post_id || "").trim()).filter(Boolean),
+    };
+  });
 }
 
 async function loadPublicUiConfig() {
@@ -511,6 +658,63 @@ export async function refreshGamificationState(options = {}) {
     forceFresh: true,
     persistDerived: options?.persistDerived === true,
   });
+}
+
+const GAMIFICATION_REFRESH_DEBOUNCE_MS = 250;
+let scheduledGamificationRefreshTimer = null;
+let scheduledGamificationRefreshOptions = { persistDerived: false };
+let gamificationRefreshInFlightPromise = null;
+let shouldRunGamificationRefreshAgain = false;
+
+function mergeScheduledGamificationRefreshOptions(options = {}) {
+  scheduledGamificationRefreshOptions = {
+    persistDerived:
+      Boolean(scheduledGamificationRefreshOptions?.persistDerived) ||
+      Boolean(options?.persistDerived),
+  };
+}
+
+async function flushScheduledGamificationRefresh() {
+  if (scheduledGamificationRefreshTimer) {
+    clearTimeout(scheduledGamificationRefreshTimer);
+    scheduledGamificationRefreshTimer = null;
+  }
+
+  if (gamificationRefreshInFlightPromise) {
+    shouldRunGamificationRefreshAgain = true;
+    return gamificationRefreshInFlightPromise;
+  }
+
+  const nextOptions = {
+    persistDerived: Boolean(scheduledGamificationRefreshOptions?.persistDerived),
+  };
+  scheduledGamificationRefreshOptions = { persistDerived: false };
+
+  gamificationRefreshInFlightPromise = refreshGamificationState(nextOptions)
+    .catch((error) => {
+      console.error("Scheduled gamification refresh failed", {
+        message: error?.message || String(error),
+        persistDerived: nextOptions.persistDerived,
+      });
+    })
+    .finally(() => {
+      gamificationRefreshInFlightPromise = null;
+      if (shouldRunGamificationRefreshAgain || scheduledGamificationRefreshOptions.persistDerived) {
+        shouldRunGamificationRefreshAgain = false;
+        scheduleGamificationRefresh();
+      }
+    });
+
+  return gamificationRefreshInFlightPromise;
+}
+
+export function scheduleGamificationRefresh(options = {}) {
+  mergeScheduledGamificationRefreshOptions(options);
+  if (scheduledGamificationRefreshTimer) return;
+  scheduledGamificationRefreshTimer = setTimeout(() => {
+    scheduledGamificationRefreshTimer = null;
+    void flushScheduledGamificationRefresh();
+  }, GAMIFICATION_REFRESH_DEBOUNCE_MS);
 }
 
 function normalizeDailyCheckInConfig(raw = {}, rules = []) {
@@ -1774,6 +1978,24 @@ function extractProfileCompetitionBoardPayload(payload = {}) {
   };
 }
 
+function buildSharedCompetitionBoardPayloadFromBoard(userId, competitionBoard, refreshInMs = GAMIFICATION_STATE_TTL_MS) {
+  const safeUserId = String(userId || "").trim();
+  const currentCompetitionEntry =
+    (competitionBoard?.entries || []).find((entry) => String(entry?.user_id || "") === safeUserId) || {
+      user_id: safeUserId,
+      position: 0,
+      weekly_points: 0,
+      points: 0,
+    };
+
+  return extractProfileCompetitionBoardPayload({
+    competitionBoard,
+    currentCompetitionEntry,
+    updatedAt: new Date().toISOString(),
+    refreshInMs,
+  });
+}
+
 function buildSharedCompetitionBoardPayload(userId, state) {
   const safeUserId = String(userId || "").trim();
   const currentCompetitionEntry =
@@ -1972,7 +2194,7 @@ async function buildLightweightProfileMetrics(userId, options = {}) {
   if (!forceFresh) {
     const sharedCached = await getCacheJson(sharedCacheKey);
     if (!cacheMiss(sharedCached)) {
-      profileMetricsCache.set(safeUserId, {
+      profileMetricsCache.set(localCacheKey, {
         value: sharedCached,
         expiresAt: Date.now() + PROFILE_METRICS_TTL_MS,
       });
@@ -2664,12 +2886,15 @@ function formatUserAdminSummary(user) {
 
 router.get("/profile/metrics", requireAuth, async (req, res) => {
   const userId = req.auth?.sub || "";
+  const safeUserId = String(userId || "").trim();
   const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
   try {
     if (shouldForceRefresh) {
-      profileMetricsCache.delete(String(userId || "").trim());
-      profileMetricsPromises.delete(String(userId || "").trim());
-      await deleteCacheKey(`gamification:profile-metrics:${String(userId || "").trim()}`);
+      profileMetricsCache.delete(`${safeUserId}:full`);
+      profileMetricsCache.delete(`${safeUserId}:summary`);
+      profileMetricsPromises.delete(`${safeUserId}:full`);
+      profileMetricsPromises.delete(`${safeUserId}:summary`);
+      await deleteCacheByPrefix(`gamification:profile-metrics:${safeUserId}:`);
     }
     const payload = shouldForceRefresh
       ? await buildLightweightProfileMetrics(userId, {
@@ -2678,11 +2903,11 @@ router.get("/profile/metrics", requireAuth, async (req, res) => {
       : buildFallbackProfileMetricsFromState(userId, await buildGamificationState());
 
     if (!shouldForceRefresh) {
-      profileMetricsCache.set(String(userId || "").trim(), {
+      profileMetricsCache.set(`${safeUserId}:full`, {
         value: payload,
         expiresAt: Date.now() + PROFILE_METRICS_TTL_MS,
       });
-      await setCacheJson(`gamification:profile-metrics:${String(userId || "").trim()}`, payload, PROFILE_METRICS_TTL_MS);
+      await setCacheJson(`gamification:profile-metrics:${safeUserId}:full`, payload, PROFILE_METRICS_TTL_MS);
     }
 
     return res.json(payload);
@@ -2692,10 +2917,10 @@ router.get("/profile/metrics", requireAuth, async (req, res) => {
       message: error?.message || String(error),
       stack: error?.stack || "",
     });
-    const staleCached = profileMetricsCache.get(String(userId || "").trim())?.value || null;
-    if (staleCached) {
+    const scopedStaleCached = profileMetricsCache.get(`${safeUserId}:full`)?.value || null;
+    if (scopedStaleCached) {
       console.warn("Serving stale cached profile metrics", { userId });
-      return res.json({ ...staleCached, _degraded: true });
+      return res.json({ ...scopedStaleCached, _degraded: true });
     }
     try {
       const state = await buildGamificationState();
@@ -2718,9 +2943,9 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
   const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
   try {
     if (shouldForceRefresh) {
-      profileMetricsCache.delete(safeUserId);
-      profileMetricsPromises.delete(safeUserId);
-      await deleteCacheKey(`gamification:profile-metrics:${safeUserId}`);
+      profileMetricsCache.delete(`${safeUserId}:summary`);
+      profileMetricsPromises.delete(`${safeUserId}:summary`);
+      await deleteCacheKey(`gamification:profile-metrics:${safeUserId}:summary`);
     }
 
     const payload = extractProfileSummaryPayload(
@@ -2749,9 +2974,21 @@ router.get("/profile/competition-board", requireAuth, async (req, res) => {
   const userId = req.auth?.sub || "";
   const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
   try {
-    const payload = buildSharedCompetitionBoardPayload(
+    let resolvedCompetitionBoard;
+    if (shouldForceRefresh) {
+      const state = await buildGamificationState({ forceFresh: true });
+      resolvedCompetitionBoard = buildCompetitionBoard(
+        Array.isArray(state?.leaderboardEntries) ? state.leaderboardEntries : [],
+        state?.cycle || { remainingMs: 0, progressPct: 0 },
+        state?.weeklyConfig || DEFAULT_PROFILE_COMPETITION_CONFIG
+      );
+    } else {
+      resolvedCompetitionBoard = await buildCachedWeeklyCompetitionBoard();
+    }
+    const payload = buildSharedCompetitionBoardPayloadFromBoard(
       userId,
-      await buildGamificationState({ forceFresh: shouldForceRefresh })
+      resolvedCompetitionBoard,
+      shouldForceRefresh ? GAMIFICATION_STATE_TTL_MS : WEEKLY_LEADERBOARD_TTL_MS
     );
 
     return res.json(payload);
@@ -3264,168 +3501,31 @@ router.get("/home/summary", requireAuth, async (_req, res) => {
 });
 
 router.get("/feed/wins", requireAuth, async (_req, res) => {
-  const recentInventory = (await listEntity("UserPrizeGalleryItem", "-claimed_at", 120))
-    .filter((item) => ["validated", "applied"].includes(String(item.claim_status || "").trim().toLowerCase()))
-    .slice(0, 40);
-
-  const userIds = Array.from(new Set(recentInventory.map((item) => item.user_id).filter(Boolean)));
-  let usersById = new Map();
-  if (userIds.length > 0) {
-    const userRows = await pool.query(
-      `SELECT id, nick, full_name, avatar_emoji, profile_avatar_id, profile_image_mode, profile_image_url, profile_image_status
-         FROM users
-        WHERE id = ANY($1::uuid[])`,
-      [userIds]
-    );
-    usersById = new Map(userRows.rows.map((row) => [row.id, row]));
+  try {
+    const payload = await getOrComputeCacheJson("gamification:feed:wins", HOME_FEED_SHARED_TTL_MS, async () => {
+      const sharedPayload = await buildHomeFeedSharedPayload();
+      return sharedPayload.winnerFeed;
+    });
+    return res.json(payload);
+  } catch (error) {
+    console.error("Failed to load winner feed", error);
+    return res.status(500).json({ error: "Nao foi possivel carregar os premios recentes agora." });
   }
-
-  res.json({
-    items: recentInventory.map((item) => {
-      const user = usersById.get(item.user_id) || null;
-      return {
-        id: item.id,
-        user_id: item.user_id,
-        user_name: user?.full_name || item.metadata?.user_name || "Participante",
-        user_nick: user?.nick || item.metadata?.user_nick || "",
-        user_avatar: user?.avatar_emoji || "",
-        profile_avatar_id: user?.profile_avatar_id || "",
-        profile_image_mode: user?.profile_image_mode || "avatar",
-        profile_image_url: getApprovedProfileImageUrl(user),
-        source_type: item.source_type || "",
-        source_label: mapPrizeSourceLabel(item.source_type),
-        reward_label: buildPrizeRewardLabel(item),
-        reward_type: item.reward_type || "",
-        reward_amount: Number(item.reward_amount || 0),
-        reward_unit: item.reward_unit || "",
-        title: item.title || "",
-        subtitle: item.subtitle || "",
-        rarity: item.rarity || "rare",
-        claimed_at: item.claimed_at || item.created_date || item.updated_date || null,
-      };
-    }),
-  });
 });
 
 router.get("/home/feed-summary", requireAuth, async (req, res) => {
   const userId = String(req.auth?.sub || "").trim();
   try {
-    const payload = await getOrComputeCacheJson(
-      `gamification:home-feed-summary:${userId}`,
-      HOME_FEED_SUMMARY_TTL_MS,
-      async () => {
-        const [postsResult, recentInventoryResult] = await Promise.all([
-          pool.query(
-            `SELECT id, data, created_at, updated_at
-               FROM entity_records
-              WHERE entity_name = 'PushNotification'
-              ORDER BY created_at DESC
-              LIMIT 30`
-          ),
-          listEntity("UserPrizeGalleryItem", "-claimed_at", 120).then((items) =>
-            items
-              .filter((item) => ["validated", "applied"].includes(String(item.claim_status || "").trim().toLowerCase()))
-              .slice(0, 40)
-          ),
-        ]);
-
-        const posts = postsResult.rows.map(normalizeEntityRecordRow);
-        const recentInventory = recentInventoryResult;
-        const targetPostIds = [
-          ...posts.map((post) => `notice-${post.id}`),
-          ...recentInventory.map((item) => `winner-${item.id}`),
-        ].filter(Boolean);
-        const winnerUserIds = Array.from(new Set(recentInventory.map((item) => item.user_id).filter(Boolean)));
-        const [userRowsResult, countRowsResult, likedRowsResult] = await Promise.allSettled([
-          winnerUserIds.length > 0
-            ? pool.query(
-                `SELECT id, nick, full_name, avatar_emoji, profile_avatar_id, profile_image_mode, profile_image_url, profile_image_status
-                   FROM users
-                  WHERE id = ANY($1::uuid[])`,
-                [winnerUserIds]
-              )
-            : Promise.resolve({ rows: [] }),
-          targetPostIds.length > 0
-            ? pool.query(
-                `SELECT COALESCE(data->>'post_id', '') AS post_id, COUNT(*)::int AS like_count
-                   FROM entity_records
-                  WHERE entity_name = 'FeedPostLike'
-                    AND COALESCE(data->>'post_id', '') = ANY($1::text[])
-                  GROUP BY COALESCE(data->>'post_id', '')`,
-                [targetPostIds]
-              )
-            : Promise.resolve({ rows: [] }),
-          targetPostIds.length > 0
-            ? pool.query(
-                `SELECT COALESCE(data->>'post_id', '') AS post_id
-                   FROM entity_records
-                  WHERE entity_name = 'FeedPostLike'
-                    AND COALESCE(data->>'user_id', '') = $1
-                    AND COALESCE(data->>'post_id', '') = ANY($2::text[])`,
-                [userId, targetPostIds]
-              )
-            : Promise.resolve({ rows: [] }),
-        ]);
-
-        if (countRowsResult.status === "rejected") {
-          console.error("Failed to load feed like counts", countRowsResult.reason);
-        }
-        if (likedRowsResult.status === "rejected") {
-          console.error("Failed to load user feed likes", likedRowsResult.reason);
-        }
-        if (userRowsResult.status === "rejected") {
-          console.error("Failed to load feed winner users", userRowsResult.reason);
-        }
-
-        const usersById = new Map(
-          (userRowsResult.status === "fulfilled" ? userRowsResult.value.rows : []).map((row) => [row.id, row])
-        );
-
-        const counts = (countRowsResult.status === "fulfilled" ? countRowsResult.value.rows : []).reduce((acc, row) => {
-          const postId = String(row.post_id || "").trim();
-          if (!postId) return acc;
-          acc[postId] = Number(row.like_count || 0);
-          return acc;
-        }, {});
-
-        const likedPostIds = (likedRowsResult.status === "fulfilled" ? likedRowsResult.value.rows : [])
-          .map((row) => String(row.post_id || "").trim())
-          .filter(Boolean);
-
-        return {
-          posts,
-          winnerFeed: {
-            items: recentInventory.map((item) => {
-              const user = usersById.get(item.user_id) || null;
-              return {
-                id: item.id,
-                user_id: item.user_id,
-                user_name: user?.full_name || item.metadata?.user_name || "Participante",
-                user_nick: user?.nick || item.metadata?.user_nick || "",
-                user_avatar: user?.avatar_emoji || "",
-                profile_avatar_id: user?.profile_avatar_id || "",
-                profile_image_mode: user?.profile_image_mode || "avatar",
-                profile_image_url: getApprovedProfileImageUrl(user),
-                source_type: item.source_type || "",
-                source_label: mapPrizeSourceLabel(item.source_type),
-                reward_label: buildPrizeRewardLabel(item),
-                reward_type: item.reward_type || "",
-                reward_amount: Number(item.reward_amount || 0),
-                reward_unit: item.reward_unit || "",
-                title: item.title || "",
-                subtitle: item.subtitle || "",
-                rarity: item.rarity || "rare",
-                claimed_at: item.claimed_at || item.created_date || item.updated_date || null,
-              };
-            }),
-          },
-          feedLikes: {
-            counts,
-            likedPostIds,
-          },
-        };
-      }
-    );
+    const sharedPayload = await buildHomeFeedSharedPayload();
+    const userFeedLikes = await buildUserFeedLikeState(userId, sharedPayload.targetPostIds || []);
+    const payload = {
+      posts: sharedPayload.posts,
+      winnerFeed: sharedPayload.winnerFeed,
+      feedLikes: {
+        counts: sharedPayload.feedLikes?.counts || {},
+        likedPostIds: userFeedLikes.likedPostIds || [],
+      },
+    };
     return res.json(payload);
   } catch (error) {
     console.error("Failed to load home feed summary", error);
@@ -3453,34 +3553,17 @@ router.get("/notifications/recent", requireAuth, async (req, res) => {
 
 router.get("/feed/likes", requireAuth, async (req, res) => {
   const userId = String(req.auth?.sub || "").trim();
-  const [countRows, likedRows] = await Promise.all([
-    pool.query(
-      `SELECT COALESCE(data->>'post_id', '') AS post_id, COUNT(*)::int AS like_count
-         FROM entity_records
-        WHERE entity_name = 'FeedPostLike'
-        GROUP BY COALESCE(data->>'post_id', '')`
-    ),
-    pool.query(
-      `SELECT COALESCE(data->>'post_id', '') AS post_id
-         FROM entity_records
-        WHERE entity_name = 'FeedPostLike'
-          AND COALESCE(data->>'user_id', '') = $1`,
-      [userId]
-    ),
-  ]);
-
-  const counts = countRows.rows.reduce((acc, row) => {
-    const postId = String(row.post_id || "").trim();
-    if (!postId) return acc;
-    acc[postId] = Number(row.like_count || 0);
-    return acc;
-  }, {});
-
-  const likedPostIds = likedRows.rows
-    .map((row) => String(row.post_id || "").trim())
-    .filter(Boolean);
-
-  return res.json({ counts, likedPostIds });
+  try {
+    const sharedPayload = await buildHomeFeedSharedPayload();
+    const userFeedLikes = await buildUserFeedLikeState(userId, sharedPayload.targetPostIds || []);
+    return res.json({
+      counts: sharedPayload.feedLikes?.counts || {},
+      likedPostIds: userFeedLikes.likedPostIds || [],
+    });
+  } catch (error) {
+    console.error("Failed to load feed likes", error);
+    return res.status(500).json({ error: "Nao foi possivel carregar as curtidas agora." });
+  }
 });
 
 router.post("/feed/likes/:postId", requireAuth, async (req, res) => {
@@ -3531,7 +3614,12 @@ router.post("/feed/likes/:postId", requireAuth, async (req, res) => {
     [postId]
   );
 
-  await deleteCacheKey(`gamification:home-feed-summary:${userId}`);
+  await Promise.all([
+    deleteCacheKey(`gamification:home-feed-summary:${userId}`),
+    deleteCacheKey("gamification:home-feed-shared"),
+    deleteCacheKey("gamification:feed:wins"),
+    deleteCacheByPrefix("gamification:home-feed-summary:"),
+  ]);
 
   return res.json({
     ok: true,
@@ -4208,8 +4296,13 @@ router.post("/admin/users/:id/restore-last-reset", requireAuth, requireAdmin, as
 });
 
 router.get("/leaderboards/weekly", requireAuth, async (_req, res) => {
-  const state = await buildGamificationState();
-  res.json(buildCompetitionBoard(state.leaderboardEntries, state.cycle, state.weeklyConfig));
+  try {
+    const payload = await buildCachedWeeklyCompetitionBoard();
+    return res.json(payload);
+  } catch (error) {
+    console.error("Failed to load weekly leaderboard", error);
+    return res.status(500).json({ error: "Nao foi possivel carregar o top semanal agora." });
+  }
 });
 
 router.get("/admin/gamification/overview", requireAuth, requireAdmin, async (_req, res) => {

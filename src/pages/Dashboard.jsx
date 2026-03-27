@@ -16,7 +16,7 @@ import { useAuth } from "@/lib/AuthContext";
 const PrizeGalleryCard = React.lazy(() => import("@/components/profile/PrizeGalleryCard"));
 const WinnersHistoryBox = React.lazy(() => import("@/components/WinnersHistoryBox"));
 
-const HEAVY_SECTIONS_DELAY_MS = 1200;
+const HEAVY_SECTIONS_DELAY_MS = 150;
 
 function DeferredDashboardSection({ active, children }) {
   if (!active) {
@@ -121,6 +121,7 @@ export default function Dashboard() {
                   emptySubtitle="Quando voce ganhar e resgatar recompensas, elas vao aparecer aqui automaticamente."
                   countLabel="na colecao"
                   privateView={true}
+                  eagerPreview={true}
                 />
               </DeferredDashboardSection>
             </motion.div>
@@ -177,6 +178,7 @@ export default function Dashboard() {
                   emptySubtitle="Quando voce ganhar e resgatar recompensas, elas vao aparecer aqui automaticamente."
                   countLabel="na colecao"
                   privateView={true}
+                  eagerPreview={true}
                 />
               </DeferredDashboardSection>
             </motion.div>
@@ -217,6 +219,7 @@ export default function Dashboard() {
                   emptySubtitle="Quando voce ganhar e resgatar recompensas, elas vao aparecer aqui automaticamente."
                   countLabel="na colecao"
                   privateView={true}
+                  eagerPreview={true}
                 />
               </DeferredDashboardSection>
 

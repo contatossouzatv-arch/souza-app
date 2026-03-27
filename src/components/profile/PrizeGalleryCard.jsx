@@ -322,6 +322,7 @@ export default function PrizeGalleryCard({
   emptySubtitle = "Abra o Baú Diário e os próximos prêmios vão aparecer aqui automaticamente.",
   countLabel = "ganhos",
   privateView = false,
+  eagerPreview = false,
 }) {
   const { user: viewer } = useAuth();
   const previewBatchSize = 3;
@@ -334,6 +335,11 @@ export default function PrizeGalleryCard({
   React.useEffect(() => {
     if (!userId) {
       setShouldLoadPreview(false);
+      return;
+    }
+
+    if (eagerPreview) {
+      setShouldLoadPreview(true);
       return;
     }
 
@@ -355,7 +361,7 @@ export default function PrizeGalleryCard({
 
     observer.observe(node);
     return () => observer.disconnect();
-  }, [userId]);
+  }, [eagerPreview, userId]);
 
   const { data: previewResponse = null, isLoading: isLoadingPreview } = useQuery({
     queryKey: ["user-prize-gallery-preview", userId],

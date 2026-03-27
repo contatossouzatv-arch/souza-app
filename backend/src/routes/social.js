@@ -2,7 +2,7 @@ import { Router } from "express";
 import { createEntity, createSecurityEvent, findUserById, listEntity, pool } from "../db/index.js";
 import { deleteCacheKey, getOrComputeCacheJson } from "../lib/cache.js";
 import { requireAuth } from "../middleware/auth.js";
-import { refreshGamificationState } from "./gamification.js";
+import { scheduleGamificationRefresh } from "./gamification.js";
 
 const router = Router();
 const DAILY_CHECKIN_CONFIG_KEY = "daily_checkin_config_v1";
@@ -523,7 +523,7 @@ router.post("/check-in/daily", requireAuth, async (req, res) => {
 
     emitEntityChanged(req, "daily_checkins", inserted?.id || dayKey, inserted ? "created" : "duplicate");
     emitEntityChanged(req, "gamification", userId, "updated");
-    await refreshGamificationState();
+    scheduleGamificationRefresh({ persistDerived: true });
 
     return res.json({
       ok: true,
@@ -719,7 +719,7 @@ async function upsertFollowState(req, res, active) {
     emitEntityChanged(req, "gamification", userId, "updated");
     emitEntityChanged(req, "gamification", targetUserId, "updated");
     await invalidateSocialCaches(userId, targetUserId);
-    await refreshGamificationState();
+    scheduleGamificationRefresh({ persistDerived: true });
 
     return res.json({ ok: true, state, alreadyProcessed: !applied });
   } catch (error) {
@@ -839,7 +839,7 @@ async function upsertLikeState(req, res, active) {
     emitEntityChanged(req, "gamification", userId, "updated");
     emitEntityChanged(req, "gamification", targetUserId, "updated");
     await invalidateSocialCaches(userId, targetUserId);
-    await refreshGamificationState();
+    scheduleGamificationRefresh({ persistDerived: true });
 
     return res.json({ ok: true, state, alreadyProcessed: !applied });
   } catch (error) {
