@@ -1,7 +1,12 @@
 ﻿import { Pool } from "pg";
 import { env } from "../config/env.js";
 
-export const pool = new Pool({ connectionString: env.databaseUrl });
+export const pool = new Pool({
+  connectionString: env.databaseUrl,
+  max: Math.max(1, Number(env.dbPoolMax || 10)),
+  idleTimeoutMillis: Math.max(1000, Number(env.dbIdleTimeoutMs || 30000)),
+  connectionTimeoutMillis: Math.max(1000, Number(env.dbConnectionTimeoutMs || 5000)),
+});
 
 const SLOW_QUERY_THRESHOLD_MS = 200;
 

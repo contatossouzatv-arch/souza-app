@@ -46,12 +46,6 @@ export function warmAppShell() {
     warmModule("layout", () => import("../Layout.jsx")),
     warmModule("dashboard", () => import("../pages/Dashboard")),
     warmModule("home", () => import("../pages/Home")),
-    warmModule("deposits", () => import("../pages/Deposits")),
-    warmModule("profile", () => import("../pages/Profile")),
-    warmModule("settings", () => import("../pages/Settings")),
-    warmModule("login", () => import("../pages/Login")),
-    warmModule("login-2fa", () => import("../pages/LoginTwoFactor")),
-    warmModule("onboarding", () => import("../pages/Onboarding")),
     warmAudio(mainMenuClickSound),
     ...(FEATURE_FLAGS.GAME_MAIN_ENABLED
       ? [import("@/lib/mainGameWarmup").then(({ warmMainGameAppShell }) => warmMainGameAppShell())]

@@ -7,8 +7,10 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Check, CircleHelp, ExternalLink, Sparkles } from "lucide-react";
 import { useAppSettings } from "@/hooks/useAppSettings";
+import { useAuth } from "@/lib/AuthContext";
 
 export default function OnboardingModal({ open, onComplete }) {
+  const { user, checkAppState } = useAuth();
   const [step, setStep] = useState(1);
   const [hasAccount, setHasAccount] = useState(null);
   const [platformId, setPlatformId] = useState("");
@@ -42,8 +44,6 @@ export default function OnboardingModal({ open, onComplete }) {
 
     setLoading(true);
     try {
-      const userData = await base44.auth.me();
-
       await base44.auth.updateMe({
         platform_id: platformId,
         has_platform_account: hasAccount,
@@ -53,8 +53,9 @@ export default function OnboardingModal({ open, onComplete }) {
       });
 
       try {
+        if (!user?.id) throw new Error("missing_user_id");
         await base44.entities.PlatformHistory.create({
-          user_id: userData.id,
+          user_id: user?.id,
           platform_name: currentPlatform?.name || "Plataforma",
           platform_id: platformId.trim(),
           created_at: new Date().toISOString(),
@@ -63,6 +64,7 @@ export default function OnboardingModal({ open, onComplete }) {
         console.log("Erro ao salvar histórico:", error);
       }
 
+      checkAppState({ background: true });
       onComplete();
     } catch (_error) {
       alert("Erro ao salvar. Tente novamente.");

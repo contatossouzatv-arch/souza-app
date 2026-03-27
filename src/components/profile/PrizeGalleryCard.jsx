@@ -8,6 +8,7 @@ import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { formatDailyChestPrize, getDailyChestRarityMeta } from "@/lib/dailyChest";
 import { toast } from "@/components/ui/use-toast";
 import { buildWhatsAppLink } from "@/lib/whatsapp";
+import { useAuth } from "@/lib/AuthContext";
 
 function getPrizeIcon(type) {
   const normalized = String(type || "").toLowerCase();
@@ -322,6 +323,7 @@ export default function PrizeGalleryCard({
   countLabel = "ganhos",
   privateView = false,
 }) {
+  const { user: viewer } = useAuth();
   const previewBatchSize = 3;
   const galleryBatchSize = 12;
   const [selectedItem, setSelectedItem] = React.useState(null);
@@ -332,12 +334,6 @@ export default function PrizeGalleryCard({
     queryFn: () => base44.gamification.prizeGallery({ userId, limit: previewBatchSize, offset: 0 }),
     enabled: Boolean(userId),
     staleTime: 30000,
-  });
-  const { data: viewer = null } = useQuery({
-    queryKey: ["prize-gallery-viewer"],
-    queryFn: () => base44.auth.me(),
-    enabled: Boolean(privateView),
-    staleTime: 60000,
   });
   const {
     data: pagedGallery = null,

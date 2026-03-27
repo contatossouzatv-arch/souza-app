@@ -131,9 +131,16 @@ const BADGE_CELEBRATION_STORAGE_PREFIX = "profile_badge_celebration_seen_v1_";
 const PROFILE_GESTURE_DRAG_ENABLED = true;
 const PROFILE_AUTOPLAY_MEDIA_ENABLED = true;
 const PROFILE_DEBUG_ENABLED = false;
+const PROFILE_CORE_LOAD_DELAY_MS = 180;
 const PROFILE_NON_CRITICAL_LOAD_DELAY_MS = 1800;
 const PROFILE_ENGAGED_QUERY_LIMIT = 3;
 const PROFILE_PUBLIC_ENRICHMENT_ENABLED = false;
+const PROFILE_PRIVATE_TABS = [
+  { id: "overview", label: "Resumo" },
+  { id: "engagement", label: "Engajamento" },
+  { id: "achievements", label: "Conquistas" },
+  { id: "prizes", label: "Prêmios" },
+];
 
 function profileDebugLog() {}
 
@@ -804,6 +811,8 @@ export default function Profile() {
   const [profileSwitchProgress, setProfileSwitchProgress] = useState(0);
   const [initialProfileLoadProgress, setInitialProfileLoadProgress] = useState(12);
   const [competitionRemainingMsLive, setCompetitionRemainingMsLive] = useState(0);
+  const [activePrivateTab, setActivePrivateTab] = useState("overview");
+  const [shouldLoadCoreProfileData, setShouldLoadCoreProfileData] = useState(false);
   const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
     typeof document === "undefined" ? true : document.visibilityState === "visible"
   );
@@ -822,6 +831,8 @@ export default function Profile() {
     phone: { checking: false, available: null, message: "" },
   });
   const [simState, setSimState] = useState({});
+  const [followPendingById, setFollowPendingById] = useState({});
+  const [likePendingById, setLikePendingById] = useState({});
   const [badgeCelebrationQueueSignal, setBadgeCelebrationQueueSignal] = useState(0);
   const pendingCelebrationSoundUnlockRef = React.useRef(null);
   const hasUnlockedBadgeWinAudioRef = React.useRef(false);
@@ -843,6 +854,10 @@ export default function Profile() {
     return params.get("user") || "";
   }, [location.search]);
   const isViewingPublicProfile = Boolean(selectedPublicProfileHandle || selectedPublicProfileId);
+  const isOverviewTabActive = activePrivateTab === "overview";
+  const isEngagementTabActive = activePrivateTab === "engagement";
+  const isAchievementsTabActive = activePrivateTab === "achievements";
+  const isPrizesTabActive = activePrivateTab === "prizes";
 
   const debugNavigate = React.useCallback(
     (target, options = undefined, reason = "unknown") => {
@@ -920,9 +935,25 @@ export default function Profile() {
 
   const [loadDiscoverProfiles, setLoadDiscoverProfiles] = useState(false);
 
+  useEffect(() => {
+    setShouldLoadCoreProfileData(false);
+    if (!user?.id || isViewingPublicProfile) return undefined;
+
+    const timerId = window.setTimeout(() => {
+      setShouldLoadCoreProfileData(true);
+    }, PROFILE_CORE_LOAD_DELAY_MS);
+
+    return () => window.clearTimeout(timerId);
+  }, [isViewingPublicProfile, location.pathname, location.search, user?.id]);
+
+  useEffect(() => {
+    if (isViewingPublicProfile) return;
+    setActivePrivateTab("overview");
+  }, [isViewingPublicProfile, user?.id]);
+
   const { data: discoverProfilesData } = useQuery({
     queryKey: ["profile-discover-profiles", user?.id],
-    queryFn: () => base44.social.discover({ limit: 24, offset: 0 }),
+    queryFn: () => base44.social.discover({ limit: 12, offset: 0 }),
     enabled: !!user && loadDiscoverProfiles,
     staleTime: 60000,
     refetchOnWindowFocus: false,
@@ -1159,6 +1190,7 @@ export default function Profile() {
       queryClient.invalidateQueries({ queryKey: ["profile-discover-profiles"] });
       queryClient.invalidateQueries({ queryKey: ["current-user"] });
       queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-competition-board-authoritative"] });
       queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative"] });
       queryClient.invalidateQueries({ queryKey: ["my-profile-images", user?.id] });
       queryClient.invalidateQueries({ queryKey: ["profile-all-deposits"] });
@@ -1199,6 +1231,7 @@ export default function Profile() {
       queryClient.invalidateQueries({ queryKey: ["profile-discover-profiles"] });
       queryClient.invalidateQueries({ queryKey: ["current-user"] });
       queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-competition-board-authoritative"] });
       queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative"] });
       queryClient.invalidateQueries({ queryKey: ["my-profile-images", user?.id] });
       queryClient.invalidateQueries({ queryKey: ["profile-all-deposits"] });
@@ -1213,30 +1246,62 @@ export default function Profile() {
   });
 
   const {
-    data: profileGamification,
+    data: profileSummaryData,
     isLoading: loadingProfileGamification,
     isFetching: fetchingProfileGamification,
     isError: isProfileGamificationError,
     error: profileGamificationError,
-    refetch: refetchProfileGamification,
+    refetch: refetchProfileSummary,
   } = useQuery({
     queryKey: ["profile-gamification-authoritative", user?.id],
     queryFn: ({ signal }) => {
-      profileDebugLog("query:profile-gamification-authoritative", {
+      profileDebugLog("query:profile-summary-authoritative", {
         loggedUserId: user?.id || "",
         pathname: location.pathname,
         search: location.search,
       });
-      return base44.gamification.profileMetrics({ signal });
+      return base44.gamification.profileSummary({ signal });
     },
-    enabled: !!user,
+    enabled: !!user && !isViewingPublicProfile && shouldLoadCoreProfileData,
     staleTime: 120000,
     retry: 1,
   });
+  const shouldLoadCompetitionBoard =
+    Boolean(user) &&
+    !isViewingPublicProfile &&
+    shouldLoadCoreProfileData &&
+    activePrivateTab === PROFILE_PRIVATE_TABS.OVERVIEW;
+  const {
+    data: profileCompetitionBoardData,
+    isFetching: fetchingProfileCompetitionBoard,
+    refetch: refetchProfileCompetitionBoard,
+  } = useQuery({
+    queryKey: ["profile-competition-board-authoritative", user?.id],
+    queryFn: ({ signal }) => base44.gamification.profileCompetitionBoard({ signal }),
+    enabled: shouldLoadCompetitionBoard,
+    staleTime: 120000,
+    retry: 1,
+  });
+  const profileGamification = useMemo(() => ({
+    ...(profileSummaryData || {}),
+    competitionBoard:
+      profileCompetitionBoardData?.competitionBoard ||
+      profileSummaryData?.competitionBoard ||
+      {
+        config: DEFAULT_PROFILE_COMPETITION_CONFIG,
+        cycle: { remainingMs: 0, progressPct: 0 },
+        entries: [],
+        rewardLabel: "",
+      },
+    currentCompetitionEntry:
+      profileCompetitionBoardData?.currentCompetitionEntry ||
+      profileSummaryData?.currentCompetitionEntry ||
+      null,
+  }), [profileCompetitionBoardData, profileSummaryData]);
   const deferredProfileGamification = React.useDeferredValue(profileGamification);
   const [isRefreshingCompetitionData, setIsRefreshingCompetitionData] = useState(false);
   const [loadNonCriticalProfileData, setLoadNonCriticalProfileData] = useState(false);
-  const hasProfileGamification = Boolean(profileGamification);
+  const hasProfileGamification = Boolean(profileSummaryData);
   const isProfileGamificationPending = !hasProfileGamification && (loadingProfileGamification || fetchingProfileGamification);
   const isProfileGamificationUnavailable = !hasProfileGamification && isProfileGamificationError;
   const canLoadDeferredProfileQueries =
@@ -1247,14 +1312,14 @@ export default function Profile() {
 
   useEffect(() => {
     setLoadDiscoverProfiles(false);
-    if (!canLoadDeferredProfileQueries) return undefined;
+    if (!canLoadDeferredProfileQueries || !isEngagementTabActive) return undefined;
 
     const timerId = window.setTimeout(() => {
       setLoadDiscoverProfiles(true);
     }, PROFILE_NON_CRITICAL_LOAD_DELAY_MS + 600);
 
     return () => window.clearTimeout(timerId);
-  }, [canLoadDeferredProfileQueries, location.pathname, location.search, user?.id]);
+  }, [canLoadDeferredProfileQueries, isEngagementTabActive, location.pathname, location.search, user?.id]);
 
   useEffect(() => {
     setLoadNonCriticalProfileData(false);
@@ -1271,8 +1336,12 @@ export default function Profile() {
     if (!user?.id) return;
     setIsRefreshingCompetitionData(true);
     try {
-      const freshGamification = await base44.gamification.profileMetrics({ force: true });
-      queryClient.setQueryData(["profile-gamification-authoritative", user.id], freshGamification);
+      const [freshSummary, freshBoard] = await Promise.all([
+        base44.gamification.profileSummary({ force: true }),
+        base44.gamification.profileCompetitionBoard({ force: true }),
+      ]);
+      queryClient.setQueryData(["profile-gamification-authoritative", user.id], freshSummary);
+      queryClient.setQueryData(["profile-competition-board-authoritative", user.id], freshBoard);
       await Promise.allSettled([
         queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative", user.id] }),
         queryClient.invalidateQueries({ queryKey: ["social-my-state", user.id] }),
@@ -2657,6 +2726,7 @@ export default function Profile() {
 
   const syncGamificationViews = React.useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative", user?.id] });
+    queryClient.invalidateQueries({ queryKey: ["profile-competition-board-authoritative", user?.id] });
     queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative", user?.id] });
     queryClient.invalidateQueries({ queryKey: ["social-my-state", user?.id] });
     queryClient.invalidateQueries({ queryKey: ["social-following-list", user?.id] });
@@ -2714,6 +2784,27 @@ export default function Profile() {
     [queryClient, user?.id]
   );
 
+  const patchSocialRelationLists = React.useCallback(
+    (targetUserId, patch) => {
+      if (!targetUserId || !user?.id) return;
+      const applyPatch = (profile) => {
+        if (!profile || String(profile.id || "") !== String(targetUserId)) return profile;
+        return {
+          ...profile,
+          ...(typeof patch === "function" ? patch(profile) : patch),
+        };
+      };
+
+      queryClient.setQueryData(["social-following-list", user.id], (current) =>
+        Array.isArray(current) ? current.map(applyPatch) : current
+      );
+      queryClient.setQueryData(["social-follower-list", user.id], (current) =>
+        Array.isArray(current) ? current.map(applyPatch) : current
+      );
+    },
+    [queryClient, user?.id]
+  );
+
   useEffect(() => {
     if (!isProfileNotificationsOpen) return;
     if (!unreadProfileNotifications.length) return;
@@ -2753,6 +2844,23 @@ export default function Profile() {
           isFollowing: Boolean(response?.state?.isFollowing),
           followers: Number(response?.state?.followers ?? profile?.followers ?? 0),
         }));
+        patchSocialRelationLists(targetUserId, (profile) => ({
+          isFollowing: Boolean(response?.state?.isFollowing),
+          followers: Number(response?.state?.followers ?? profile?.followers ?? 0),
+        }));
+      }
+      if (user?.id && targetUserId && targetUserId !== user.id) {
+        queryClient.setQueryData(["social-my-state", user.id], (previous) => {
+          const baseState = previous && typeof previous === "object" ? previous : {};
+          const currentFollowing = Number(baseState.following || 0);
+          const nextFollowing = response?.alreadyProcessed
+            ? currentFollowing
+            : currentFollowing + (response?.state?.isFollowing ? 1 : -1);
+          return {
+            ...baseState,
+            following: Math.max(0, nextFollowing),
+          };
+        });
       }
       if (response?.state?.targetUserId === user?.id || response?.state?.targetUserId === "me") {
         setSocial((prev) => ({
@@ -2803,6 +2911,10 @@ export default function Profile() {
       }
       if (targetUserId) {
         patchProfileCollections(targetUserId, (profile) => ({
+          isLiked: Boolean(response?.state?.isLiked),
+          likes: Number(response?.state?.likes ?? profile?.likes ?? 0),
+        }));
+        patchSocialRelationLists(targetUserId, (profile) => ({
           isLiked: Boolean(response?.state?.isLiked),
           likes: Number(response?.state?.likes ?? profile?.likes ?? 0),
         }));
@@ -2870,6 +2982,7 @@ export default function Profile() {
       await Promise.allSettled([
         queryClient.invalidateQueries({ queryKey: ["daily-checkin-state", user?.id] }),
         queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative", user?.id] }),
+        queryClient.invalidateQueries({ queryKey: ["profile-competition-board-authoritative", user?.id] }),
         queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative", user?.id] }),
       ]);
       toast({
@@ -2990,6 +3103,7 @@ export default function Profile() {
     }));
 
     try {
+      setFollowPendingById((prev) => ({ ...prev, [targetUserId]: true }));
       await followMutation.mutateAsync({ targetUserId, shouldFollow });
     } catch {
       setSimState((prev) => ({
@@ -2999,6 +3113,8 @@ export default function Profile() {
           ...current,
         },
       }));
+    } finally {
+      setFollowPendingById((prev) => ({ ...prev, [targetUserId]: false }));
     }
   };
 
@@ -3034,6 +3150,7 @@ export default function Profile() {
       });
 
       try {
+        setFollowPendingById((prev) => ({ ...prev, [targetUserId]: true }));
         const response = await followMutation.mutateAsync({ targetUserId, shouldFollow });
         if (response?.state) {
           syncDiscoverCardState(targetUserId, (prev) => ({
@@ -3044,6 +3161,8 @@ export default function Profile() {
         }
       } catch {
         syncDiscoverCardState(targetUserId, current);
+      } finally {
+        setFollowPendingById((prev) => ({ ...prev, [targetUserId]: false }));
       }
     },
     [followMutation, simState, syncDiscoverCardState, user?.id]
@@ -3070,6 +3189,7 @@ export default function Profile() {
       });
 
       try {
+        setFollowPendingById((prev) => ({ ...prev, [targetUserId]: true }));
         const response = await followMutation.mutateAsync({ targetUserId, shouldFollow });
         if (response?.state) {
           syncDiscoverCardState(targetUserId, (prev) => ({
@@ -3084,6 +3204,8 @@ export default function Profile() {
           isFollowing: current.isFollowing,
           followers: current.followers,
         });
+      } finally {
+        setFollowPendingById((prev) => ({ ...prev, [targetUserId]: false }));
       }
     },
     [followMutation, simState, syncDiscoverCardState, user?.id]
@@ -3186,6 +3308,7 @@ export default function Profile() {
     }));
 
     try {
+      setLikePendingById((prev) => ({ ...prev, [targetUserId]: true }));
       await likeMutation.mutateAsync({ targetUserId, shouldLike });
     } catch {
       setSimState((prev) => ({
@@ -3195,6 +3318,8 @@ export default function Profile() {
           ...current,
         },
       }));
+    } finally {
+      setLikePendingById((prev) => ({ ...prev, [targetUserId]: false }));
     }
   };
 
@@ -3218,6 +3343,7 @@ export default function Profile() {
       });
 
       try {
+        setLikePendingById((prev) => ({ ...prev, [targetUserId]: true }));
         const response = await likeMutation.mutateAsync({ targetUserId, shouldLike });
         if (response?.state) {
           syncDiscoverCardState(targetUserId, (prev) => ({
@@ -3228,6 +3354,8 @@ export default function Profile() {
         }
       } catch {
         syncDiscoverCardState(targetUserId, current);
+      } finally {
+        setLikePendingById((prev) => ({ ...prev, [targetUserId]: false }));
       }
     },
     [likeMutation, simState, syncDiscoverCardState, user?.id]
@@ -3613,6 +3741,7 @@ export default function Profile() {
       queryClient.invalidateQueries({ queryKey: ["profile-discover-profiles"] });
       queryClient.invalidateQueries({ queryKey: ["current-user"] });
       queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-competition-board-authoritative"] });
       setIsEditOpen(false);
       toast({
         title: "Perfil atualizado",
@@ -4543,7 +4672,7 @@ export default function Profile() {
                 <button
                   type="button"
                   onClick={isSelectedRealProfile ? toggleAuthoritativePublicFollow : () => toggleSimFollow(selectedPublicProfile.id)}
-                  disabled={isSelectedRealProfile && followMutation.isPending}
+                  disabled={isSelectedRealProfile && Boolean(followPendingById[selectedPublicProfile.id])}
                   className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
                     publicState?.isFollowing
                       ? "bg-cyan-500/25 text-cyan-100 ring-1 ring-cyan-400/40"
@@ -4555,7 +4684,7 @@ export default function Profile() {
                 <button
                   type="button"
                   onClick={isSelectedRealProfile ? toggleAuthoritativePublicLike : () => toggleSimLike(selectedPublicProfile.id)}
-                  disabled={isSelectedRealProfile && likeMutation.isPending}
+                  disabled={isSelectedRealProfile && Boolean(likePendingById[selectedPublicProfile.id])}
                   className={`rounded-xl px-3 py-2 text-xs font-bold text-white transition ${
                     publicState?.isLiked ? "bg-pink-500 hover:bg-pink-400" : "bg-pink-600/60 hover:bg-pink-500/80"
                   }`}
@@ -5063,7 +5192,29 @@ export default function Profile() {
 
       </Card>
 
-      {isProfileGamificationPending ? (
+      <Card className="border-slate-800 bg-slate-900/70 p-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {PROFILE_PRIVATE_TABS.map((tab) => {
+            const isActive = activePrivateTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActivePrivateTab(tab.id)}
+                className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
+                  isActive
+                    ? "bg-cyan-500 text-slate-950"
+                    : "bg-slate-950/60 text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      {isEngagementTabActive ? (isProfileGamificationPending ? (
         renderSectionSkeleton({
           title: "Mais Engajados",
           subtitle: "Carregando os perfis com maior nível, top semanal e engajamento.",
@@ -5224,9 +5375,9 @@ export default function Profile() {
             })}
           </div>
         </Card>
-      )}
+      )) : null}
 
-      {isProfileGamificationPending ? (
+      {isOverviewTabActive ? (isProfileGamificationPending ? (
         renderSectionSkeleton({
           title: "Resumo Publico",
           subtitle: "Buscando bilhetes, posição no top semanal e progresso geral.",
@@ -5269,9 +5420,9 @@ export default function Profile() {
             </div>
           </div>
         </Card>
-      )}
+      )) : null}
 
-      {isProfileGamificationPending ? (
+      {isAchievementsTabActive ? (isProfileGamificationPending ? (
         renderSectionSkeleton({
           title: "Selos e Conquistas",
           subtitle: "Carregando selos, níveis e progresso do perfil.",
@@ -5352,9 +5503,9 @@ export default function Profile() {
             ))}
           </div>
         </Card>
-      )}
+      )) : null}
 
-      <Suspense
+      {isPrizesTabActive ? (<Suspense
         fallback={renderSectionSkeleton({
           title: "Seus Prêmios",
           subtitle: "Montando sua galeria privada de prêmios.",
@@ -5370,7 +5521,7 @@ export default function Profile() {
           countLabel="na coleção"
           privateView={true}
         />
-      </Suspense>
+      </Suspense>) : null}
 
       <Dialog open={isPointsHistoryOpen} onOpenChange={setIsPointsHistoryOpen}>
         <DialogContent className="border-cyan-500/30 bg-slate-950 text-white shadow-[0_0_45px_rgba(34,211,238,0.15)]">
@@ -5914,7 +6065,7 @@ export default function Profile() {
                     <Button
                       type="button"
                       size="sm"
-                      disabled={followMutation.isPending}
+                      disabled={Boolean(followPendingById[profile.id])}
                       onClick={() => toggleSocialListFollow(profile)}
                       className={
                         profile.isFollowing

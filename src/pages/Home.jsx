@@ -39,7 +39,7 @@ export default function Home() {
   const { data: feedSummary = null, isLoading } = useQuery({
     queryKey: ["inicio-feed-summary"],
     queryFn: () => base44.home.feedSummary(),
-    staleTime: 15000,
+    staleTime: 30000,
   });
 
   const posts = feedSummary?.posts || [];
@@ -49,7 +49,7 @@ export default function Home() {
   const { data: homeSummary } = useQuery({
     queryKey: ["inicio-summary"],
     queryFn: () => base44.home.summary(),
-    staleTime: 60000,
+    staleTime: 120000,
   });
 
   const winnerUserIds = useMemo(
@@ -68,7 +68,7 @@ export default function Home() {
     queryKey: ["inicio-winner-users", winnerUserIds.join(",")],
     queryFn: () => base44.profile.publicBasics(winnerUserIds),
     enabled: winnerUserIds.length > 0,
-    staleTime: 60000,
+    staleTime: 300000,
     retry: false,
   });
 

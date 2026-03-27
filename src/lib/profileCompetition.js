@@ -173,6 +173,7 @@ export function buildCompetitionLeaderboard({
       avatar_emoji: String(user.avatar_emoji || ""),
       profile_avatar_id: String(user.profile_avatar_id || ""),
       profile_image_mode: String(user.profile_image_mode || "avatar"),
+      profile_image_status: String(user.profile_image_status || "none"),
       profile_image_url: String(user.profile_image_url || ""),
       points: 0,
       breakdown: {},

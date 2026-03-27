@@ -77,7 +77,6 @@ export default function Onboarding() {
 
     setLoading(true);
     try {
-      const userData = await base44.auth.me();
       await base44.auth.updateMe({
         platform_id: platformId,
         has_platform_account: hasAccount,
@@ -88,8 +87,9 @@ export default function Onboarding() {
       });
 
       try {
+        if (!user?.id) throw new Error("missing_user_id");
         await base44.entities.PlatformHistory.create({
-          user_id: userData.id,
+          user_id: user?.id,
           platform_name: currentPlatform?.name || "Plataforma",
           platform_id: platformId.trim(),
           created_at: new Date().toISOString(),

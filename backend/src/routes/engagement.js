@@ -23,8 +23,10 @@ import {
   getWinningSummary,
   listActivePromoBoxes,
 } from "../services/raffleReadService.js";
+import { getOrComputeCacheJson } from "../lib/cache.js";
 
 const router = Router();
+const DYNAMICS_SUMMARY_TTL_MS = 10_000;
 
 function requestMeta(req) {
   return {
@@ -64,46 +66,49 @@ router.post("/live-draws/:id/join", requireAuth, async (req, res) => {
 
 router.get("/dynamics/summary", requireAuth, async (req, res) => {
   const userId = req.auth.sub;
+  const payload = await getOrComputeCacheJson(`engagement:dynamics-summary:${userId}`, DYNAMICS_SUMMARY_TTL_MS, async () => {
+    const [promoBoxes, activeInstantRaffle, activeLiveDraw, activeGameCall] = await Promise.all([
+      listActivePromoBoxes(),
+      findActiveEntity("InstantRaffle"),
+      findActiveEntity("LiveDrawRaffle"),
+      findActiveEntity("GameCallRaffle"),
+    ]);
 
-  const [promoBoxes, activeInstantRaffle, activeLiveDraw, activeGameCall] = await Promise.all([
-    listActivePromoBoxes(),
-    findActiveEntity("InstantRaffle"),
-    findActiveEntity("LiveDrawRaffle"),
-    findActiveEntity("GameCallRaffle"),
-  ]);
+    const [instantSummary, liveDrawSummary, gameCallSummary] = await Promise.all([
+      activeInstantRaffle?.id
+        ? getInstantRaffleSummary(activeInstantRaffle.id, userId)
+        : Promise.resolve({
+            myParticipation: [],
+            participantsPreview: [],
+            participantsCount: 0,
+            winners: [],
+          }),
+      activeLiveDraw?.id
+        ? getLiveDrawSummary(activeLiveDraw.id, userId)
+        : Promise.resolve({ myParticipation: [] }),
+      activeGameCall?.id
+        ? getGameCallSummary(activeGameCall.id, userId)
+        : Promise.resolve({ myParticipation: null }),
+    ]);
 
-  const [instantSummary, liveDrawSummary, gameCallSummary] = await Promise.all([
-    activeInstantRaffle?.id
-      ? getInstantRaffleSummary(activeInstantRaffle.id, userId)
-      : Promise.resolve({
-          myParticipation: [],
-          participantsPreview: [],
-          participantsCount: 0,
-          winners: [],
-        }),
-    activeLiveDraw?.id
-      ? getLiveDrawSummary(activeLiveDraw.id, userId)
-      : Promise.resolve({ myParticipation: [] }),
-    activeGameCall?.id
-      ? getGameCallSummary(activeGameCall.id, userId)
-      : Promise.resolve({ myParticipation: null }),
-  ]);
-
-  res.json({
-    promoBoxes,
-    instantRaffle: {
-      raffle: activeInstantRaffle,
-      ...instantSummary,
-    },
-    liveDraw: {
-      raffle: activeLiveDraw,
-      ...liveDrawSummary,
-    },
-    gameCall: {
-      raffle: activeGameCall,
-      ...gameCallSummary,
-    },
+    return {
+      promoBoxes,
+      instantRaffle: {
+        raffle: activeInstantRaffle,
+        ...instantSummary,
+      },
+      liveDraw: {
+        raffle: activeLiveDraw,
+        ...liveDrawSummary,
+      },
+      gameCall: {
+        raffle: activeGameCall,
+        ...gameCallSummary,
+      },
+    };
   });
+
+  res.json(payload);
 });
 
 router.get("/winnings/summary", requireAuth, async (req, res) => {

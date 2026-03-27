@@ -116,10 +116,15 @@ export default function Layout({ children }) {
   }, []);
 
   React.useEffect(() => {
-    let cancelled = false;
-    const idleScheduler = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 180));
+    const likelyNextRoutes = navItems
+      .map((item) => item.path)
+      .filter((path) => path && path !== location.pathname)
+      .slice(0, 2);
+    const idleScheduler = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 600));
     const idleHandle = idleScheduler(() => {
-      Object.values(routePreloaders).forEach((preload) => {
+      likelyNextRoutes.forEach((path) => {
+        const preload = routePreloaders[path];
+        if (!preload) return;
         Promise.resolve()
           .then(() => preload())
           .catch(() => {});
@@ -127,15 +132,13 @@ export default function Layout({ children }) {
     });
 
     return () => {
-      cancelled = true;
       if (typeof window.cancelIdleCallback === "function" && typeof idleHandle === "number") {
         window.cancelIdleCallback(idleHandle);
         return;
       }
-      if (!cancelled) return;
       window.clearTimeout(idleHandle);
     };
-  }, []);
+  }, [location.pathname]);
 
   const playMenuClickSound = () => {
     if (!isMenuSoundEnabled()) return;

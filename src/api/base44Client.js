@@ -42,6 +42,10 @@ function resolveTimeoutMs(path = "", timeoutMs) {
   if (
     normalizedPath === "/api/profile/metrics" ||
     normalizedPath === "/api/profile/metrics?force=true" ||
+    normalizedPath === "/api/profile/summary" ||
+    normalizedPath === "/api/profile/summary?force=true" ||
+    normalizedPath === "/api/profile/competition-board" ||
+    normalizedPath === "/api/profile/competition-board?force=true" ||
     normalizedPath.startsWith("/api/profile/public/")
   ) {
     return PROFILE_REQUEST_TIMEOUT_MS;
@@ -1648,6 +1652,20 @@ export const base44 = {
   },
 
   gamification: {
+    async profileSummary(options = {}) {
+      const params = new URLSearchParams();
+      if (options?.force) params.set("force", "true");
+      const suffix = params.toString() ? `?${params.toString()}` : "";
+      return request(`/api/profile/summary${suffix}`, options);
+    },
+
+    async profileCompetitionBoard(options = {}) {
+      const params = new URLSearchParams();
+      if (options?.force) params.set("force", "true");
+      const suffix = params.toString() ? `?${params.toString()}` : "";
+      return request(`/api/profile/competition-board${suffix}`, options);
+    },
+
     async profileMetrics(options = {}) {
       const params = new URLSearchParams();
       if (options?.force) params.set("force", "true");

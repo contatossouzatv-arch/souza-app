@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React, { Suspense } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -11,19 +11,48 @@ import TechLoader from "../components/TechLoader";
 import { Card } from "@/components/ui/card";
 import { Sparkles, Trophy, Gamepad2 } from "lucide-react";
 import LegalLinksBar from "@/components/LegalLinksBar";
-import PrizeGalleryCard from "@/components/profile/PrizeGalleryCard";
-import WinnersHistoryBox from "@/components/WinnersHistoryBox";
 import { useAuth } from "@/lib/AuthContext";
+
+const PrizeGalleryCard = React.lazy(() => import("@/components/profile/PrizeGalleryCard"));
+const WinnersHistoryBox = React.lazy(() => import("@/components/WinnersHistoryBox"));
+
+const HEAVY_SECTIONS_DELAY_MS = 1200;
+
+function DeferredDashboardSection({ active, children }) {
+  if (!active) {
+    return (
+      <Card className="border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-400">
+        Preparando informacoes extras...
+      </Card>
+    );
+  }
+
+  return (
+    <Suspense fallback={<Card className="border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-300">Carregando painel...</Card>}>
+      {children}
+    </Suspense>
+  );
+}
 
 export default function Dashboard() {
   const { user, isLoadingAuth } = useAuth();
+  const [showHeavySections, setShowHeavySections] = React.useState(false);
 
   const { data: dynamicsSummary, isLoading: dynamicsLoading } = useQuery({
     queryKey: ["dashboard-dynamics-summary"],
     queryFn: () => base44.dynamics.summary(),
     enabled: !!user,
-    staleTime: 30000,
+    staleTime: 45000,
   });
+
+  React.useEffect(() => {
+    setShowHeavySections(false);
+    if (!user || dynamicsLoading) return undefined;
+    const timerId = window.setTimeout(() => {
+      setShowHeavySections(true);
+    }, HEAVY_SECTIONS_DELAY_MS);
+    return () => window.clearTimeout(timerId);
+  }, [dynamicsLoading, user?.id]);
 
   const promoBoxes = dynamicsSummary?.promoBoxes || [];
   const instantSummary = dynamicsSummary?.instantRaffle || null;
@@ -61,14 +90,14 @@ export default function Dashboard() {
       <AutoAppUpdater />
 
       <motion.div
-        className="w-full space-y-4 px-2 sm:px-3 py-2 sm:py-3"
+        className="w-full space-y-4 px-2 py-2 sm:px-3 sm:py-3"
         variants={containerVariants}
         initial={false}
         animate="show"
       >
-        <motion.div variants={itemVariants} className="text-center px-2">
-          <h1 className="text-2xl font-bold text-white">Sorteios e Dinâmicas</h1>
-          <p className="text-sm text-slate-400">Entre nas dinâmicas ativas e acompanhe os resultados ao vivo.</p>
+        <motion.div variants={itemVariants} className="px-2 text-center">
+          <h1 className="text-2xl font-bold text-white">Sorteios e Dinamicas</h1>
+          <p className="text-sm text-slate-400">Entre nas dinamicas ativas e acompanhe os resultados ao vivo.</p>
         </motion.div>
 
         {hasActiveDynamics ? (
@@ -92,15 +121,15 @@ export default function Dashboard() {
             {promoBoxes.length > 0 ? (
               <motion.div variants={itemVariants} className="space-y-4">
                 {promoBoxes.map((promo) => (
-                  <Card key={promo.id} className="bg-slate-900/70 border-slate-800 p-4">
+                  <Card key={promo.id} className="border-slate-800 bg-slate-900/70 p-4">
                     {promo.image_url ? (
                       <img
                         src={promo.image_url}
                         alt={promo.title}
-                        className="w-full h-44 object-cover rounded-lg mb-3"
+                        className="mb-3 h-44 w-full rounded-lg object-cover"
                       />
                     ) : null}
-                    <h3 className="text-lg font-bold text-white mb-1">{promo.title}</h3>
+                    <h3 className="mb-1 text-lg font-bold text-white">{promo.title}</h3>
                     <p className="text-sm text-slate-300">{promo.description}</p>
                   </Card>
                 ))}
@@ -108,19 +137,23 @@ export default function Dashboard() {
             ) : null}
 
             <motion.div variants={itemVariants}>
-              <WinnersHistoryBox />
+              <DeferredDashboardSection active={showHeavySections}>
+                <WinnersHistoryBox />
+              </DeferredDashboardSection>
             </motion.div>
 
             <motion.div variants={itemVariants}>
-              <PrizeGalleryCard
-                userId={user.id}
-                title="Seus Prêmios"
-                subtitle="Aqui você acompanha sua coleção pessoal de prêmios já ganhos e registrados no app."
-                emptyTitle="Sua coleção de prêmios ainda está vazia"
-                emptySubtitle="Quando você ganhar e resgatar recompensas, elas vão aparecer aqui automaticamente."
-                countLabel="na coleção"
-                privateView={true}
-              />
+              <DeferredDashboardSection active={showHeavySections}>
+                <PrizeGalleryCard
+                  userId={user.id}
+                  title="Seus Premios"
+                  subtitle="Aqui voce acompanha sua colecao pessoal de premios ja ganhos e registrados no app."
+                  emptyTitle="Sua colecao de premios ainda esta vazia"
+                  emptySubtitle="Quando voce ganhar e resgatar recompensas, elas vao aparecer aqui automaticamente."
+                  countLabel="na colecao"
+                  privateView={true}
+                />
+              </DeferredDashboardSection>
             </motion.div>
           </>
         ) : (
@@ -130,9 +163,9 @@ export default function Dashboard() {
                 <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/15">
                   <Sparkles className="h-7 w-7 text-cyan-300" />
                 </div>
-                <h3 className="text-xl font-bold text-white mb-2">Nenhum sorteio ativo no momento</h3>
-                <p className="text-sm text-slate-400 mb-5">
-                  Assim que uma dinâmica for ativada, ela aparece aqui automaticamente para você participar.
+                <h3 className="mb-2 text-xl font-bold text-white">Nenhum sorteio ativo no momento</h3>
+                <p className="mb-5 text-sm text-slate-400">
+                  Assim que uma dinamica for ativada, ela aparece aqui automaticamente para voce participar.
                 </p>
                 <div className="grid grid-cols-3 gap-2 text-xs text-slate-300">
                   <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-2">
@@ -145,23 +178,27 @@ export default function Dashboard() {
                   </div>
                   <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-2">
                     <Sparkles className="mx-auto mb-1 h-4 w-4 text-pink-400" />
-                    Dinâmica rápida
+                    Dinamica rapida
                   </div>
                 </div>
               </Card>
 
-              <PrizeGalleryCard
-                userId={user.id}
-                title="Seus Prêmios"
-                subtitle="Aqui você acompanha sua coleção pessoal de prêmios já ganhos e registrados no app."
-                emptyTitle="Sua coleção de prêmios ainda está vazia"
-                emptySubtitle="Quando você ganhar e resgatar recompensas, elas vão aparecer aqui automaticamente."
-                countLabel="na coleção"
-                privateView={true}
-              />
+              <DeferredDashboardSection active={showHeavySections}>
+                <PrizeGalleryCard
+                  userId={user.id}
+                  title="Seus Premios"
+                  subtitle="Aqui voce acompanha sua colecao pessoal de premios ja ganhos e registrados no app."
+                  emptyTitle="Sua colecao de premios ainda esta vazia"
+                  emptySubtitle="Quando voce ganhar e resgatar recompensas, elas vao aparecer aqui automaticamente."
+                  countLabel="na colecao"
+                  privateView={true}
+                />
+              </DeferredDashboardSection>
 
               <div className="mt-4">
-                <WinnersHistoryBox />
+                <DeferredDashboardSection active={showHeavySections}>
+                  <WinnersHistoryBox />
+                </DeferredDashboardSection>
               </div>
             </div>
           </motion.div>
@@ -174,4 +211,3 @@ export default function Dashboard() {
     </div>
   );
 }
-

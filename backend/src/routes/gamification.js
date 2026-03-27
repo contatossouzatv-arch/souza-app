@@ -28,14 +28,16 @@ const POINTS_RULES_KEY = "achievement_points_rules_v1";
 const PROFILE_COMPETITION_KEY = "profile_competition_rules_v1";
 const WEEKLY_TOP_CONFIG_KEY = "weekly_top_config_v2";
 const DAILY_CHECKIN_CONFIG_KEY = "daily_checkin_config_v1";
-const GAMIFICATION_STATE_TTL_MS = 30000;
-const GAMIFICATION_RULES_TTL_MS = 30000;
-const WEEKLY_CYCLE_TTL_MS = 15000;
-const PROFILE_METRICS_TTL_MS = 15000;
-const WINNERS_HISTORY_TTL_MS = 30000;
-const HOME_SUMMARY_TTL_MS = 30000;
-const HOME_FEED_SUMMARY_TTL_MS = 15000;
-const PUBLIC_UI_CONFIG_TTL_MS = 30000;
+const GAMIFICATION_STATE_TTL_MS = 60000;
+const GAMIFICATION_RULES_TTL_MS = 60000;
+const WEEKLY_CYCLE_TTL_MS = 30000;
+const PROFILE_METRICS_TTL_MS = 45000;
+const WINNERS_HISTORY_TTL_MS = 60000;
+const HOME_SUMMARY_TTL_MS = 120000;
+const HOME_FEED_SUMMARY_TTL_MS = 30000;
+const PUBLIC_UI_CONFIG_TTL_MS = 60000;
+const PUBLIC_PROFILE_SUMMARY_TTL_MS = 30000;
+const PROFILE_PRIZE_GALLERY_TTL_MS = 20000;
 
 const DEFAULT_POINTS_RULES = {
   points_per_participation: 12,
@@ -1725,6 +1727,38 @@ function buildCompetitionBoard(entries, cycle, config) {
   };
 }
 
+function extractProfileSummaryPayload(payload = {}) {
+  const competitionBoard = payload?.competitionBoard || {};
+  return {
+    metrics: payload?.metrics || {},
+    pointsRules: payload?.pointsRules || DEFAULT_POINTS_RULES,
+    badgeRules: payload?.badgeRules || DEFAULT_BADGE_RULES,
+    dailyCheckInConfig: payload?.dailyCheckInConfig || DEFAULT_DAILY_CHECKIN_CONFIG,
+    achievements: Array.isArray(payload?.achievements) ? payload.achievements : [],
+    progressBadges: Array.isArray(payload?.progressBadges) ? payload.progressBadges : [],
+    currentCompetitionEntry: payload?.currentCompetitionEntry || null,
+    competitionBoard: {
+      config: competitionBoard?.config || DEFAULT_PROFILE_COMPETITION_CONFIG,
+      cycle: competitionBoard?.cycle || { remainingMs: 0, progressPct: 0 },
+      entries: [],
+      rewardLabel: competitionBoard?.rewardLabel || "",
+    },
+  };
+}
+
+function extractProfileCompetitionBoardPayload(payload = {}) {
+  const competitionBoard = payload?.competitionBoard || {};
+  return {
+    competitionBoard: {
+      config: competitionBoard?.config || DEFAULT_PROFILE_COMPETITION_CONFIG,
+      cycle: competitionBoard?.cycle || { remainingMs: 0, progressPct: 0 },
+      entries: Array.isArray(competitionBoard?.entries) ? competitionBoard.entries : [],
+      rewardLabel: competitionBoard?.rewardLabel || "",
+    },
+    currentCompetitionEntry: payload?.currentCompetitionEntry || null,
+  };
+}
+
 async function buildLightweightProfileMetricsFresh(userId) {
   const [{ badgeRules, weeklyConfig, dailyCheckInConfig }, settingsMap] = await Promise.all([
     loadGamificationRules(),
@@ -2674,6 +2708,76 @@ router.get("/profile/metrics", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/profile/summary", requireAuth, async (req, res) => {
+  const userId = req.auth?.sub || "";
+  const safeUserId = String(userId || "").trim();
+  const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
+  try {
+    if (shouldForceRefresh) {
+      profileMetricsCache.delete(safeUserId);
+      profileMetricsPromises.delete(safeUserId);
+      await deleteCacheKey(`gamification:profile-metrics:${safeUserId}`);
+    }
+
+    const payload = shouldForceRefresh
+      ? extractProfileSummaryPayload(
+          await buildLightweightProfileMetrics(userId, {
+            forceFresh: true,
+          })
+        )
+      : extractProfileSummaryPayload(buildFallbackProfileMetricsFromState(userId, await buildGamificationState()));
+
+    return res.json(payload);
+  } catch (error) {
+    console.error("Failed to load profile summary", {
+      userId,
+      message: error?.message || String(error),
+    });
+    try {
+      const fallbackPayload = extractProfileSummaryPayload(buildFallbackProfileMetricsFromState(userId, await buildGamificationState()));
+      return res.json({ ...fallbackPayload, _degraded: true });
+    } catch {
+      return res.status(500).json({ error: "Nao foi possivel carregar o resumo do perfil agora." });
+    }
+  }
+});
+
+router.get("/profile/competition-board", requireAuth, async (req, res) => {
+  const userId = req.auth?.sub || "";
+  const safeUserId = String(userId || "").trim();
+  const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
+  try {
+    if (shouldForceRefresh) {
+      profileMetricsCache.delete(safeUserId);
+      profileMetricsPromises.delete(safeUserId);
+      await deleteCacheKey(`gamification:profile-metrics:${safeUserId}`);
+    }
+
+    const payload = shouldForceRefresh
+      ? extractProfileCompetitionBoardPayload(
+          await buildLightweightProfileMetrics(userId, {
+            forceFresh: true,
+          })
+        )
+      : extractProfileCompetitionBoardPayload(buildFallbackProfileMetricsFromState(userId, await buildGamificationState()));
+
+    return res.json(payload);
+  } catch (error) {
+    console.error("Failed to load profile competition board", {
+      userId,
+      message: error?.message || String(error),
+    });
+    try {
+      const fallbackPayload = extractProfileCompetitionBoardPayload(
+        buildFallbackProfileMetricsFromState(userId, await buildGamificationState())
+      );
+      return res.json({ ...fallbackPayload, _degraded: true });
+    } catch {
+      return res.status(500).json({ error: "Nao foi possivel carregar o ranking do perfil agora." });
+    }
+  }
+});
+
 router.get("/profile/public/:userId/summary", requireAuth, async (req, res) => {
   try {
     const targetUserId = String(req.params.userId || "").trim();
@@ -2681,7 +2785,9 @@ router.get("/profile/public/:userId/summary", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Usuario invalido." });
     }
 
-    const payload = buildFallbackProfileMetricsFromState(targetUserId, await buildGamificationState());
+    const payload = await getOrComputeCacheJson(`gamification:public-profile-summary:${targetUserId}`, PUBLIC_PROFILE_SUMMARY_TTL_MS, async () => (
+      buildFallbackProfileMetricsFromState(targetUserId, await buildGamificationState())
+    ));
     return res.json({
       metrics: payload.metrics || {},
       currentCompetitionEntry: payload.currentCompetitionEntry || null,
@@ -2814,40 +2920,47 @@ router.get("/profile/prize-gallery", requireAuth, async (req, res) => {
     const userId = requestedUserId || String(req.auth.sub || "").trim();
     const limit = clampInt(req.query?.limit, 3, 1, 24);
     const offset = clampInt(req.query?.offset, 0, 0, 2000);
+    const payload = await getOrComputeCacheJson(
+      `gamification:profile-prize-gallery:${userId}:${limit}:${offset}`,
+      PROFILE_PRIZE_GALLERY_TTL_MS,
+      async () => {
+        const [countResult, itemsResult] = await Promise.all([
+          pool.query(
+            `SELECT COUNT(*)::int AS total
+               FROM entity_records
+              WHERE entity_name = 'UserPrizeGalleryItem'
+                AND COALESCE(data->>'user_id', '') = $1`,
+            [userId]
+          ),
+          pool.query(
+            `SELECT id, data, created_at, updated_at
+               FROM entity_records
+              WHERE entity_name = 'UserPrizeGalleryItem'
+                AND COALESCE(data->>'user_id', '') = $1
+              ORDER BY COALESCE(NULLIF(data->>'claimed_at', ''), created_at::text)::timestamptz DESC,
+                       created_at DESC,
+                       id ASC
+              LIMIT $2
+             OFFSET $3`,
+            [userId, limit, offset]
+          ),
+        ]);
 
-    const [countResult, itemsResult] = await Promise.all([
-      pool.query(
-        `SELECT COUNT(*)::int AS total
-           FROM entity_records
-          WHERE entity_name = 'UserPrizeGalleryItem'
-            AND COALESCE(data->>'user_id', '') = $1`,
-        [userId]
-      ),
-      pool.query(
-        `SELECT id, data, created_at, updated_at
-           FROM entity_records
-          WHERE entity_name = 'UserPrizeGalleryItem'
-            AND COALESCE(data->>'user_id', '') = $1
-          ORDER BY COALESCE(NULLIF(data->>'claimed_at', ''), created_at::text)::timestamptz DESC,
-                   created_at DESC,
-                   id ASC
-          LIMIT $2
-         OFFSET $3`,
-        [userId, limit, offset]
-      ),
-    ]);
+        const items = itemsResult.rows.map(normalizeEntityRecordRow);
+        const total = Number(countResult.rows[0]?.total || 0);
 
-    const items = itemsResult.rows.map(normalizeEntityRecordRow);
-    const total = Number(countResult.rows[0]?.total || 0);
+        return {
+          items,
+          total,
+          limit,
+          offset,
+          nextOffset: offset + items.length,
+          hasMore: offset + items.length < total,
+        };
+      }
+    );
 
-    return res.json({
-      items,
-      total,
-      limit,
-      offset,
-      nextOffset: offset + items.length,
-      hasMore: offset + items.length < total,
-    });
+    return res.json(payload);
   } catch (error) {
     console.error("Failed to load profile prize gallery", error);
     return res.status(500).json({ error: "Nao foi possivel carregar a galeria de premios." });
@@ -2973,6 +3086,9 @@ router.get("/prizes/winners-history", requireAuth, async (req, res) => {
       name: String(audit.user_name || user?.full_name || user?.nick || "Participante").trim(),
       nick: String(audit.user_nick || user?.nick || "").trim(),
       avatar_emoji: String(user?.avatar_emoji || audit.user_avatar || "🎰"),
+      profile_avatar_id: String(user?.profile_avatar_id || ""),
+      profile_image_mode: String(user?.profile_image_mode || "avatar"),
+      profile_image_status: String(user?.profile_image_status || "none"),
       profile_image_url: profileImageUrl,
       prize_amount: Number(audit.prize_amount || 0),
       game_call: String(audit.game_call || "").trim(),

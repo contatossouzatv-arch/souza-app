@@ -2,11 +2,23 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { CalendarDays, Crown, History, Phone, Sparkles, Trophy, UserRound } from "lucide-react";
-import { base44, resolveAssetUrl } from "@/api/base44Client";
+import { base44 } from "@/api/base44Client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { getProfileAvatarSrc } from "@/lib/profileMedia";
 import { buildWhatsAppLink } from "@/lib/whatsapp";
+
+const avatarModules = import.meta.glob("../../assets-para-app/avatar/*.png", {
+  eager: true,
+  import: "default",
+});
+
+const avatarById = Object.entries(avatarModules).reduce((acc, [path, src]) => {
+  const id = path.split("/").pop().replace(".png", "");
+  acc[id] = src;
+  return acc;
+}, {});
 
 function formatMoney(value) {
   return new Intl.NumberFormat("pt-BR", {
@@ -31,7 +43,7 @@ function formatWinnerDateTime(value) {
 }
 
 function WinnerAvatar({ winner }) {
-  const imageUrl = resolveAssetUrl(winner?.profile_image_url || "");
+  const imageUrl = getProfileAvatarSrc(winner, avatarById, "");
   if (imageUrl) {
     return <img src={imageUrl} alt={winner?.name || "Ganhador"} className="h-full w-full object-cover" loading="lazy" />;
   }

@@ -537,6 +537,7 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["profile-discover-profiles"] });
       queryClient.invalidateQueries({ queryKey: ["current-user"] });
       queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-competition-board-authoritative"] });
       queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative"] });
       queryClient.invalidateQueries({ queryKey: ["social-following-list"] });
       queryClient.invalidateQueries({ queryKey: ["social-follower-list"] });
@@ -588,6 +589,7 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["profile-discover-profiles"] });
       queryClient.invalidateQueries({ queryKey: ["current-user"] });
       queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
+      queryClient.invalidateQueries({ queryKey: ["profile-competition-board-authoritative"] });
       queryClient.invalidateQueries({ queryKey: ["profile-history-authoritative"] });
       queryClient.invalidateQueries({ queryKey: ["my-profile-images", user?.id] });
       toast({

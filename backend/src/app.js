@@ -209,13 +209,21 @@ export function createApp(io) {
     });
   });
 
-  app.use("/uploads", express.static(genericUploadsDir));
+  const uploadsStaticOptions = {
+    etag: true,
+    maxAge: "15m",
+    setHeaders(res) {
+      res.setHeader("Cache-Control", "public, max-age=900");
+    },
+  };
+
+  app.use("/uploads", express.static(genericUploadsDir, uploadsStaticOptions));
   if (path.resolve(genericUploadsDir) !== path.resolve(uploadsDir)) {
-    app.use("/uploads", express.static(uploadsDir));
+    app.use("/uploads", express.static(uploadsDir, uploadsStaticOptions));
   }
-  app.use("/api/uploads", express.static(genericUploadsDir));
+  app.use("/api/uploads", express.static(genericUploadsDir, uploadsStaticOptions));
   if (path.resolve(genericUploadsDir) !== path.resolve(uploadsDir)) {
-    app.use("/api/uploads", express.static(uploadsDir));
+    app.use("/api/uploads", express.static(uploadsDir, uploadsStaticOptions));
   }
 
   app.use("/api/auth", authApiRateLimiter, authRoutes);
