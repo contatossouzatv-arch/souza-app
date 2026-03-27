@@ -1585,12 +1585,18 @@ export const base44 = {
         return request(`/api/social/state/${encodeURIComponent(targetUserId)}`);
       },
 
-      async following() {
-        return request("/api/social/following/my");
+      async following({ limit = 24, offset = 0 } = {}) {
+        const params = new URLSearchParams();
+        params.set("limit", String(limit));
+        params.set("offset", String(offset));
+        return request(`/api/social/following/my?${params.toString()}`);
       },
 
-      async followers() {
-        return request("/api/social/followers/my");
+      async followers({ limit = 24, offset = 0 } = {}) {
+        const params = new URLSearchParams();
+        params.set("limit", String(limit));
+        params.set("offset", String(offset));
+        return request(`/api/social/followers/my?${params.toString()}`);
       },
 
       async follow(targetUserId, requestId) {
@@ -1686,12 +1692,18 @@ export const base44 = {
       return request(`/api/social/state/${encodeURIComponent(targetUserId)}`, options);
     },
 
-    async following() {
-      return request("/api/social/following/my");
+    async following({ limit = 24, offset = 0 } = {}) {
+      const params = new URLSearchParams();
+      params.set("limit", String(limit));
+      params.set("offset", String(offset));
+      return request(`/api/social/following/my?${params.toString()}`);
     },
 
-    async followers() {
-      return request("/api/social/followers/my");
+    async followers({ limit = 24, offset = 0 } = {}) {
+      const params = new URLSearchParams();
+      params.set("limit", String(limit));
+      params.set("offset", String(offset));
+      return request(`/api/social/followers/my?${params.toString()}`);
     },
 
     async discover({ limit = 12, offset = 0, sort = "recent" } = {}) {

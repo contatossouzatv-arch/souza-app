@@ -1796,24 +1796,6 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
          AND COALESCE(data->>'user_id', '') = $1`,
       [userId]
     ),
-    pool.query(
-      `SELECT
-         COALESCE(
-           SUM(
-             CASE
-               WHEN REPLACE(REGEXP_REPLACE(COALESCE(data->>'amount', ''), '[^0-9,.-]', '', 'g'), ',', '.') ~ '^-?[0-9]+(\\.[0-9]+)?$'
-               THEN REPLACE(REGEXP_REPLACE(COALESCE(data->>'amount', ''), '[^0-9,.-]', '', 'g'), ',', '.')::numeric
-               ELSE 0
-             END
-           ),
-           0
-         ) AS total_approved
-       FROM entity_records
-       WHERE entity_name = 'Deposit'
-         AND COALESCE(data->>'user_id', '') = $1
-         AND COALESCE(data->>'status', '') = 'approved'`,
-      [userId]
-    ),
   ];
 
   if (includeCompetitionBoard) {
@@ -1862,7 +1844,7 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
     );
   }
 
-  const [balanceRows, participationRows, approvedDepositRows, leaderboardRowsResult = { rows: [] }] = await Promise.all(queryTasks);
+  const [balanceRows, participationRows, leaderboardRowsResult = { rows: [] }] = await Promise.all(queryTasks);
 
   const pointsRules = {
     ...DEFAULT_POINTS_RULES,
@@ -1873,7 +1855,6 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
     balanceRows.rows.map((row) => [`${row.metric_key}::${row.cycle_key || ""}`, Number(row.amount || 0)])
   );
   const participationRow = participationRows?.rows?.[0] || {};
-  const approvedDepositRow = approvedDepositRows?.rows?.[0] || {};
 
   const weeklyCycleKey = String(cycle?.cycle_key || "");
   const leaderboardEntries = (leaderboardRowsResult?.rows || []).map((row) => ({
@@ -1899,7 +1880,7 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
 
   const metrics = {
     position: Number(currentCompetitionEntry.position || 0),
-    totalApproved: Number(approvedDepositRow.total_approved || 0),
+    totalApproved: 0,
     totalTickets: Number(balanceMap.get("tickets_active::") || 0),
     totalParticipations:
       Number(participationRow.live_participations || 0) +

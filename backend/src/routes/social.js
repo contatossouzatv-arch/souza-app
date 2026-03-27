@@ -151,6 +151,10 @@ function buildSocialRelationListCacheKey(type, userId) {
   return `social:${String(type || "").trim()}:${String(userId || "").trim()}`;
 }
 
+function buildSocialRelationListPageCacheKey(type, userId, { limit = 24, offset = 0 } = {}) {
+  return `${buildSocialRelationListCacheKey(type, userId)}:${Number(limit || 24)}:${Number(offset || 0)}`;
+}
+
 function buildSocialDiscoverCacheKey(userId, { limit = 12, offset = 0, sort = "recent" } = {}) {
   return `social:discover:${String(userId || "").trim()}:${Number(limit || 12)}:${Number(offset || 0)}:${String(sort || "recent").trim().toLowerCase()}`;
 }
@@ -271,7 +275,9 @@ async function buildSocialState(client, viewerUserId, targetUserId) {
   };
 }
 
-async function listRelationProfiles(client, type, userId) {
+async function listRelationProfiles(client, type, userId, { limit = 24, offset = 0 } = {}) {
+  const queryLimit = normalizeListLimit(limit, 24, 60);
+  const queryOffset = normalizeListOffset(offset);
   const relationSql =
     type === "following"
       ? `SELECT u.*,
@@ -300,7 +306,8 @@ async function listRelationProfiles(client, type, userId) {
          ) likes ON likes.target_user_id = u.id
          WHERE rel.follower_user_id = $1
            AND rel.active = true
-         ORDER BY rel.followed_at DESC, rel.updated_at DESC`
+         ORDER BY rel.followed_at DESC, rel.updated_at DESC
+         LIMIT $2 OFFSET $3`
       : `SELECT u.*,
             COALESCE(followers.count, 0) AS followers,
             COALESCE(following.count, 0) AS following,
@@ -327,10 +334,17 @@ async function listRelationProfiles(client, type, userId) {
          ) likes ON likes.target_user_id = u.id
          WHERE rel.target_user_id = $1
            AND rel.active = true
-         ORDER BY rel.followed_at DESC, rel.updated_at DESC`;
+         ORDER BY rel.followed_at DESC, rel.updated_at DESC
+         LIMIT $2 OFFSET $3`;
 
-  const result = await client.query(relationSql, [userId]);
-  return result.rows.map(mapSocialProfile);
+  const result = await client.query(relationSql, [userId, queryLimit + 1, queryOffset]);
+  return {
+    items: result.rows.slice(0, queryLimit).map(mapSocialProfile),
+    limit: queryLimit,
+    offset: queryOffset,
+    nextOffset: result.rows.length > queryLimit ? queryOffset + queryLimit : null,
+    hasMore: result.rows.length > queryLimit,
+  };
 }
 
 async function listDiscoverProfiles(client, viewerUserId, { limit = 12, offset = 0, sort = "recent" } = {}) {
@@ -550,10 +564,12 @@ router.get("/social/state/:targetUserId", requireAuth, async (req, res) => {
 router.get("/social/following/my", requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
+    const limit = normalizeListLimit(req.query?.limit, 24, 60);
+    const offset = normalizeListOffset(req.query?.offset);
     const items = await getOrComputeCacheJson(
-      buildSocialRelationListCacheKey("following", req.auth.sub),
+      buildSocialRelationListPageCacheKey("following", req.auth.sub, { limit, offset }),
       SOCIAL_RELATION_LIST_TTL_MS,
-      () => listRelationProfiles(client, "following", req.auth.sub)
+      () => listRelationProfiles(client, "following", req.auth.sub, { limit, offset })
     );
     res.json(items);
   } finally {
@@ -564,10 +580,12 @@ router.get("/social/following/my", requireAuth, async (req, res) => {
 router.get("/social/followers/my", requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
+    const limit = normalizeListLimit(req.query?.limit, 24, 60);
+    const offset = normalizeListOffset(req.query?.offset);
     const items = await getOrComputeCacheJson(
-      buildSocialRelationListCacheKey("followers", req.auth.sub),
+      buildSocialRelationListPageCacheKey("followers", req.auth.sub, { limit, offset }),
       SOCIAL_RELATION_LIST_TTL_MS,
-      () => listRelationProfiles(client, "followers", req.auth.sub)
+      () => listRelationProfiles(client, "followers", req.auth.sub, { limit, offset })
     );
     res.json(items);
   } finally {
