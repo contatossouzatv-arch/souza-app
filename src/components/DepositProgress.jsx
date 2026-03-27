@@ -48,6 +48,7 @@ export default function DepositProgress({ totalApproved, pendingAmount, user, on
     },
     staleTime: 300000,
     refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const { data: cashbackClaims = [] } = useQuery({
@@ -59,6 +60,7 @@ export default function DepositProgress({ totalApproved, pendingAmount, user, on
     enabled: !!user,
     refetchOnWindowFocus: false,
     staleTime: 30000,
+    retry: false,
   });
 
   const depositsEnabled = safeFind(safeSettings, (s) => s.key === "deposits_enabled")?.value === "true";

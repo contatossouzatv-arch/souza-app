@@ -262,6 +262,7 @@ export default function Home() {
   });
 
   const handleLike = (postId) => {
+    if (String(postId || "").startsWith("winner-")) return;
     const likedPostIds = Array.isArray(feedLikes?.likedPostIds) ? feedLikes.likedPostIds : [];
     if (!postId || likedPostIds.includes(postId) || likePostMutation.isPending) return;
     likePostMutation.mutate(postId);
@@ -511,15 +512,7 @@ export default function Home() {
                       <Trophy className="h-3.5 w-3.5" />
                       Post automático de ganhador
                     </span>
-                    <Button
-                      onClick={() => handleLike(item.id)}
-                      variant="outline"
-                      disabled={isLiked}
-                      className="h-8 border-slate-700 bg-slate-800/60 px-3 text-xs text-slate-200 hover:bg-slate-700 disabled:cursor-default disabled:opacity-100"
-                    >
-                      <Heart className="mr-1 h-3.5 w-3.5" />
-                      {isLiked ? `Curtido (${likesCount})` : `Curtir (${likesCount})`}
-                    </Button>
+                    <span className="text-xs text-slate-400">Interação indisponível nesse post</span>
                   </div>
                 </Card>
               );

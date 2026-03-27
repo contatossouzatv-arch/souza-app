@@ -1815,7 +1815,7 @@ export default function Profile() {
       (Boolean(selectedPublicProfileId) || Boolean(selectedPublicProfileHandle) || canLoadDeferredPublicProfileQueries),
     staleTime: 30000,
     refetchOnWindowFocus: false,
-    retry: 2,
+    retry: 3,
   });
   const publicProfileBasicsMap = useMemo(() => {
     const map = new Map();
@@ -1840,12 +1840,22 @@ export default function Profile() {
     (isLoadingAuth ||
       publicProfileBasicsLoading ||
       publicProfileBasicsFetching ||
+      (!selectedPublicProfile && !publicProfileBasicsError) ||
       (!selectedPublicProfileId && Boolean(selectedPublicProfileHandle) && !simulatedProfiles.length));
+  const publicProfileLookupStatus = Number(publicProfileBasicsError?.status || 0);
   const hasPublicProfileLookupError =
     isViewingPublicProfile &&
     !isPublicProfileResolving &&
-    Boolean(publicProfileBasicsError) &&
+    publicProfileLookupStatus > 0 &&
+    publicProfileLookupStatus !== 404 &&
     !(publicProfileBasicsPayload?.items || []).length;
+  const hasPublicProfileLookupNotFound =
+    isViewingPublicProfile &&
+    !isPublicProfileResolving &&
+    (
+      publicProfileLookupStatus === 404 ||
+      (!(publicProfileBasicsPayload?.items || []).length && !publicProfileBasicsError)
+    );
   const engagedProfileSocialQueries = useQueries({
     queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
       queryKey: ["social-target-state", user?.id, profile.id, "engaged-card"],
@@ -5073,11 +5083,15 @@ export default function Profile() {
           </Card>
         ) : hasPublicProfileLookupError ? (
           <Card className="border-slate-800 bg-slate-900/70 p-6 text-center text-slate-200">
-            Não foi possível carregar esse perfil agora. Tente novamente.
+            Não foi possível carregar esse perfil agora. O app vai tentar novamente assim que a conexão estabilizar.
           </Card>
-        ) : (
+        ) : hasPublicProfileLookupNotFound ? (
           <Card className="border-slate-800 bg-slate-900/70 p-6 text-center text-slate-200">
             Perfil não encontrado.
+          </Card>
+        ) : (
+          <Card className="border-slate-800 bg-slate-900/70 p-6">
+            <TechLoader />
           </Card>
         )}
       {profileSwitchLoaderOverlay}

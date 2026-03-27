@@ -13,7 +13,17 @@ export default function PlatformMigrationModal({ user, onVisibilityChange, onCon
   const queryClient = useQueryClient();
   const [platformId, setPlatformId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isQueryReady, setIsQueryReady] = useState(false);
   const { isLoadingAuth } = useAuth();
+
+  useEffect(() => {
+    setIsQueryReady(false);
+    if (isLoadingAuth || !user?.id || !user?.onboarding_completed) return undefined;
+    const timerId = window.setTimeout(() => {
+      setIsQueryReady(true);
+    }, 4000);
+    return () => window.clearTimeout(timerId);
+  }, [isLoadingAuth, user?.id, user?.onboarding_completed]);
 
   const { data: platforms = [] } = useQuery({
     queryKey: ["current-platform-modal"],
@@ -21,6 +31,10 @@ export default function PlatformMigrationModal({ user, onVisibilityChange, onCon
       const response = await base44.platforms.summary();
       return response.currentPlatform ? [response.currentPlatform] : [];
     },
+    enabled: isQueryReady,
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
   const { data: platformHistory = [] } = useQuery({
     queryKey: ["platform-history", user?.id],
@@ -28,7 +42,10 @@ export default function PlatformMigrationModal({ user, onVisibilityChange, onCon
       const response = await base44.adminEvents.profile.platformHistory();
       return response.items || [];
     },
-    enabled: Boolean(user?.id) && !isLoadingAuth,
+    enabled: isQueryReady,
+    staleTime: 300000,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const currentPlatform = platforms[0] || null;

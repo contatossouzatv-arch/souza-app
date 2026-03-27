@@ -180,6 +180,15 @@ function normalizeEntityRecordRow(row) {
   return data;
 }
 
+function buildHandle(nick = "", userId = "") {
+  const base = String(nick || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ".")
+    .replace(/[^a-z0-9._]/g, "");
+  return base || `usuario.${String(userId || "").slice(0, 6)}`;
+}
+
 function safeDate(value) {
   const parsed = new Date(value || "");
   return Number.isNaN(parsed.getTime()) ? null : parsed;
@@ -2819,6 +2828,86 @@ router.get("/profile/public-basics", async (req, res) => {
   }
 });
 
+router.get("/profile/public-directory", async (req, res) => {
+  try {
+    const limit = clampInt(req.query?.limit, 24, 1, 60);
+    const offset = clampInt(req.query?.offset, 0, 0, 5000);
+    const payload = await getOrComputeCacheJson(
+      `gamification:profile-public-directory:${limit}:${offset}`,
+      PROFILE_PUBLIC_BASICS_TTL_MS,
+      async () => {
+        const result = await pool.query(
+          `SELECT
+             u.id,
+             u.nick,
+             u.full_name,
+             u.avatar_emoji,
+             u.profile_avatar_id,
+             u.profile_image_mode,
+             u.profile_image_status,
+             u.profile_image_url,
+             u.created_at,
+             COUNT(*) OVER()::int AS total_count
+           FROM users u
+           WHERE COALESCE(u.account_status, 'active') <> 'deactivated'
+           ORDER BY
+             CASE
+               WHEN LOWER(COALESCE(u.profile_image_mode, '')) = 'photo'
+                AND LOWER(COALESCE(u.profile_image_status, '')) = 'approved'
+                AND COALESCE(NULLIF(BTRIM(u.profile_image_url), ''), '') <> ''
+                 THEN 0
+               WHEN COALESCE(NULLIF(BTRIM(u.profile_avatar_id), ''), '') <> ''
+                 OR COALESCE(NULLIF(BTRIM(u.avatar_emoji), ''), '') <> ''
+                 THEN 1
+               ELSE 2
+             END ASC,
+             u.created_at DESC
+           LIMIT $1
+          OFFSET $2`,
+          [limit + 1, offset]
+        );
+
+        const rows = result.rows || [];
+        const visibleRows = rows.slice(0, limit);
+        const items = visibleRows.map((row) => {
+          const approvedProfileImageUrl =
+            String(row.profile_image_mode || "").toLowerCase() === "photo" &&
+            String(row.profile_image_status || "").toLowerCase() === "approved"
+              ? String(row.profile_image_url || "").trim() || (row.id ? `/api/auth/profile-image/${row.id}` : "")
+              : "";
+
+          return {
+            id: row.id,
+            nick: row.nick || row.full_name || "Usuario",
+            handle: buildHandle(row.nick || row.full_name || "", row.id),
+            avatar_emoji: row.avatar_emoji || "",
+            profile_avatar_id: row.profile_avatar_id || "",
+            profile_image_mode: row.profile_image_mode || "avatar",
+            profile_image_status: row.profile_image_status || "none",
+            profile_image_url: approvedProfileImageUrl,
+            created_date: toIso(row.created_at),
+          };
+        });
+        const total = Number(visibleRows[0]?.total_count || rows[0]?.total_count || 0);
+
+        return {
+          items,
+          total,
+          limit,
+          offset,
+          nextOffset: offset + items.length,
+          hasMore: rows.length > limit,
+        };
+      }
+    );
+
+    return res.json(payload);
+  } catch (error) {
+    console.error("Failed to load public profile directory", error);
+    return res.status(500).json({ error: "Nao foi possivel carregar a galeria de perfis." });
+  }
+});
+
 router.get("/profile/notifications", requireAuth, async (req, res) => {
   try {
     const userId = String(req.auth?.sub || "").trim();
@@ -2943,8 +3032,8 @@ router.get("/profile/prize-gallery", async (req, res) => {
                FROM entity_records
               WHERE entity_name = 'UserPrizeGalleryItem'
                 AND COALESCE(data->>'user_id', '') = $1
-              ORDER BY COALESCE(NULLIF(data->>'claimed_at', ''), created_at::text)::timestamptz DESC,
-                       created_at DESC,
+              ORDER BY created_at DESC,
+                       updated_at DESC,
                        id ASC
               LIMIT $2
              OFFSET $3`,
@@ -2952,7 +3041,16 @@ router.get("/profile/prize-gallery", async (req, res) => {
           ),
         ]);
 
-        const items = itemsResult.rows.map(normalizeEntityRecordRow);
+        const items = itemsResult.rows
+          .map(normalizeEntityRecordRow)
+          .sort((a, b) => {
+            const timeA = Date.parse(String(a?.claimed_at || a?.created_date || a?.created_at || ""));
+            const timeB = Date.parse(String(b?.claimed_at || b?.created_date || b?.created_at || ""));
+            const safeA = Number.isFinite(timeA) ? timeA : 0;
+            const safeB = Number.isFinite(timeB) ? timeB : 0;
+            if (safeB !== safeA) return safeB - safeA;
+            return String(b?.id || "").localeCompare(String(a?.id || ""));
+          });
         const total = Number(countResult.rows[0]?.total || 0);
 
         return {

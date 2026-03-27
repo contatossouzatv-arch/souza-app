@@ -13,6 +13,8 @@ const ADMIN_ACTION_TIMEOUT_MS = 45000;
 const ADMIN_READ_TIMEOUT_MS = 30000;
 const RAFFLE_PARTICIPANT_TIMEOUT_MS = 30000;
 const AUTH_RECOVERABLE_RETRY_DELAY_MS = 1200;
+const REQUEST_DIAGNOSTIC_SLOW_MS = 1200;
+const REQUEST_DIAGNOSTIC_NOISY_CONCURRENCY = 4;
 
 function logAuthClient(message, details) {
   console.info(`[auth-client] ${message}`, details || {});
@@ -27,6 +29,71 @@ function shouldLogRequest(path = "", status = null) {
 
 function logRequestResult(message, details) {
   console.info(`[api-client] ${message}`, details || {});
+}
+
+function getRequestDiagnosticsStore() {
+  if (typeof window === "undefined") return null;
+  if (!window.__souzaRequestDiagnostics) {
+    window.__souzaRequestDiagnostics = {
+      inFlight: 0,
+      active: new Map(),
+      recent: [],
+    };
+  }
+  return window.__souzaRequestDiagnostics;
+}
+
+function getCurrentRouteLabel() {
+  if (typeof window === "undefined") return "";
+  return `${window.location.pathname || ""}${window.location.search || ""}`;
+}
+
+function registerRequestStart(path) {
+  const store = getRequestDiagnosticsStore();
+  if (!store) return null;
+  const requestId = createRequestId("http");
+  const route = getCurrentRouteLabel();
+  const startedAt = performance.now();
+  store.inFlight += 1;
+  store.active.set(requestId, { path, route, startedAt });
+
+  if (store.inFlight >= REQUEST_DIAGNOSTIC_NOISY_CONCURRENCY) {
+    logRequestResult("concurrency spike", {
+      path,
+      route,
+      inFlight: store.inFlight,
+      activePaths: Array.from(store.active.values()).map((item) => item.path).slice(-8),
+    });
+  }
+
+  return { requestId, route, startedAt };
+}
+
+function registerRequestEnd(meta, status, outcome, extra = {}) {
+  const store = getRequestDiagnosticsStore();
+  if (!store || !meta?.requestId) return;
+  const activeMeta = store.active.get(meta.requestId);
+  const startedAt = activeMeta?.startedAt ?? meta.startedAt ?? performance.now();
+  const elapsedMs = Math.round(performance.now() - startedAt);
+  const record = {
+    path: meta.path,
+    route: activeMeta?.route || meta.route || getCurrentRouteLabel(),
+    status: Number(status || 0),
+    outcome,
+    elapsedMs,
+    inFlightAfter: Math.max(0, store.inFlight - 1),
+    ...extra,
+  };
+  store.active.delete(meta.requestId);
+  store.inFlight = Math.max(0, store.inFlight - 1);
+  store.recent.push(record);
+  if (store.recent.length > 40) {
+    store.recent.splice(0, store.recent.length - 40);
+  }
+
+  if (elapsedMs >= REQUEST_DIAGNOSTIC_SLOW_MS || outcome !== "success") {
+    logRequestResult("diagnostic", record);
+  }
 }
 
 function isAbortError(error) {
@@ -385,6 +452,10 @@ async function request(path, options = {}) {
   const headers = { ...(fetchOptions.headers || {}) };
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
+  const diagnosticMeta = registerRequestStart(path);
+  if (diagnosticMeta) {
+    diagnosticMeta.path = path;
+  }
 
   let response;
   try {
@@ -401,6 +472,10 @@ async function request(path, options = {}) {
       elapsedMs,
       apiBaseUrl: API_BASE_URL,
       hasToken: hasToken(),
+      isTimeout: error?.name === "TimeoutError",
+      message: error?.message || "Network error",
+    });
+    registerRequestEnd(diagnosticMeta, error?.status || 0, "network_failure", {
       isTimeout: error?.name === "TimeoutError",
       message: error?.message || "Network error",
     });
@@ -438,6 +513,7 @@ async function request(path, options = {}) {
         hasToken: hasToken(),
       });
     }
+    registerRequestEnd(diagnosticMeta, response.status, "success");
     return data;
   } catch (error) {
     if (shouldLogRequest(path, error?.status)) {
@@ -453,6 +529,9 @@ async function request(path, options = {}) {
     if (shouldHandleUnauthorized(path, error?.status)) {
       notifyUnauthorized(path, error);
     }
+    registerRequestEnd(diagnosticMeta, error?.status || 0, "response_error", {
+      message: error?.message || "Request failed",
+    });
     throw error;
   }
 }
@@ -1475,6 +1554,12 @@ export const base44 = {
         if (uniqueIds.length > 0) params.set("ids", uniqueIds.join(","));
         if (uniqueHandles.length > 0) params.set("handles", uniqueHandles.join(","));
         return request(`/api/profile/public-basics?${params.toString()}`, options);
+      },
+      publicDirectory({ limit = 24, offset = 0 } = {}, options = {}) {
+        const params = new URLSearchParams();
+        params.set("limit", String(limit));
+        params.set("offset", String(offset));
+        return request(`/api/profile/public-directory?${params.toString()}`, options);
       },
       platformHistory({ limit = 100 } = {}) {
         const params = new URLSearchParams();

@@ -45,6 +45,7 @@ export default function DepositHistory() {
     enabled: Boolean(user?.id) && !isLoadingAuth,
     refetchOnWindowFocus: false,
     staleTime: 60000,
+    retry: false,
   });
 
   const activeCycle = resolveCurrentDepositCycle(cycles);

@@ -43,10 +43,13 @@ export default function ProfilesGallery() {
 
   const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage } = useInfiniteQuery({
     queryKey: ["profiles-gallery"],
-    queryFn: ({ pageParam = 0 }) => base44.social.discover({ limit: PAGE_SIZE, offset: pageParam, sort: "priority" }),
+    queryFn: ({ pageParam = 0, signal }) =>
+      base44.profile.publicDirectory({ limit: PAGE_SIZE, offset: pageParam }, { signal }),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => (lastPage?.hasMore ? lastPage?.nextOffset ?? undefined : undefined),
     staleTime: 60000,
+    refetchOnWindowFocus: false,
+    retry: 2,
   });
 
   React.useEffect(() => {

@@ -24,6 +24,9 @@ export default function TicketsDisplay({
       const response = await base44.deposits.dashboardSummary();
       return response.cycles || [];
     },
+    retry: false,
+    refetchOnWindowFocus: false,
+    staleTime: 60000,
   });
 
   const safeSettings = Array.isArray(settings) ? settings : [];
