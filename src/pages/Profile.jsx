@@ -144,6 +144,18 @@ const PROFILE_PRIVATE_TABS = [
 
 function profileDebugLog() {}
 
+function formatElapsedSince(value) {
+  if (!value) return "agora";
+  const elapsedMs = Math.max(0, Date.now() - new Date(value).getTime());
+  const elapsedSeconds = Math.floor(elapsedMs / 1000);
+  if (elapsedSeconds < 5) return "agora";
+  if (elapsedSeconds < 60) return `há ${elapsedSeconds}s`;
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+  if (elapsedMinutes < 60) return `há ${elapsedMinutes}min`;
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  return `há ${elapsedHours}h`;
+}
+
 function getSpecialBadgeVisual(achievement) {
   const normalizedLabel = String(achievement?.label || "").toLowerCase();
   const isStarterBadge = achievement?.key === "starter-install";
@@ -1283,12 +1295,10 @@ export default function Profile() {
     Boolean(user) &&
     !isViewingPublicProfile &&
     shouldLoadCoreProfileData &&
-    isOverviewTabActive &&
     !Array.isArray(profileSummaryData?.competitionBoard?.entries);
   const {
     data: profileCompetitionBoardData,
     isFetching: fetchingProfileCompetitionBoard,
-    refetch: refetchProfileCompetitionBoard,
   } = useQuery({
     queryKey: ["profile-competition-board-authoritative", user?.id],
     queryFn: ({ signal }) => base44.gamification.profileCompetitionBoard({ signal }),
@@ -1298,6 +1308,8 @@ export default function Profile() {
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+    refetchInterval: 30000,
+    refetchIntervalInBackground: true,
     retry: false,
   });
   const profileGamification = useMemo(() => ({
@@ -1317,6 +1329,7 @@ export default function Profile() {
       null,
   }), [profileCompetitionBoardData, profileSummaryData]);
   const deferredProfileGamification = React.useDeferredValue(profileGamification);
+  const competitionBoardUpdatedAt = profileCompetitionBoardData?.updatedAt || null;
   const [isRefreshingCompetitionData, setIsRefreshingCompetitionData] = useState(false);
   const [loadNonCriticalProfileData, setLoadNonCriticalProfileData] = useState(false);
   const hasProfileGamification = Boolean(profileSummaryData);
@@ -4387,14 +4400,11 @@ export default function Profile() {
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-300">Top Ranking do Ciclo</p>
                   <p className="text-[11px] text-slate-400">{titleSuffix}</p>
                 </div>
-                <Button
-                  type="button"
-                  onClick={() => refreshProfileCompetitionData()}
-                  disabled={fetchingProfileGamification || isRefreshingCompetitionData}
-                  className="h-8 rounded-full border border-cyan-400/45 bg-cyan-500/10 px-3 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-100 hover:bg-cyan-500/20 disabled:cursor-wait disabled:opacity-70"
-                >
-                  {fetchingProfileGamification || isRefreshingCompetitionData ? "Atualizando..." : "Atualizar dados"}
-                </Button>
+                <div className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-cyan-100">
+                  {fetchingProfileCompetitionBoard || isRefreshingCompetitionData
+                    ? "Atualizando..."
+                    : `Dados atualizados ${formatElapsedSince(competitionBoardUpdatedAt)}`}
+                </div>
               </div>
               {visibleEntries.length === 0 ? (
                 <p className="rounded-xl border border-slate-700 bg-slate-900/70 p-3 text-xs text-slate-300">

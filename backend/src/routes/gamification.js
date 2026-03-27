@@ -28,7 +28,7 @@ const POINTS_RULES_KEY = "achievement_points_rules_v1";
 const PROFILE_COMPETITION_KEY = "profile_competition_rules_v1";
 const WEEKLY_TOP_CONFIG_KEY = "weekly_top_config_v2";
 const DAILY_CHECKIN_CONFIG_KEY = "daily_checkin_config_v1";
-const GAMIFICATION_STATE_TTL_MS = 60000;
+const GAMIFICATION_STATE_TTL_MS = 30000;
 const GAMIFICATION_RULES_TTL_MS = 60000;
 const WEEKLY_CYCLE_TTL_MS = 30000;
 const PROFILE_METRICS_TTL_MS = 45000;
@@ -1682,6 +1682,7 @@ async function buildGamificationStateFresh(options = {}) {
     cycle,
     leaderboardEntries,
     snapshots,
+    generatedAt: new Date().toISOString(),
   };
 }
 
@@ -1768,7 +1769,31 @@ function extractProfileCompetitionBoardPayload(payload = {}) {
       rewardLabel: competitionBoard?.rewardLabel || "",
     },
     currentCompetitionEntry: payload?.currentCompetitionEntry || null,
+    updatedAt: payload?.updatedAt || null,
+    refreshInMs: Number(payload?.refreshInMs || GAMIFICATION_STATE_TTL_MS),
   };
+}
+
+function buildSharedCompetitionBoardPayload(userId, state) {
+  const safeUserId = String(userId || "").trim();
+  const currentCompetitionEntry =
+    (state?.leaderboardEntries || []).find((entry) => String(entry?.user_id || "") === safeUserId) || {
+      user_id: safeUserId,
+      position: 0,
+      weekly_points: 0,
+      points: 0,
+    };
+
+  return extractProfileCompetitionBoardPayload({
+    competitionBoard: buildCompetitionBoard(
+      Array.isArray(state?.leaderboardEntries) ? state.leaderboardEntries : [],
+      state?.cycle || { remainingMs: 0, progressPct: 0 },
+      state?.weeklyConfig || DEFAULT_PROFILE_COMPETITION_CONFIG
+    ),
+    currentCompetitionEntry,
+    updatedAt: state?.generatedAt || new Date().toISOString(),
+    refreshInMs: GAMIFICATION_STATE_TTL_MS,
+  });
 }
 
 async function buildLightweightProfileMetricsFresh(userId, options = {}) {
@@ -2722,20 +2747,11 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
 
 router.get("/profile/competition-board", requireAuth, async (req, res) => {
   const userId = req.auth?.sub || "";
-  const safeUserId = String(userId || "").trim();
   const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
   try {
-    if (shouldForceRefresh) {
-      profileMetricsCache.delete(safeUserId);
-      profileMetricsPromises.delete(safeUserId);
-      await deleteCacheKey(`gamification:profile-metrics:${safeUserId}`);
-    }
-
-    const payload = extractProfileCompetitionBoardPayload(
-      await buildLightweightProfileMetrics(userId, {
-        forceFresh: shouldForceRefresh,
-        includeCompetitionBoard: true,
-      })
+    const payload = buildSharedCompetitionBoardPayload(
+      userId,
+      await buildGamificationState({ forceFresh: shouldForceRefresh })
     );
 
     return res.json(payload);
@@ -2745,9 +2761,7 @@ router.get("/profile/competition-board", requireAuth, async (req, res) => {
       message: error?.message || String(error),
     });
     try {
-      const fallbackPayload = extractProfileCompetitionBoardPayload(
-        buildFallbackProfileMetricsFromState(userId, await buildGamificationState())
-      );
+      const fallbackPayload = buildSharedCompetitionBoardPayload(userId, await buildGamificationState());
       return res.json({ ...fallbackPayload, _degraded: true });
     } catch {
       return res.status(500).json({ error: "Nao foi possivel carregar o ranking do perfil agora." });
