@@ -8,6 +8,7 @@
                     "build":  "node -e \"console.log('Backend build step not required')\"",
                     "start":  "node src/server.js",
                     "start:prod":  "node src/server.js",
+                    "migrate:profile-images:cloudinary":  "node scripts/migrate-profile-images-to-cloudinary.js",
                     "bootstrap:admin":  "node scripts/bootstrap-admin.js"
                 },
     "dependencies":  {

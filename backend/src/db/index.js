@@ -1,12 +1,25 @@
 ﻿import pg from "pg";
 
 const { Pool } = pg;
+const poolMax = Math.max(1, Number(process.env.DB_POOL_MAX || 10));
+const poolIdleTimeoutMs = Math.max(1000, Number(process.env.DB_IDLE_TIMEOUT_MS || 30000));
+const poolConnectionTimeoutMs = Math.max(1000, Number(process.env.DB_CONNECTION_TIMEOUT_MS || 5000));
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  max: poolMax,
+  idleTimeoutMillis: poolIdleTimeoutMs,
+  connectionTimeoutMillis: poolConnectionTimeoutMs,
+  keepAlive: true,
   ssl: {
     rejectUnauthorized: false,
   },
+});
+
+pool.on("error", (error) => {
+  console.error("[db] pool error", {
+    message: error?.message || "Unknown pool error",
+  });
 });
 
 const SLOW_QUERY_THRESHOLD_MS = 200;
@@ -445,6 +458,7 @@ export async function ensureDb() {
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS idx_deposit_processing_events_deposit_id ON deposit_processing_events(deposit_id)");
   await pool.query("CREATE INDEX IF NOT EXISTS idx_deposit_processing_events_user_id ON deposit_processing_events(user_id)");
+  await pool.query("CREATE INDEX IF NOT EXISTS idx_deposit_processing_events_deposit_event_created ON deposit_processing_events(deposit_id, event_type, created_at DESC)");
   await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS uniq_deposit_processing_approve ON deposit_processing_events(deposit_id, event_type) WHERE event_type = 'approved'");
   await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS uniq_deposit_processing_reject ON deposit_processing_events(deposit_id, event_type) WHERE event_type = 'rejected'");
 
@@ -2369,6 +2383,22 @@ export async function listDepositsByUserId(userId) {
 }
 
 export async function listAdminDeposits({ status = "", cycleId = "", limit } = {}) {
+  const values = ["Deposit"];
+  const where = ["er.entity_name = $1"];
+  const normalizedStatus = String(status || "").trim();
+  const normalizedCycleId = String(cycleId || "").trim();
+  const limitValue = Math.max(1, Math.min(500, Number(limit || 200) || 200));
+
+  if (normalizedStatus) {
+    values.push(normalizedStatus);
+    where.push(`COALESCE(er.data->>'status', '') = $${values.length}`);
+  }
+  if (normalizedCycleId) {
+    values.push(normalizedCycleId);
+    where.push(`COALESCE(er.data->>'cycle_id', '') = $${values.length}`);
+  }
+  values.push(limitValue);
+
   const result = await pool.query(
     `SELECT
        er.*,
@@ -2378,8 +2408,10 @@ export async function listAdminDeposits({ status = "", cycleId = "", limit } = {
      FROM entity_records er
      LEFT JOIN users u
        ON u.id::text = er.data->>'user_id'
-     WHERE er.entity_name = 'Deposit'
-     ORDER BY er.created_at DESC`
+     WHERE ${where.join(" AND ")}
+     ORDER BY er.created_at DESC
+     LIMIT $${values.length}`,
+    values
   );
   let rows = result.rows.map((row) => {
     const record = normalizeRecord(row);
@@ -2400,13 +2432,7 @@ export async function listAdminDeposits({ status = "", cycleId = "", limit } = {
         record.user_platform_id,
     };
   });
-  if (status) {
-    rows = rows.filter((item) => String(item.status || "") === String(status));
-  }
-  if (cycleId) {
-    rows = rows.filter((item) => String(item.cycle_id || "") === String(cycleId));
-  }
-  return applyLimit(rows, limit);
+  return rows;
 }
 
 export async function listDepositCycleLeaderboard({ cycleId = "", limit = 10, currentUserId = "" } = {}) {

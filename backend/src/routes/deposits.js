@@ -21,6 +21,36 @@ import { getOrComputeCacheJson } from "../lib/cache.js";
 const router = Router();
 const DEPOSIT_LEADERBOARD_TTL_MS = 15000;
 const DEPOSIT_DASHBOARD_SUMMARY_TTL_MS = 10000;
+const DEPOSIT_ROUTE_SLOW_MS = 800;
+
+function asyncHandler(handler) {
+  return (req, res, next) => {
+    Promise.resolve(handler(req, res, next)).catch(next);
+  };
+}
+
+async function withRouteTiming(label, meta, task) {
+  const startedAt = Date.now();
+  try {
+    const result = await task();
+    const durationMs = Date.now() - startedAt;
+    if (durationMs >= DEPOSIT_ROUTE_SLOW_MS) {
+      console.warn(`[deposits-route] slow ${label}`, {
+        durationMs,
+        ...meta,
+      });
+    }
+    return result;
+  } catch (error) {
+    const durationMs = Date.now() - startedAt;
+    console.error(`[deposits-route] failed ${label}`, {
+      durationMs,
+      ...meta,
+      message: error?.message || "unknown error",
+    });
+    throw error;
+  }
+}
 
 function emitEntityChanged(req, entity, action, payload = {}) {
   req.app?.locals?.io?.emit("entity:changed", {
@@ -134,13 +164,16 @@ async function listUsersBasicByIds(ids = []) {
   }));
 }
 
-router.post("/deposits", requireAuth, async (req, res) => {
+router.post("/deposits", requireAuth, asyncHandler(async (req, res) => {
   const payload = normalizeCreatePayload(req.body || {});
   if (!payload.platformName || !payload.userPlatformId || !payload.cycleId || !Number.isFinite(payload.amount) || payload.amount <= 0) {
     return res.status(400).json({ error: "Campos obrigatórios: amount, platformName, userPlatformId e cycleId." });
   }
 
-  const result = await createDepositRecord({
+  const result = await withRouteTiming("create", {
+    userId: String(req.auth?.sub || ""),
+    cycleId: payload.cycleId,
+  }, () => createDepositRecord({
     userId: req.auth.sub,
     userEmail: req.auth.email,
     userName: payload.userName,
@@ -151,7 +184,7 @@ router.post("/deposits", requireAuth, async (req, res) => {
     proofImageUrls: payload.proofImageUrls,
     cycleId: payload.cycleId,
     requestId: payload.requestId,
-  });
+  }));
 
   emitEntityChanged(req, "Deposit", result.idempotent ? "create-idempotent" : "create", {
     deposit_id: result?.deposit?.id || "",
@@ -160,15 +193,15 @@ router.post("/deposits", requireAuth, async (req, res) => {
   });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
-});
+}));
 
-router.get("/deposits/my", requireAuth, async (req, res) => {
+router.get("/deposits/my", requireAuth, asyncHandler(async (req, res) => {
   const deposits = await listDepositsByUserId(req.auth.sub);
   return res.json({ items: deposits });
-});
+}));
 
-router.get("/deposits/dashboard-summary", requireAuth, async (_req, res) => {
-  const result = await getOrComputeCacheJson("deposits:dashboard-summary", DEPOSIT_DASHBOARD_SUMMARY_TTL_MS, async () => {
+router.get("/deposits/dashboard-summary", requireAuth, asyncHandler(async (_req, res) => {
+  const result = await withRouteTiming("dashboard-summary", {}, () => getOrComputeCacheJson("deposits:dashboard-summary", DEPOSIT_DASHBOARD_SUMMARY_TTL_MS, async () => {
     const [cycles, drawWinners] = await Promise.all([
       listDepositCycles(),
       listDepositDrawWinners(),
@@ -189,51 +222,55 @@ router.get("/deposits/dashboard-summary", requireAuth, async (_req, res) => {
       drawWinners,
       profiles,
     };
-  });
+  }));
   return res.json(result);
-});
+}));
 
-router.get("/deposits/leaderboard", requireAuth, async (req, res) => {
+router.get("/deposits/leaderboard", requireAuth, asyncHandler(async (req, res) => {
   const cycleId = String(req.query.cycleId || "").trim();
   const limit = Math.max(1, Math.min(50, Number(req.query.limit || 10) || 10));
   const currentUserId = String(req.auth.sub || "").trim();
   const cacheKey = `deposits:leaderboard:${cycleId || "all"}:${limit}:user:${currentUserId || "anon"}`;
-  const result = await getOrComputeCacheJson(cacheKey, DEPOSIT_LEADERBOARD_TTL_MS, () =>
+  const result = await withRouteTiming("leaderboard", { cycleId, limit }, () => getOrComputeCacheJson(cacheKey, DEPOSIT_LEADERBOARD_TTL_MS, () =>
     listDepositCycleLeaderboard({
       cycleId,
       limit,
       currentUserId,
     })
-  );
+  ));
   return res.json(result);
-});
+}));
 
-router.get("/admin/deposits", requireAuth, requireAdmin, async (req, res) => {
-  const items = await listAdminDeposits({
+router.get("/admin/deposits", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  const items = await withRouteTiming("admin-list", {
+    status: String(req.query.status || "").trim(),
+    cycleId: String(req.query.cycleId || "").trim(),
+    limit: Math.max(1, Math.min(500, Number(req.query.limit || 200) || 200)),
+  }, () => listAdminDeposits({
     status: String(req.query.status || "").trim(),
     cycleId: String(req.query.cycleId || "").trim(),
     limit: req.query.limit,
-  });
+  }));
   return res.json({ items });
-});
+}));
 
-router.get("/admin/deposits/:id/history", requireAuth, requireAdmin, async (req, res) => {
+router.get("/admin/deposits/:id/history", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const depositId = String(req.params.id || "").trim();
   if (!depositId) return res.status(400).json({ error: "Deposit id obrigatório." });
   const items = await getDepositAdminHistory(depositId);
   return res.json({ items });
-});
+}));
 
-router.post("/admin/deposits/:id/approve", requireAuth, requireAdmin, async (req, res) => {
+router.post("/admin/deposits/:id/approve", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const depositId = String(req.params.id || "").trim();
   if (!depositId) return res.status(400).json({ error: "Deposit id obrigatório." });
 
-  const result = await approveDepositRecord({
+  const result = await withRouteTiming("admin-approve", { depositId }, () => approveDepositRecord({
     depositId,
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
     requestId: String(req.body?.requestId || "").trim(),
-  });
+  }));
 
   if (!result) {
     return res.status(404).json({ error: "Depósito não encontrado." });
@@ -263,20 +300,20 @@ router.post("/admin/deposits/:id/approve", requireAuth, requireAdmin, async (req
   });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
-});
+}));
 
-router.patch("/admin/deposits/:id", requireAuth, requireAdmin, async (req, res) => {
+router.patch("/admin/deposits/:id", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const depositId = String(req.params.id || "").trim();
   if (!depositId) return res.status(400).json({ error: "Deposit id obrigatório." });
 
-  const result = await updateDepositAdminRecord({
+  const result = await withRouteTiming("admin-update", { depositId }, () => updateDepositAdminRecord({
     depositId,
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
     requestId: String(req.body?.requestId || "").trim(),
     reason: String(req.body?.reason || "").trim(),
     patch: normalizeAdminPatchPayload(req.body || {}),
-  });
+  }));
 
   if (!result) {
     return res.status(404).json({ error: "Depósito não encontrado." });
@@ -301,20 +338,20 @@ router.patch("/admin/deposits/:id", requireAuth, requireAdmin, async (req, res) 
   });
 
   return res.status(result.idempotent ? 200 : 200).json(result);
-});
+}));
 
-router.post("/admin/deposits/:id/adjust-tickets", requireAuth, requireAdmin, async (req, res) => {
+router.post("/admin/deposits/:id/adjust-tickets", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const depositId = String(req.params.id || "").trim();
   if (!depositId) return res.status(400).json({ error: "Deposit id obrigatório." });
 
-  const result = await adjustDepositTicketsAdmin({
+  const result = await withRouteTiming("admin-adjust-tickets", { depositId }, () => adjustDepositTicketsAdmin({
     depositId,
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
     requestId: String(req.body?.requestId || "").trim(),
     reason: String(req.body?.reason || "").trim(),
     adjustment: Number(req.body?.adjustment),
-  });
+  }));
 
   if (!result) {
     return res.status(404).json({ error: "Depósito não encontrado." });
@@ -344,19 +381,19 @@ router.post("/admin/deposits/:id/adjust-tickets", requireAuth, requireAdmin, asy
   });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
-});
+}));
 
-router.post("/admin/deposits/:id/reject", requireAuth, requireAdmin, async (req, res) => {
+router.post("/admin/deposits/:id/reject", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const depositId = String(req.params.id || "").trim();
   if (!depositId) return res.status(400).json({ error: "Deposit id obrigatório." });
 
-  const result = await rejectDepositRecord({
+  const result = await withRouteTiming("admin-reject", { depositId }, () => rejectDepositRecord({
     depositId,
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
     requestId: String(req.body?.requestId || "").trim(),
     reason: String(req.body?.reason || "").trim(),
-  });
+  }));
 
   if (!result) {
     return res.status(404).json({ error: "Depósito não encontrado." });
@@ -381,19 +418,19 @@ router.post("/admin/deposits/:id/reject", requireAuth, requireAdmin, async (req,
   });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
-});
+}));
 
-router.post("/admin/deposits/:id/invalidate", requireAuth, requireAdmin, async (req, res) => {
+router.post("/admin/deposits/:id/invalidate", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const depositId = String(req.params.id || "").trim();
   if (!depositId) return res.status(400).json({ error: "Deposit id obrigatório." });
 
-  const result = await invalidateDepositAdmin({
+  const result = await withRouteTiming("admin-invalidate", { depositId }, () => invalidateDepositAdmin({
     depositId,
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
     requestId: String(req.body?.requestId || "").trim(),
     reason: String(req.body?.reason || "").trim(),
-  });
+  }));
 
   if (!result) {
     return res.status(404).json({ error: "Depósito não encontrado." });
@@ -422,19 +459,19 @@ router.post("/admin/deposits/:id/invalidate", requireAuth, requireAdmin, async (
   });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
-});
+}));
 
-router.delete("/admin/deposits/:id", requireAuth, requireAdmin, async (req, res) => {
+router.delete("/admin/deposits/:id", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
   const depositId = String(req.params.id || "").trim();
   if (!depositId) return res.status(400).json({ error: "Deposit id obrigatório." });
 
-  const result = await deleteDepositAdmin({
+  const result = await withRouteTiming("admin-delete", { depositId }, () => deleteDepositAdmin({
     depositId,
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
     requestId: String(req.body?.requestId || "").trim(),
     reason: String(req.body?.reason || "").trim(),
-  });
+  }));
 
   if (!result) {
     return res.status(404).json({ error: "Depósito não encontrado." });
@@ -463,6 +500,6 @@ router.delete("/admin/deposits/:id", requireAuth, requireAdmin, async (req, res)
   });
 
   return res.status(200).json(result);
-});
+}));
 
 export default router;

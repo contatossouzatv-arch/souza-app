@@ -43,6 +43,7 @@ import {
   signAccessToken,
 } from "../auth.js";
 import { env } from "../config/env.js";
+import { getCloudinaryConfig, uploadToCloudinary } from "../lib/cloudinary.js";
 import { sendPasswordResetEmail } from "../lib/mailer.js";
 import { privateUploadsDir, uploadsDir } from "../lib/paths.js";
 
@@ -51,6 +52,7 @@ const googleClient = new OAuth2Client();
 const profilePendingDir = path.resolve(privateUploadsDir, "profile-pending");
 const profilePublicDir = path.resolve(uploadsDir, "profile");
 const bannedNameTokens = ["nude", "porn", "sexo", "sex", "nsfw"];
+const profileImageCloudinaryConfig = getCloudinaryConfig();
 
 fs.mkdirSync(profilePendingDir, { recursive: true });
 fs.mkdirSync(profilePublicDir, { recursive: true });
@@ -255,6 +257,23 @@ function buildProfileImageVersionUrl(req, versionId) {
     return relativePath;
   }
   return `${configuredBase}${relativePath}`;
+}
+
+function isExternalHttpUrl(value = "") {
+  return /^https?:\/\//i.test(String(value || "").trim());
+}
+
+async function uploadProfileImageToCloudinary(userId, buffer, mimetype, originalName) {
+  if (!profileImageCloudinaryConfig.enabled || !buffer) return "";
+  const folder = [profileImageCloudinaryConfig.folder, "profile-images"].filter(Boolean).join("/");
+  const result = await uploadToCloudinary({
+    buffer,
+    mimetype: mimetype || "image/jpeg",
+    originalName: originalName || `profile-${userId}.jpg`,
+    folder,
+    publicId: `users/${userId}/profile-current`,
+  });
+  return String(result?.url || "").trim();
 }
 
 function extractProfileImageVersionId(value) {
@@ -1099,7 +1118,13 @@ router.post(
         pending_file_name: null,
         pending_data: null,
       });
-      updatePayload.profile_image_url = buildProfileImageVersionUrl(req, approvedVersion.id);
+      const cloudinaryUrl = await uploadProfileImageToCloudinary(
+        req.auth.sub,
+        req.file.buffer,
+        req.file.mimetype,
+        req.file.originalname || `profile-${req.auth.sub}`
+      );
+      updatePayload.profile_image_url = cloudinaryUrl || buildProfileImageVersionUrl(req, approvedVersion.id);
       updatePayload.profile_image_reject_reason = "";
     } else if (moderation.status === "rejected") {
       await upsertUserProfileImages(req.auth.sub, {
@@ -1239,6 +1264,9 @@ router.get("/admin/profile-images/:userId/preview", requireAuth, requireAdmin, a
   }
 
   if (user.profile_image_status === "approved" && user.profile_image_url) {
+    if (isExternalHttpUrl(user.profile_image_url)) {
+      return res.redirect(user.profile_image_url);
+    }
     const marker = "/uploads/profile/";
     const idx = user.profile_image_url.indexOf(marker);
     if (idx !== -1) {
@@ -1265,16 +1293,22 @@ router.post("/admin/profile-images/:userId/approve", requireAuth, requireAdmin, 
 
   const profileImages = await getUserProfileImages(user.id);
   let approvedVersion = null;
+  let approvedBuffer = null;
+  let approvedMimeType = "image/jpeg";
+  let approvedFileName = `profile-${user.id}`;
   if (profileImages?.pending_data) {
+    approvedBuffer = profileImages.pending_data;
+    approvedMimeType = profileImages.pending_mime_type || "image/jpeg";
+    approvedFileName = profileImages.pending_file_name || `profile-${user.id}`;
     approvedVersion = await createUserProfileImageVersion(user.id, {
-      mime_type: profileImages.pending_mime_type || "image/jpeg",
-      file_name: profileImages.pending_file_name || `profile-${user.id}`,
-      data: profileImages.pending_data,
+      mime_type: approvedMimeType,
+      file_name: approvedFileName,
+      data: approvedBuffer,
     });
     await upsertUserProfileImages(user.id, {
-      approved_mime_type: profileImages.pending_mime_type || "image/jpeg",
-      approved_file_name: profileImages.pending_file_name || `profile-${user.id}`,
-      approved_data: profileImages.pending_data,
+      approved_mime_type: approvedMimeType,
+      approved_file_name: approvedFileName,
+      approved_data: approvedBuffer,
       pending_mime_type: null,
       pending_file_name: null,
       pending_data: null,
@@ -1292,25 +1326,38 @@ router.post("/admin/profile-images/:userId/approve", requireAuth, requireAdmin, 
 
     await fs.promises.rename(sourcePath, targetPath);
     const fileBuffer = await fs.promises.readFile(targetPath);
+    approvedBuffer = fileBuffer;
+    approvedMimeType = safeExt === ".png" ? "image/png" : safeExt === ".webp" ? "image/webp" : "image/jpeg";
+    approvedFileName = user.profile_image_pending_name || publicFilename;
     approvedVersion = await createUserProfileImageVersion(user.id, {
-      mime_type: safeExt === ".png" ? "image/png" : safeExt === ".webp" ? "image/webp" : "image/jpeg",
-      file_name: user.profile_image_pending_name || publicFilename,
-      data: fileBuffer,
+      mime_type: approvedMimeType,
+      file_name: approvedFileName,
+      data: approvedBuffer,
     });
     await upsertUserProfileImages(user.id, {
-      approved_mime_type: safeExt === ".png" ? "image/png" : safeExt === ".webp" ? "image/webp" : "image/jpeg",
-      approved_file_name: user.profile_image_pending_name || publicFilename,
-      approved_data: fileBuffer,
+      approved_mime_type: approvedMimeType,
+      approved_file_name: approvedFileName,
+      approved_data: approvedBuffer,
       pending_mime_type: null,
       pending_file_name: null,
       pending_data: null,
     });
   }
   removePublicFileByUrl(user.profile_image_url);
+  const cloudinaryUrl = approvedVersion
+    ? await uploadProfileImageToCloudinary(
+        user.id,
+        approvedBuffer,
+        approvedMimeType,
+        approvedFileName
+      )
+    : "";
 
   const updated = await updateUserById(user.id, {
     profile_image_status: "approved",
-    profile_image_url: approvedVersion ? buildProfileImageVersionUrl(req, approvedVersion.id) : buildProfileImageUrl(req, user.id),
+    profile_image_url:
+      cloudinaryUrl ||
+      (approvedVersion ? buildProfileImageVersionUrl(req, approvedVersion.id) : buildProfileImageUrl(req, user.id)),
     profile_image_pending_name: "",
     profile_image_reject_reason: "",
     profile_image_mode: "photo",
@@ -1371,6 +1418,9 @@ router.get("/profile-image/:userId", async (req, res) => {
   }
 
   if (user.profile_image_url) {
+    if (isExternalHttpUrl(user.profile_image_url)) {
+      return res.redirect(user.profile_image_url);
+    }
     const marker = "/uploads/profile/";
     const idx = user.profile_image_url.indexOf(marker);
     if (idx !== -1) {

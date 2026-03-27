@@ -5,7 +5,7 @@ dotenv.config();
 const nodeEnv = process.env.NODE_ENV || "development";
 const isProd = nodeEnv === "production";
 const rawOrigin = process.env.ORIGIN || "*";
-const productionAllowedOrigins = ["https://souzatv.app", "https://www.souzatv.app"];
+const baseProductionAllowedOrigins = ["https://souzatv.app", "https://www.souzatv.app"];
 const developmentAllowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
@@ -50,6 +50,7 @@ export const env = {
   port: Number(process.env.PORT || 8080),
   origin: rawOrigin,
   origins: rawOrigin.split(",").map((v) => v.trim()).filter(Boolean),
+  additionalAllowedOrigins: readEnv("ADDITIONAL_ALLOWED_ORIGINS", "").split(",").map((v) => v.trim()).filter(Boolean),
   databaseUrl: process.env.DATABASE_URL || "",
   dbPoolMax: Number(process.env.DB_POOL_MAX || 10),
   dbIdleTimeoutMs: Number(process.env.DB_IDLE_TIMEOUT_MS || 30000),
@@ -101,6 +102,8 @@ export const env = {
   authCookieHttpOnly: readEnv("AUTH_COOKIE_HTTPONLY", "true") !== "false",
 };
 
+const productionAllowedOrigins = [...baseProductionAllowedOrigins, ...env.additionalAllowedOrigins];
+
 const normalizedOriginSet = new Set(
   [...env.origins, ...(isProd ? productionAllowedOrigins : developmentAllowedOrigins)]
     .map((value) => String(value || "").trim())
@@ -124,7 +127,7 @@ assertProductionEnv(env.origin !== "*", "ORIGIN cannot be '*' in production");
 assertProductionEnv(env.origins.length > 0, "ORIGIN must list at least one allowed origin in production");
 assertProductionEnv(
   env.origins.every((origin) => productionAllowedOrigins.includes(origin)),
-  "ORIGIN in production must contain only https://souzatv.app and https://www.souzatv.app"
+  "ORIGIN in production must contain only the approved frontend origins"
 );
 assertProductionEnv(Boolean(env.jwtSecret), "JWT_SECRET is required in production");
 assertProductionEnv(isStrongSecret(env.jwtSecret), "JWT_SECRET must have at least 32 characters in production");
