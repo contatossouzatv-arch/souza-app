@@ -3,7 +3,7 @@ import { env } from "../config/env.js";
 
 function shouldUseDatabaseSsl() {
   const rawUrl = String(env.databaseUrl || "");
-  return /sslmode=require/i.test(rawUrl) || String(process.env.DB_SSL || "").toLowerCase() === "true";
+  return env.nodeEnv === "production" || /sslmode=require/i.test(rawUrl) || String(process.env.DB_SSL || "").toLowerCase() === "true";
 }
 
 export const pool = new Pool({
