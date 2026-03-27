@@ -1334,6 +1334,12 @@ export default function Profile() {
   const [loadNonCriticalProfileData, setLoadNonCriticalProfileData] = useState(false);
   const hasProfileGamification = Boolean(profileSummaryData);
   const isProfileGamificationPending = !hasProfileGamification && (loadingProfileGamification || fetchingProfileGamification);
+  const isCompetitionBoardPending =
+    Boolean(user) &&
+    !isViewingPublicProfile &&
+    shouldLoadCompetitionBoard &&
+    !profileCompetitionBoardData &&
+    fetchingProfileCompetitionBoard;
   const isProfileGamificationUnavailable = !hasProfileGamification && isProfileGamificationError;
   const canLoadDeferredProfileQueries =
     Boolean(user) &&
@@ -2044,12 +2050,14 @@ export default function Profile() {
     });
   }, [myFollowingProfiles, simulatedProfiles]);
 
-  const currentCompetitionEntry = deferredProfileGamification?.currentCompetitionEntry || competitionEntryByUserId[user?.id] || {
-    user_id: user?.id || "",
-    points: 0,
-    position: 0,
-    weekly_points: 0,
-  };
+  const currentCompetitionEntry = isCompetitionBoardPending
+    ? null
+    : deferredProfileGamification?.currentCompetitionEntry || competitionEntryByUserId[user?.id] || {
+      user_id: user?.id || "",
+      points: 0,
+      position: 0,
+      weekly_points: 0,
+    };
   const canRenderProfileOverviewFallback = Boolean(user?.id);
   const canRenderCompetitionFallback = Boolean(currentCompetitionEntry?.user_id || user?.id);
   const competitionTimeLeft = formatTimeLeft(competitionRemainingMsLive);
@@ -5283,7 +5291,7 @@ export default function Profile() {
         </div>
 
         <div className="mt-4">
-          {isProfileGamificationPending
+          {isProfileGamificationPending || isCompetitionBoardPending
             ? renderSectionSkeleton({
                 title: "Top Semanal",
                 subtitle: "Preparando ranking, pontos e premiação do ciclo.",
