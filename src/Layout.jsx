@@ -221,7 +221,7 @@ export default function Layout({ children }) {
       {enableBlockingOverlays && user ? (
         <PhoneAlert user={user} onUpdate={checkAppState} platformModalVisible={platformModalVisible} />
       ) : null}
-      <div key={`${location.pathname}${location.search}`} className="min-h-screen bg-slate-950 text-white">
+      <div className="min-h-screen bg-slate-950 text-white">
         {showDailyChestEntry ? (
           <DailyChestEntry onPress={playMenuClickSound} loadState={shouldLoadDailyChestState} />
         ) : null}

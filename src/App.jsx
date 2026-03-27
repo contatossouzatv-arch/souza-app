@@ -215,6 +215,13 @@ const AUTH_BOOT_FAILSAFE_MS = 18000;
 const needsOnboarding = (user) =>
   !user?.onboarding_completed || !user?.terms_accepted || !user?.privacy_accepted;
 
+const getPageElementKey = (pageName, location) => {
+  if (pageName === "Profile") {
+    return `${location.pathname}${location.search}`;
+  }
+  return undefined;
+};
+
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, user, checkAppState } = useAuth();
   const location = useLocation();
@@ -340,8 +347,9 @@ const AuthenticatedApp = () => {
   return (
     <Suspense fallback={<RouteLoader />}>
       {/*
-        Force page remounts on URL changes, including Profile query-string changes.
-        This prevents stale heavy state from the Profile page from surviving route swaps.
+        Only Profile keeps a URL-based remount key because it depends on query-string
+        navigation (`?user=` / `?u=`). Other pages should preserve their mounted state
+        across menu navigation and rely on React Query cache.
       */}
       <Routes>
       <Route path="/termos-de-uso" element={<TermsOfUse />} />
@@ -389,7 +397,7 @@ const AuthenticatedApp = () => {
               <Navigate to="/onboarding" replace />
             ) : (
               <LayoutWrapper currentPageName={mainPageKey}>
-                <MainPage key={`${location.pathname}${location.search}`} />
+                <MainPage key={getPageElementKey(mainPageKey, location)} />
               </LayoutWrapper>
             )
           ) : (
@@ -442,10 +450,10 @@ const AuthenticatedApp = () => {
                 <Navigate to="/onboarding" replace />
               ) : (
                 FULLSCREEN_PAGES.has(path) ? (
-                  <Page key={`${location.pathname}${location.search}`} />
+                  <Page key={getPageElementKey(path, location)} />
                 ) : (
                   <LayoutWrapper currentPageName={path}>
-                    <Page key={`${location.pathname}${location.search}`} />
+                    <Page key={getPageElementKey(path, location)} />
                   </LayoutWrapper>
                 )
               )
