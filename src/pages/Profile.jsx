@@ -1292,7 +1292,7 @@ export default function Profile() {
   } = useQuery({
     queryKey: ["profile-competition-board-authoritative", user?.id],
     queryFn: ({ signal }) => base44.gamification.profileCompetitionBoard({ signal }),
-    enabled: false && shouldLoadCompetitionBoard,
+    enabled: shouldLoadCompetitionBoard && hasResolvedAuthBootstrap,
     staleTime: 180000,
     gcTime: 30 * 60 * 1000,
     refetchOnMount: false,
