@@ -48,6 +48,7 @@ const PUBLIC_UI_CONFIG_TTL_MS = 60000;
 const PUBLIC_PROFILE_SUMMARY_TTL_MS = 30000;
 const PROFILE_PUBLIC_BASICS_TTL_MS = 60000;
 const PROFILE_PRIZE_GALLERY_TTL_MS = 20000;
+const PROFILE_ENDPOINT_SOFT_TIMEOUT_MS = 2500;
 
 const DEFAULT_POINTS_RULES = {
   points_per_participation: 12,
@@ -141,6 +142,23 @@ function clampInt(value, fallback = 0, min = 0, max = Number.MAX_SAFE_INTEGER) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(max, Math.max(min, Math.round(parsed)));
+}
+
+async function withSoftTimeout(promise, timeoutMs, errorMessage = "Operation timed out") {
+  let timeoutId = null;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new Error(errorMessage);
+      error.code = "SOFT_TIMEOUT";
+      reject(error);
+    }, Math.max(1, Number(timeoutMs || 1)));
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 function xpRequiredForLevel(level) {
@@ -2970,10 +2988,14 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
     }
 
     const payload = extractProfileSummaryPayload(
-      await buildLightweightProfileMetrics(userId, {
-        forceFresh: shouldForceRefresh,
-        includeCompetitionBoard: false,
-      })
+      await withSoftTimeout(
+        buildLightweightProfileMetrics(userId, {
+          forceFresh: shouldForceRefresh,
+          includeCompetitionBoard: false,
+        }),
+        PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
+        "Profile summary soft timeout"
+      )
     );
 
     return res.json(payload);
@@ -3004,7 +3026,11 @@ router.get("/profile/competition-board", requireAuth, async (req, res) => {
         state?.weeklyConfig || DEFAULT_PROFILE_COMPETITION_CONFIG
       );
     } else {
-      resolvedCompetitionBoard = await buildCachedWeeklyCompetitionBoard();
+      resolvedCompetitionBoard = await withSoftTimeout(
+        buildCachedWeeklyCompetitionBoard(),
+        PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
+        "Profile competition board soft timeout"
+      );
     }
     const payload = buildSharedCompetitionBoardPayloadFromBoard(
       userId,
