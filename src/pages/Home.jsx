@@ -316,7 +316,9 @@ export default function Home() {
       recentProfilesDragRef.current.moved = true;
     }
     container.scrollLeft = drag.startScrollLeft - deltaX;
-    event.preventDefault();
+    if (event.cancelable) {
+      event.preventDefault();
+    }
   };
 
   const handleRecentProfilesPointerUpOrCancel = (event) => {
@@ -340,7 +342,9 @@ export default function Home() {
     if (!container) return;
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
       container.scrollLeft += event.deltaY;
-      event.preventDefault();
+      if (event.cancelable) {
+        event.preventDefault();
+      }
     }
   };
 

@@ -41,10 +41,48 @@ export default function ProfilesGallery() {
   const loadMoreRef = React.useRef(null);
   const [search, setSearch] = React.useState("");
 
-  const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage } = useInfiniteQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    isFetchingNextPage,
+    fetchNextPage,
+    hasNextPage,
+    refetch,
+  } = useInfiniteQuery({
     queryKey: ["profiles-gallery"],
-    queryFn: ({ pageParam = 0, signal }) =>
-      base44.profile.publicDirectory({ limit: PAGE_SIZE, offset: pageParam }, { signal }),
+    queryFn: async ({ pageParam = 0, signal }) => {
+      try {
+        const payload = await base44.profile.publicDirectory({ limit: PAGE_SIZE, offset: pageParam }, { signal });
+        if (Array.isArray(payload?.items) && payload.items.length > 0) {
+          return payload;
+        }
+      } catch (primaryError) {
+        console.warn("[profiles-gallery] public-directory failed, falling back to social.discover", primaryError);
+      }
+
+      const fallbackPayload = await base44.social.discover({ limit: PAGE_SIZE, offset: pageParam, sort: "recent" });
+      const fallbackItems = Array.isArray(fallbackPayload?.items) ? fallbackPayload.items : [];
+      return {
+        items: fallbackItems.map((profile) => ({
+          id: profile.id,
+          nick: profile.nick || profile.full_name || "Usuário",
+          handle: profile.handle || String(profile.nick || profile.full_name || "usuario").toLowerCase().replace(/\s+/g, "."),
+          avatar_emoji: profile.avatar_emoji || "",
+          profile_avatar_id: profile.profile_avatar_id || "",
+          profile_image_mode: profile.profile_image_mode || "avatar",
+          profile_image_status: profile.profile_image_status || "none",
+          profile_image_url: profile.profile_image_url || "",
+          created_date: profile.created_date || profile.created_at || null,
+        })),
+        total: Number(fallbackPayload?.total || 0),
+        limit: PAGE_SIZE,
+        offset: pageParam,
+        nextOffset: pageParam + fallbackItems.length,
+        hasMore: Boolean(fallbackPayload?.hasMore || fallbackItems.length === PAGE_SIZE),
+      };
+    },
     initialPageParam: 0,
     getNextPageParam: (lastPage) => (lastPage?.hasMore ? lastPage?.nextOffset ?? undefined : undefined),
     staleTime: 60000,
@@ -132,6 +170,20 @@ export default function ProfilesGallery() {
       {isLoading ? (
         <Card className="border-slate-800 bg-slate-900/70 p-6 text-center text-slate-400">
           Carregando perfis...
+        </Card>
+      ) : isError ? (
+        <Card className="space-y-3 border-slate-800 bg-slate-900/70 p-6 text-center text-slate-300">
+          <p>Não foi possível carregar a galeria agora.</p>
+          <p className="text-xs text-slate-500">{error?.message || "Falha ao buscar perfis."}</p>
+          <div>
+            <Button
+              type="button"
+              onClick={() => refetch()}
+              className="bg-cyan-500 text-slate-950 hover:bg-cyan-400"
+            >
+              Tentar novamente
+            </Button>
+          </div>
         </Card>
       ) : filteredProfiles.length ? (
         <>
