@@ -1819,7 +1819,7 @@ export function getEntityRecordData(row) {
 
 export async function getAppSettingsMap() {
   const result = await pool.query(
-    "SELECT data FROM entity_records WHERE entity_name = 'AppSettings' ORDER BY created_at DESC"
+    "SELECT data FROM entity_records WHERE entity_name = 'AppSettings' ORDER BY updated_at DESC NULLS LAST, created_at DESC"
   );
   const map = new Map();
   result.rows.forEach((row) => {
@@ -3833,7 +3833,7 @@ export async function listEntity(entityName, sort, limit) {
       `SELECT id, data, created_at, updated_at
        FROM entity_records
        WHERE entity_name = $1
-       ORDER BY created_at DESC
+       ORDER BY updated_at DESC NULLS LAST, created_at DESC
        ${limitClause}`,
       values
     );

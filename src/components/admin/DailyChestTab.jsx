@@ -476,47 +476,26 @@ export default function DailyChestTab() {
     },
   });
 
-  const saveAccessGroupLinkMutation = useMutation({
-    mutationFn: (link) =>
+  const saveAccessConfigMutation = useMutation({
+    mutationFn: () =>
       base44.adminDailyChest.saveSettings({
-        daily_chest_access_group_link: link,
+        daily_chest_access_code_required: String(
+          parseBooleanString(settingsDraft.daily_chest_access_code_required, true)
+        ),
+        daily_chest_access_group_link: String(settingsDraft.daily_chest_access_group_link ?? ""),
       }),
     onSuccess: () => {
       lastPersistedAccessLinkRef.current = String(settingsDraft.daily_chest_access_group_link ?? "");
       queryClient.invalidateQueries({ queryKey: ["admin-daily-chest-config-v2"] });
-    },
-    onError: (error) => {
       toast({
-        variant: "destructive",
-        title: "Falha ao salvar link",
-        description: error?.message || "Tente novamente.",
-      });
-    },
-  });
-
-  const toggleAccessRequirementMutation = useMutation({
-    mutationFn: (nextRequired) =>
-      base44.adminDailyChest.saveSettings({
-        daily_chest_access_code_required: String(Boolean(nextRequired)),
-      }),
-    onSuccess: (_result, nextRequired) => {
-      const normalizedValue = String(Boolean(nextRequired));
-      setSettingsDraft((prev) => ({
-        ...prev,
-        daily_chest_access_code_required: normalizedValue,
-      }));
-      queryClient.invalidateQueries({ queryKey: ["admin-daily-chest-config-v2"] });
-      toast({
-        title: Boolean(nextRequired) ? "Chave diária ativada" : "Chave diária desativada",
-        description: Boolean(nextRequired)
-          ? "O baú base volta a exigir a chave do dia."
-          : "O baú base fica liberado e segue atualizando automaticamente no horário configurado.",
+        title: "Acesso do baú salvo",
+        description: "As regras da chave diária foram atualizadas.",
       });
     },
     onError: (error) => {
       toast({
         variant: "destructive",
-        title: "Falha ao atualizar acesso",
+        title: "Falha ao salvar acesso",
         description: error?.message || "Tente novamente.",
       });
     },
@@ -673,28 +652,6 @@ export default function DailyChestTab() {
     chestWarnings.push("Existe prêmio em saldo sem limite diário nem estoque total. Revise para evitar custo aberto demais.");
   }
 
-  React.useEffect(() => {
-    const currentLink = String(settingsDraft.daily_chest_access_group_link ?? "");
-    if (!accessLinkReadyRef.current) {
-      accessLinkReadyRef.current = true;
-      return;
-    }
-
-    if (currentLink === lastPersistedAccessLinkRef.current) {
-      return;
-    }
-
-    if (saveAccessGroupLinkMutation.isPending) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      saveAccessGroupLinkMutation.mutate(currentLink);
-    }, 1200);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [saveAccessGroupLinkMutation, saveAccessGroupLinkMutation.isPending, settingsDraft.daily_chest_access_group_link]);
-
   return (
     <div className="mt-6 space-y-6">
       <Card className="border-cyan-700/40 bg-gradient-to-br from-slate-900/85 to-cyan-950/45 p-6">
@@ -731,8 +688,9 @@ export default function DailyChestTab() {
                 </div>
                 <Switch
                   checked={parseBooleanString(settingsDraft.daily_chest_access_code_required, true)}
-                  onCheckedChange={(checked) => toggleAccessRequirementMutation.mutate(checked)}
-                  disabled={toggleAccessRequirementMutation.isPending}
+                  onCheckedChange={(checked) =>
+                    updateSetting("daily_chest_access_code_required", String(Boolean(checked)))
+                  }
                 />
               </div>
               <p className="mt-3 text-xs font-semibold text-cyan-200">
@@ -763,23 +721,33 @@ export default function DailyChestTab() {
           </div>
 
           <div className="flex min-w-[220px] items-start">
-            <Button
-              type="button"
-              onClick={() => generateAccessCodeMutation.mutate("")}
-              disabled={
-                generateAccessCodeMutation.isPending ||
-                !parseBooleanString(settingsDraft.daily_chest_access_code_required, true)
-              }
-              className="w-full bg-emerald-400 font-bold text-slate-950 hover:bg-emerald-300"
-            >
-              {generateAccessCodeMutation.isPending
-                ? "Gerando..."
-                : !parseBooleanString(settingsDraft.daily_chest_access_code_required, true)
-                ? "Chave desativada"
-                : settingsDraft.daily_chest_access_code
-                ? "Gerar novamente"
-                : "Gerar chave do dia"}
-            </Button>
+            <div className="w-full space-y-3">
+              <Button
+                type="button"
+                onClick={() => saveAccessConfigMutation.mutate()}
+                disabled={saveAccessConfigMutation.isPending}
+                className="w-full bg-cyan-500 font-bold text-slate-950 hover:bg-cyan-400"
+              >
+                {saveAccessConfigMutation.isPending ? "Salvando acesso..." : "Salvar configurações de chave"}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => generateAccessCodeMutation.mutate("")}
+                disabled={
+                  generateAccessCodeMutation.isPending ||
+                  !parseBooleanString(settingsDraft.daily_chest_access_code_required, true)
+                }
+                className="w-full bg-emerald-400 font-bold text-slate-950 hover:bg-emerald-300"
+              >
+                {generateAccessCodeMutation.isPending
+                  ? "Gerando..."
+                  : !parseBooleanString(settingsDraft.daily_chest_access_code_required, true)
+                  ? "Chave desativada"
+                  : settingsDraft.daily_chest_access_code
+                  ? "Gerar novamente"
+                  : "Gerar chave do dia"}
+              </Button>
+            </div>
           </div>
         </div>
       </Card>
