@@ -3558,41 +3558,19 @@ router.get("/feed/wins", requireAuth, async (_req, res) => {
 router.get("/home/feed-summary", requireAuth, async (req, res) => {
   const userId = String(req.auth?.sub || "").trim();
   try {
-    const sharedPayload = await withSoftTimeout(
-      buildHomeFeedSharedPayload(),
-      PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
-      "Home feed shared soft timeout"
-    );
-    const userFeedLikes = await withSoftTimeout(
-      buildUserFeedLikeState(userId, sharedPayload.targetPostIds || []),
-      PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
-      "Home feed likes soft timeout"
-    );
-    const payload = {
+    const sharedPayload = await buildHomeFeedSharedPayload();
+    const userFeedLikes = await buildUserFeedLikeState(userId, sharedPayload.targetPostIds || []);
+    return res.json({
       posts: sharedPayload.posts,
       winnerFeed: sharedPayload.winnerFeed,
       feedLikes: {
         counts: sharedPayload.feedLikes?.counts || {},
         likedPostIds: userFeedLikes.likedPostIds || [],
       },
-    };
-    return res.json(payload);
+    });
   } catch (error) {
     console.error("Failed to load home feed summary", error);
-    try {
-      const sharedPayload = await getCacheJson("gamification:home-feed-shared");
-      return res.json({
-        posts: Array.isArray(sharedPayload?.posts) ? sharedPayload.posts : [],
-        winnerFeed: sharedPayload?.winnerFeed || { items: [] },
-        feedLikes: {
-          counts: sharedPayload?.feedLikes?.counts || {},
-          likedPostIds: [],
-        },
-        _degraded: true,
-      });
-    } catch {
-      return res.status(500).json({ error: "Nao foi possivel carregar o feed inicial agora." });
-    }
+    return res.status(500).json({ error: "Nao foi possivel carregar o feed inicial agora." });
   }
 });
 
