@@ -116,7 +116,7 @@ export default function ProfilesGallery() {
             </div>
             <div>
               <h1 className="text-lg font-bold text-white">Galeria de perfis</h1>
-              <p className="text-sm text-slate-400">Todos os perfis reais do app carregando aos poucos.</p>
+              <p className="text-sm text-slate-400">Perfis públicos do app, priorizando quem já tem foto aprovada.</p>
             </div>
           </div>
           <Button
