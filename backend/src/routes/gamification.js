@@ -456,15 +456,29 @@ function findPrizeItemForAudit(prizeItems = [], audit = {}, sourceType = "") {
 }
 
 async function upsertAppSetting(key, value, description = "") {
-  const settings = await listEntity("AppSettings");
-  const existing = settings.find((entry) => entry.key === key);
   const payload = {
     key,
     value: typeof value === "string" ? value : JSON.stringify(value),
     description,
   };
-  if (existing?.id) {
-    return updateEntity("AppSettings", existing.id, payload);
+  const updated = await pool.query(
+    `UPDATE entity_records
+        SET data = jsonb_build_object(
+          'key', $2::text,
+          'value', $3::text,
+          'description', $4::text
+        ),
+            updated_at = NOW()
+      WHERE entity_name = 'AppSettings'
+        AND data->>'key' = $1
+      RETURNING id, data`,
+    [String(key || ""), String(key || ""), payload.value, String(description || "")]
+  );
+  if (updated.rows.length > 0) {
+    return {
+      id: updated.rows[0].id,
+      ...(updated.rows[0].data || {}),
+    };
   }
   return createEntity("AppSettings", payload);
 }
