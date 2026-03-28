@@ -131,7 +131,6 @@ const BADGE_CELEBRATION_STORAGE_PREFIX = "profile_badge_celebration_seen_v1_";
 const PROFILE_GESTURE_DRAG_ENABLED = true;
 const PROFILE_AUTOPLAY_MEDIA_ENABLED = true;
 const PROFILE_DEBUG_ENABLED = false;
-const PROFILE_CORE_LOAD_DELAY_MS = 180;
 const PROFILE_NON_CRITICAL_LOAD_DELAY_MS = 1800;
 const PROFILE_ENGAGED_QUERY_LIMIT = 5;
 const PROFILE_PUBLIC_ENRICHMENT_ENABLED = true;
@@ -852,7 +851,6 @@ export default function Profile() {
   const [competitionRemainingMsLive, setCompetitionRemainingMsLive] = useState(0);
   const [activePrivateTab, setActivePrivateTab] = useState("overview");
   const [activePublicTab, setActivePublicTab] = useState("overview");
-  const [shouldLoadCoreProfileData, setShouldLoadCoreProfileData] = useState(false);
   const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
     typeof document === "undefined" ? true : document.visibilityState === "visible"
   );
@@ -978,17 +976,6 @@ export default function Profile() {
   }, []);
 
   const [loadDiscoverProfiles, setLoadDiscoverProfiles] = useState(false);
-
-  useEffect(() => {
-    setShouldLoadCoreProfileData(false);
-    if (!user?.id || isViewingPublicProfile) return undefined;
-
-    const timerId = window.setTimeout(() => {
-      setShouldLoadCoreProfileData(true);
-    }, PROFILE_CORE_LOAD_DELAY_MS);
-
-    return () => window.clearTimeout(timerId);
-  }, [isViewingPublicProfile, location.pathname, location.search, user?.id]);
 
   useEffect(() => {
     if (isViewingPublicProfile) return;
@@ -1316,7 +1303,7 @@ export default function Profile() {
       });
       return base44.gamification.profileSummary({ signal });
     },
-    enabled: !!user && !isViewingPublicProfile && shouldLoadCoreProfileData,
+    enabled: !!user && !isViewingPublicProfile && hasResolvedAuthBootstrap,
     staleTime: 180000,
     gcTime: 30 * 60 * 1000,
     refetchOnMount: false,
@@ -1327,7 +1314,7 @@ export default function Profile() {
   const shouldLoadCompetitionBoard =
     Boolean(user) &&
     !isViewingPublicProfile &&
-    shouldLoadCoreProfileData &&
+    hasResolvedAuthBootstrap &&
     !Array.isArray(profileSummaryData?.competitionBoard?.entries);
   const {
     data: profileCompetitionBoardData,
