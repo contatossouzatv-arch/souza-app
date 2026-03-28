@@ -2,7 +2,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Users } from "lucide-react";
-import { apiRequest, base44 } from "@/api/base44Client";
+import { base44 } from "@/api/base44Client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,10 +53,12 @@ export default function ProfilesGallery() {
   } = useInfiniteQuery({
     queryKey: ["profiles-gallery"],
     queryFn: async ({ pageParam = 0, signal }) => {
-      const params = new URLSearchParams();
-      params.set("limit", String(PAGE_SIZE));
-      params.set("offset", String(pageParam));
-      return apiRequest(`/api/profile/public-directory?${params.toString()}`, { signal });
+      if (typeof base44?.profile?.publicDirectory === "function") {
+        return base44.profile.publicDirectory({ limit: PAGE_SIZE, offset: pageParam }, { signal });
+      }
+
+      console.warn("[profiles-gallery] public-directory unavailable in client, using social.discover fallback");
+      return base44.social.discover({ limit: PAGE_SIZE, offset: pageParam, sort: "recent" });
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage) => (lastPage?.hasMore ? lastPage?.nextOffset ?? undefined : undefined),
@@ -116,7 +118,7 @@ export default function ProfilesGallery() {
             </div>
             <div>
               <h1 className="text-lg font-bold text-white">Galeria de perfis</h1>
-              <p className="text-sm text-slate-400">Perfis públicos do app, priorizando quem já tem foto aprovada.</p>
+              <p className="text-sm text-slate-400">Perfis públicos do app para você descobrir novos usuários.</p>
             </div>
           </div>
           <Button

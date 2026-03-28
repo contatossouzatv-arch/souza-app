@@ -4342,14 +4342,42 @@ export default function Profile() {
       return <img src={src} alt="" aria-hidden="true" className={className} />;
     };
 
-    const getRankingAvatarSrc = (item) => {
-      if (String(item?.profile_image_status || "").toLowerCase() === "approved" && item?.profile_image_url) {
-        return resolveAssetUrl(item.profile_image_url);
+    const getRankingAvatarSrc = (item) =>
+      getProfileAvatarSrc(
+        {
+          ...item,
+          id: item?.id || item?.user_id || "",
+        },
+        avatarSrcById,
+        ""
+      ) || "";
+
+    const renderRankingAvatar = (item, fallbackLabel = "U", sizeClass = "h-full w-full") => {
+      const avatarSrc = getRankingAvatarSrc(item);
+      const avatarFallback = getProfileAvatarFallback(item, fallbackLabel);
+
+      if (!avatarSrc) {
+        return (
+          <div className={`flex ${sizeClass} items-center justify-center text-[10px] font-black text-slate-200`}>
+            {avatarFallback}
+          </div>
+        );
       }
-      if (item?.profile_avatar_id && avatarSrcById[item.profile_avatar_id]) {
-        return avatarSrcById[item.profile_avatar_id];
-      }
-      return selectedAvatar?.src || "";
+
+      return (
+        <img
+          src={avatarSrc}
+          alt={item?.nick || "Usuário"}
+          className={`${sizeClass} object-cover`}
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+            const fallbackNode = event.currentTarget.nextElementSibling;
+            if (fallbackNode instanceof HTMLElement) {
+              fallbackNode.style.display = "flex";
+            }
+          }}
+        />
+      );
     };
 
     return (
@@ -4448,11 +4476,12 @@ export default function Profile() {
                             {(item.nick || "G").slice(0, 1).toUpperCase()}
                           </div>
                         ) : (
-                          <img
-                            src={getRankingAvatarSrc(item)}
-                            alt={item.nick}
-                            className="h-full w-full object-cover"
-                          />
+                          <>
+                            {renderRankingAvatar(item, "U")}
+                            <div className="hidden h-full w-full items-center justify-center text-[10px] font-black text-slate-200">
+                              {getProfileAvatarFallback(item, "U")}
+                            </div>
+                          </>
                         )}
                       </div>
                       <p className="truncate text-xs font-bold text-white">{item.nick}</p>
@@ -4525,11 +4554,12 @@ export default function Profile() {
                                   {(item.nick || "C").slice(0, 1).toUpperCase()}
                                 </div>
                               ) : (
-                                <img
-                                  src={getRankingAvatarSrc(item)}
-                                  alt={item.nick}
-                                  className="h-full w-full object-cover"
-                                />
+                                <>
+                                  {renderRankingAvatar(item, "U")}
+                                  <div className="hidden h-full w-full items-center justify-center text-[9px] font-black text-slate-200">
+                                    {getProfileAvatarFallback(item, "U")}
+                                  </div>
+                                </>
                               )}
                             </div>
                             {item.position <= 3 && top3FrameUrl
@@ -4565,7 +4595,12 @@ export default function Profile() {
                       <div className="mr-2">
                         <div className="relative h-6 w-6">
                           <div className="h-6 w-6 overflow-hidden rounded-full border border-slate-500/80 bg-slate-800">
-                            <img src={getRankingAvatarSrc(entry)} alt={entry.nick || "Voce"} className="h-full w-full object-cover" />
+                            <>
+                              {renderRankingAvatar(entry, "V")}
+                              <div className="hidden h-full w-full items-center justify-center text-[9px] font-black text-slate-200">
+                                {getProfileAvatarFallback(entry, "V")}
+                              </div>
+                            </>
                           </div>
                         </div>
                       </div>
