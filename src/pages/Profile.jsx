@@ -2245,16 +2245,21 @@ export default function Profile() {
     avatarOptions.find((item) => item.id === profilePrefs.avatarId) ||
     avatarOptions.find((item) => item.id === DEFAULT_AVATAR_ID) ||
     avatarOptions[0];
+  const resolvedOwnPhotoSrc = getProfileAvatarSrc(
+    {
+      id: user?.id || "",
+      profile_image_status: user?.profile_image_status || "",
+      profile_image_url: profilePrefs.selectedPhotoUrl || user?.profile_image_url || "",
+      profile_avatar_id: user?.profile_avatar_id || profilePrefs.avatarId || "",
+    },
+    avatarSrcById,
+    selectedAvatar?.src || ""
+  );
   const profileImageSrc =
     user?.profile_image_status === "manual_review" || user?.profile_image_status === "pending"
       ? privatePhotoPreview || selectedAvatar?.src
-      : user?.profile_image_mode === "photo" && user?.profile_image_status === "approved"
-      ? (profilePrefs.selectedPhotoUrl || user?.profile_image_url)
-        ? resolveAssetUrl(profilePrefs.selectedPhotoUrl || user.profile_image_url)
-        : selectedAvatar?.src
-      : selectedAvatar?.src;
+      : resolvedOwnPhotoSrc || selectedAvatar?.src;
   const secondaryProfileImageSrc =
-    user?.profile_image_status === "approved" &&
     user?.profile_image_url &&
     resolveAssetUrl(user.profile_image_url) !== profileImageSrc
       ? resolveAssetUrl(user.profile_image_url)

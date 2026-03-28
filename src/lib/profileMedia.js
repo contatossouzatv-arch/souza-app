@@ -5,15 +5,15 @@ export function getProfileAvatarSrc(profile, avatarSrcById = {}, fallbackSrc = "
     return fallbackSrc || "";
   }
 
+  const rawProfileImageUrl = String(profile.profile_image_url || "").trim();
   const hasApprovedPhoto = String(profile.profile_image_status || "").toLowerCase() === "approved";
 
-  if (hasApprovedPhoto) {
-    const approvedPhotoUrl =
-      String(profile.profile_image_url || "").trim() ||
-      (profile.id ? `/api/auth/profile-image/${profile.id}` : "");
-    if (approvedPhotoUrl) {
-      return resolveAssetUrl(approvedPhotoUrl);
-    }
+  if (rawProfileImageUrl) {
+    return resolveAssetUrl(rawProfileImageUrl);
+  }
+
+  if (hasApprovedPhoto && profile.id) {
+    return resolveAssetUrl(`/api/auth/profile-image/${profile.id}`);
   }
 
   const avatarId = String(profile.profile_avatar_id || "").trim();
