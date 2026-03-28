@@ -121,7 +121,6 @@ function buildHandle(nick = "", userId = "") {
 
 function mapSocialProfile(row) {
   const approvedProfileImageUrl =
-    String(row.profile_image_mode || "").toLowerCase() === "photo" &&
     String(row.profile_image_status || "").toLowerCase() === "approved"
       ? String(row.profile_image_url || "").trim() || (row.id ? `/api/auth/profile-image/${row.id}` : "")
       : "";

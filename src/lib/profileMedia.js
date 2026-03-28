@@ -5,9 +5,7 @@ export function getProfileAvatarSrc(profile, avatarSrcById = {}, fallbackSrc = "
     return fallbackSrc || "";
   }
 
-  const hasApprovedPhoto =
-    String(profile.profile_image_mode || "").toLowerCase() === "photo" &&
-    String(profile.profile_image_status || "").toLowerCase() === "approved";
+  const hasApprovedPhoto = String(profile.profile_image_status || "").toLowerCase() === "approved";
 
   if (hasApprovedPhoto) {
     const approvedPhotoUrl =

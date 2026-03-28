@@ -1235,8 +1235,7 @@ function createUserSnapshot(user) {
 }
 
 function getApprovedProfileImageUrl(user) {
-  return String(user?.profile_image_mode || "").toLowerCase() === "photo" &&
-    String(user?.profile_image_status || "").toLowerCase() === "approved"
+  return String(user?.profile_image_status || "").toLowerCase() === "approved"
     ? String(user?.profile_image_url || "").trim() || (user?.id ? `/api/auth/profile-image/${user.id}` : "")
     : "";
 }
@@ -3090,7 +3089,6 @@ router.get("/profile/public-directory", async (req, res) => {
         const visibleRows = rows.slice(0, limit);
         const items = visibleRows.map((row) => {
           const approvedProfileImageUrl =
-            String(row.profile_image_mode || "").toLowerCase() === "photo" &&
             String(row.profile_image_status || "").toLowerCase() === "approved"
               ? String(row.profile_image_url || "").trim() || (row.id ? `/api/auth/profile-image/${row.id}` : "")
               : "";

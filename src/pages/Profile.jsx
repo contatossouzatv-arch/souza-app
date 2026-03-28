@@ -4309,6 +4309,12 @@ export default function Profile() {
             </Button>
           </div>
 
+          {!isCompetitionFinishedPreview ? (
+            <div className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-100">
+              Top Semanal sendo montado agora. Se os dados ainda não aparecerem, atualize a tela.
+            </div>
+          ) : null}
+
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded-xl border border-slate-700/80 bg-slate-900/75 p-2">
               <p className="text-[10px] text-slate-400">Tempo restante</p>
