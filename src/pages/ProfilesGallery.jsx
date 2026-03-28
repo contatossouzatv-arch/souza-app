@@ -53,40 +53,11 @@ export default function ProfilesGallery() {
   } = useInfiniteQuery({
     queryKey: ["profiles-gallery"],
     queryFn: async ({ pageParam = 0, signal }) => {
-      try {
-        const publicDirectory = base44?.profile?.publicDirectory;
-        if (typeof publicDirectory === "function") {
-          const payload = await publicDirectory({ limit: PAGE_SIZE, offset: pageParam }, { signal });
-          if (Array.isArray(payload?.items) && payload.items.length > 0) {
-            return payload;
-          }
-        } else {
-          console.warn("[profiles-gallery] public-directory unavailable in client, using social.discover fallback");
-        }
-      } catch (primaryError) {
-        console.warn("[profiles-gallery] public-directory failed, falling back to social.discover", primaryError);
+      const publicDirectory = base44?.profile?.publicDirectory;
+      if (typeof publicDirectory !== "function") {
+        throw new Error("Rota de galeria pública indisponível no client.");
       }
-
-      const fallbackPayload = await base44.social.discover({ limit: PAGE_SIZE, offset: pageParam, sort: "recent" });
-      const fallbackItems = Array.isArray(fallbackPayload?.items) ? fallbackPayload.items : [];
-      return {
-        items: fallbackItems.map((profile) => ({
-          id: profile.id,
-          nick: profile.nick || profile.full_name || "Usuário",
-          handle: profile.handle || String(profile.nick || profile.full_name || "usuario").toLowerCase().replace(/\s+/g, "."),
-          avatar_emoji: profile.avatar_emoji || "",
-          profile_avatar_id: profile.profile_avatar_id || "",
-          profile_image_mode: profile.profile_image_mode || "avatar",
-          profile_image_status: profile.profile_image_status || "none",
-          profile_image_url: profile.profile_image_url || "",
-          created_date: profile.created_date || profile.created_at || null,
-        })),
-        total: Number(fallbackPayload?.total || 0),
-        limit: PAGE_SIZE,
-        offset: pageParam,
-        nextOffset: pageParam + fallbackItems.length,
-        hasMore: Boolean(fallbackPayload?.hasMore || fallbackItems.length === PAGE_SIZE),
-      };
+      return publicDirectory({ limit: PAGE_SIZE, offset: pageParam }, { signal });
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage) => (lastPage?.hasMore ? lastPage?.nextOffset ?? undefined : undefined),
