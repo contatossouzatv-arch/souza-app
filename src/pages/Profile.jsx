@@ -2326,32 +2326,55 @@ export default function Profile() {
       };
     }
     if (selectedPublicUser) {
-      return {
+      const selectedEntry =
+        competitionEntryByUserId[String(selectedPublicUser.id || "")] ||
+        competitionEntryByUserId[String(selectedPublicProfileId || "")] ||
+        null;
+      const baseProfileCandidate = selectedPublicProfileHandle
+        ? simulatedProfiles.find((profile) => profile.handle === selectedPublicProfileHandle)
+        : simulatedProfiles.find((profile) => profile.id === selectedPublicUser.id);
+      const mergedSelectedProfile = {
+        ...(baseProfileCandidate || {}),
+        ...(realProfilesById[String(selectedPublicUser.id || "")] || {}),
+        ...(selectedEntry || {}),
+        ...selectedPublicUser,
         id: selectedPublicUser.id,
-        nick: selectedPublicUser.nick || "Usuário",
+      };
+      const avatarMatch = avatarOptions.find(
+        (item) => item.id === mergedSelectedProfile.profile_avatar_id || item.id === selectedEntry?.profile_avatar_id
+      );
+      return {
+        id: mergedSelectedProfile.id,
+        nick: mergedSelectedProfile.nick || "Usuário",
         handle:
-          selectedPublicUser.handle ||
-          String(selectedPublicUser.nick || "usuario")
+          mergedSelectedProfile.handle ||
+          String(mergedSelectedProfile.nick || "usuario")
             .toLowerCase()
             .replace(/\s+/g, "."),
-        avatarSrc: getProfileAvatarSrc(selectedPublicUser, avatarSrcById, "") || "",
-        avatar_emoji: String(selectedPublicUser.avatar_emoji || ""),
-        profile_avatar_id: String(selectedPublicUser.profile_avatar_id || ""),
-        profile_image_mode: String(selectedPublicUser.profile_image_mode || "avatar"),
-        profile_image_status: String(selectedPublicUser.profile_image_status || ""),
-        profile_image_url: String(selectedPublicUser.profile_image_url || ""),
-        points: 0,
-        xpTotal: Math.max(0, Number(selectedPublicUser.xp_total ?? selectedPublicUser.xpTotal ?? 0)),
-        xp_total: Math.max(0, Number(selectedPublicUser.xp_total ?? selectedPublicUser.xpTotal ?? 0)),
-        tickets: 0,
-        participations: 0,
-        position: 0,
-        totalWins: 0,
-        totalApproved: 0,
-        liveParticipations: 0,
-        following: Number(selectedPublicUser.following || 0),
-        followers: Number(selectedPublicUser.followers || 0),
-        likes: Number(selectedPublicUser.likes || 0),
+        avatarSrc:
+          getProfileAvatarSrc(mergedSelectedProfile, avatarSrcById, avatarMatch?.src || "") ||
+          avatarMatch?.src ||
+          "",
+        avatar_emoji: String(mergedSelectedProfile.avatar_emoji || ""),
+        profile_avatar_id: String(mergedSelectedProfile.profile_avatar_id || ""),
+        profile_image_mode: String(mergedSelectedProfile.profile_image_mode || "avatar"),
+        profile_image_status: String(mergedSelectedProfile.profile_image_status || ""),
+        profile_image_url: String(mergedSelectedProfile.profile_image_url || ""),
+        points: Number(selectedEntry?.weekly_points ?? selectedEntry?.points ?? 0),
+        xpTotal: Math.max(0, Number(mergedSelectedProfile.xp_total ?? mergedSelectedProfile.xpTotal ?? 0)),
+        xp_total: Math.max(0, Number(mergedSelectedProfile.xp_total ?? mergedSelectedProfile.xpTotal ?? 0)),
+        tickets: Number(selectedEntry?.totalTickets || 0),
+        participations:
+          Number(selectedEntry?.liveParticipations || 0) +
+          Number(selectedEntry?.gameParticipations || 0) +
+          Number(selectedEntry?.instantParticipations || 0),
+        position: Number(selectedEntry?.position || 0),
+        totalWins: Number(selectedEntry?.totalWins || 0),
+        totalApproved: Number(selectedEntry?.totalApproved || 0),
+        liveParticipations: Number(selectedEntry?.liveParticipations || 0),
+        following: Number(mergedSelectedProfile.following || 0),
+        followers: Number(mergedSelectedProfile.followers || 0),
+        likes: Number(mergedSelectedProfile.likes || 0),
       };
     }
     const baseProfile = selectedPublicProfileHandle
@@ -4211,6 +4234,10 @@ export default function Profile() {
     const safeEntryPoints = Number(entry?.weekly_points ?? entry?.points ?? 0);
     const isCompetitionFinishedPreview = competitionBoard.config.preview_mode === "finished";
     const topEntries = competitionBoard.entries.slice(0, 20);
+    const shouldShowCompetitionBuildNotice =
+      !isCompetitionFinishedPreview &&
+      topEntries.length === 0 &&
+      (isCompetitionBoardPending || loadingProfileGamification || fetchingProfileCompetitionBoard);
     const visibleEntries = [...topEntries];
     const isEntryInTop20 = Boolean(entry?.user_id) && topEntries.some((item) => item.user_id === entry.user_id);
     const showOwnEntryOutsideTop = Boolean(entry?.user_id) && Number(entry?.position || 0) > 20 && !isEntryInTop20;
@@ -4309,7 +4336,7 @@ export default function Profile() {
             </Button>
           </div>
 
-          {!isCompetitionFinishedPreview ? (
+          {shouldShowCompetitionBuildNotice ? (
             <div className="rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-100">
               Top Semanal sendo montado agora. Se os dados ainda não aparecerem, atualize a tela.
             </div>

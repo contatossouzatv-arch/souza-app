@@ -494,6 +494,34 @@ export default function DailyChestTab() {
     },
   });
 
+  const toggleAccessRequirementMutation = useMutation({
+    mutationFn: (nextRequired) =>
+      base44.adminDailyChest.saveSettings({
+        daily_chest_access_code_required: String(Boolean(nextRequired)),
+      }),
+    onSuccess: (_result, nextRequired) => {
+      const normalizedValue = String(Boolean(nextRequired));
+      setSettingsDraft((prev) => ({
+        ...prev,
+        daily_chest_access_code_required: normalizedValue,
+      }));
+      queryClient.invalidateQueries({ queryKey: ["admin-daily-chest-config-v2"] });
+      toast({
+        title: Boolean(nextRequired) ? "Chave diária ativada" : "Chave diária desativada",
+        description: Boolean(nextRequired)
+          ? "O baú base volta a exigir a chave do dia."
+          : "O baú base fica liberado e segue atualizando automaticamente no horário configurado.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Falha ao atualizar acesso",
+        description: error?.message || "Tente novamente.",
+      });
+    },
+  });
+
   const applyPlannerMutation = useMutation({
     mutationFn: async () => {
       const cashRewardId = plannerSuggestion.cashRewardId;

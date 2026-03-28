@@ -44,6 +44,7 @@ const DEFAULT_DAILY_CHEST_SETTINGS = {
   bonusAmountStep: 0,
   bonusChestsPerStep: 0,
   balanceWinsPerUserDay: 1,
+  accessCodeRequired: true,
   accessGroupLink: "",
 };
 
@@ -148,6 +149,10 @@ async function loadDailyChestSettings() {
         DEFAULT_DAILY_CHEST_SETTINGS.balanceWinsPerUserDay,
         0,
         10
+      ),
+      accessCodeRequired: readBooleanSetting(
+        map.get("daily_chest_access_code_required"),
+        DEFAULT_DAILY_CHEST_SETTINGS.accessCodeRequired
       ),
       accessCode: normalizeAccessCode(map.get("daily_chest_access_code")),
       accessCodeDayKey: String(map.get("daily_chest_access_code_day_key") || "").trim(),
@@ -353,7 +358,10 @@ function summarizeSlots({ openings = [], baseSlots = 0, bonusSlots = 0, baseUnlo
 }
 
 async function resolveAccessGate({ userId, settings, windowInfo, scheduleUnlocked }) {
-  const required = scheduleUnlocked && Math.max(0, Number(settings.baseDailyChests || 0)) > 0;
+  const required =
+    Boolean(settings.accessCodeRequired) &&
+    scheduleUnlocked &&
+    Math.max(0, Number(settings.baseDailyChests || 0)) > 0;
   const codeAvailable =
     Boolean(settings.accessCode) && String(settings.accessCodeDayKey || "") === String(windowInfo.chestDayKey || "");
 
@@ -1044,6 +1052,10 @@ router.post("/unlock", requireAuth, async (req, res) => {
   }
 
   if (Math.max(0, Number(settings.baseDailyChests || 0)) <= 0) {
+    return res.json(await resolveChestStateForUser(req.auth.sub));
+  }
+
+  if (!Boolean(settings.accessCodeRequired)) {
     return res.json(await resolveChestStateForUser(req.auth.sub));
   }
 
