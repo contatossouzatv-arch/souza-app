@@ -2,7 +2,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Users } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { apiRequest, base44 } from "@/api/base44Client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,11 +53,10 @@ export default function ProfilesGallery() {
   } = useInfiniteQuery({
     queryKey: ["profiles-gallery"],
     queryFn: async ({ pageParam = 0, signal }) => {
-      const publicDirectory = base44?.profile?.publicDirectory;
-      if (typeof publicDirectory !== "function") {
-        throw new Error("Rota de galeria pública indisponível no client.");
-      }
-      return publicDirectory({ limit: PAGE_SIZE, offset: pageParam }, { signal });
+      const params = new URLSearchParams();
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String(pageParam));
+      return apiRequest(`/api/profile/public-directory?${params.toString()}`, { signal });
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage) => (lastPage?.hasMore ? lastPage?.nextOffset ?? undefined : undefined),

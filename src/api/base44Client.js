@@ -698,6 +698,10 @@ async function deleteFile({ fileUrl, path } = {}) {
   });
 }
 
+export async function apiRequest(path, options = {}) {
+  return request(path, options);
+}
+
 export const base44 = {
   auth: {
     hasToken,
