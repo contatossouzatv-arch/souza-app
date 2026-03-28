@@ -1888,6 +1888,7 @@ export default function Profile() {
     data: publicProfileBasicsPayload,
     isLoading: publicProfileBasicsLoading,
     isFetching: publicProfileBasicsFetching,
+    isFetched: publicProfileBasicsFetched,
     error: publicProfileBasicsError,
   } = useQuery({
     queryKey: ["public-profile-basics", publicProfileBasicIds.join(","), String(selectedPublicProfileHandle || "").trim().toLowerCase()],
@@ -1940,7 +1941,7 @@ export default function Profile() {
     (isLoadingAuth ||
       publicProfileBasicsLoading ||
       publicProfileBasicsFetching ||
-      (!hasResolvedPublicProfileCandidate && !publicProfileBasicsError) ||
+      (!hasResolvedPublicProfileCandidate && !publicProfileBasicsError && !publicProfileBasicsFetched) ||
       (!selectedPublicProfileId && Boolean(selectedPublicProfileHandle) && !simulatedProfiles.length));
   const publicProfileLookupStatus = Number(publicProfileBasicsError?.status || 0);
   const hasPublicProfileLookupError =
