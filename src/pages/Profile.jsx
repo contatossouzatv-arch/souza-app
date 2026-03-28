@@ -147,6 +147,16 @@ const PROFILE_PUBLIC_TABS = [
   { id: "prizes", label: "Prêmios" },
   { id: "engagement", label: "Perfis" },
 ];
+const DEFAULT_DAILY_CHECKIN_CONFIG = {
+  enabled: false,
+  streak_days: 7,
+  rewards: Array.from({ length: 7 }, (_, index) => ({
+    day: index + 1,
+    weekly_points: 0,
+    label: `Dia ${index + 1}`,
+    active: false,
+  })),
+};
 
 function profileDebugLog() {}
 
