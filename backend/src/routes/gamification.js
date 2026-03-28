@@ -2028,25 +2028,47 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
   const includeCompetitionBoard = options?.includeCompetitionBoard !== false;
   const { badgeRules, pointsRules, weeklyConfig, dailyCheckInConfig } = await loadGamificationRules();
   const cycle = includeCompetitionBoard ? await ensureActiveWeeklyCycle(weeklyConfig) : null;
+  const balanceMetricKeys = [
+    "tickets_active",
+    "prize_counts",
+    "social_followers",
+    "social_likes",
+    "daily_checkins",
+    "social_following",
+    "engagement_points",
+    "xp_total",
+  ];
+  if (includeCompetitionBoard && cycle?.cycle_key) {
+    balanceMetricKeys.push("weekly_points");
+  }
 
   const queryTasks = [
     pool.query(
       `SELECT metric_key, cycle_key, amount
          FROM user_metric_balances
-        WHERE user_id = $1`,
-      [userId]
-    ),
-    pool.query(
-      `SELECT
-         COUNT(*) FILTER (WHERE entity_name = 'LiveDrawParticipant')::int AS live_participations,
-         COUNT(*) FILTER (WHERE entity_name = 'GameCallParticipant')::int AS game_participations,
-         COUNT(*) FILTER (WHERE entity_name = 'InstantRaffleParticipant')::int AS instant_participations
-       FROM entity_records
-       WHERE entity_name IN ('LiveDrawParticipant', 'GameCallParticipant', 'InstantRaffleParticipant')
-         AND COALESCE(data->>'user_id', '') = $1`,
-      [userId]
+        WHERE user_id = $1
+          AND (
+            metric_key = ANY($2::text[])
+            OR (metric_key = 'weekly_points' AND cycle_key = $3)
+          )`,
+      [userId, balanceMetricKeys, String(cycle?.cycle_key || "")]
     ),
   ];
+
+  if (includeCompetitionBoard) {
+    queryTasks.push(
+      pool.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE entity_name = 'LiveDrawParticipant')::int AS live_participations,
+           COUNT(*) FILTER (WHERE entity_name = 'GameCallParticipant')::int AS game_participations,
+           COUNT(*) FILTER (WHERE entity_name = 'InstantRaffleParticipant')::int AS instant_participations
+         FROM entity_records
+         WHERE entity_name IN ('LiveDrawParticipant', 'GameCallParticipant', 'InstantRaffleParticipant')
+           AND COALESCE(data->>'user_id', '') = $1`,
+        [userId]
+      )
+    );
+  }
 
   if (includeCompetitionBoard) {
     queryTasks.push(
@@ -2093,12 +2115,12 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
     );
   }
 
-  const [balanceRows, participationRows, leaderboardRowsResult = { rows: [] }] = await Promise.all(queryTasks);
+  const [balanceRows, participationRowsResult = { rows: [{ live_participations: 0, game_participations: 0, instant_participations: 0 }] }, leaderboardRowsResult = { rows: [] }] = await Promise.all(queryTasks);
 
   const balanceMap = new Map(
     balanceRows.rows.map((row) => [`${row.metric_key}::${row.cycle_key || ""}`, Number(row.amount || 0)])
   );
-  const participationRow = participationRows?.rows?.[0] || {};
+  const participationRow = participationRowsResult?.rows?.[0] || {};
 
   const weeklyCycleKey = String(cycle?.cycle_key || "");
   const leaderboardEntries = (leaderboardRowsResult?.rows || []).map((row) => ({
