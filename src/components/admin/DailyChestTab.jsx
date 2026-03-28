@@ -721,6 +721,27 @@ export default function DailyChestTab() {
 
         <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto]">
           <div className="space-y-4">
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/70 px-4 py-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-white">Exigir chave diária</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Desative para deixar o baú livre e só atualizar no horário configurado.
+                  </p>
+                </div>
+                <Switch
+                  checked={parseBooleanString(settingsDraft.daily_chest_access_code_required, true)}
+                  onCheckedChange={(checked) => toggleAccessRequirementMutation.mutate(checked)}
+                  disabled={toggleAccessRequirementMutation.isPending}
+                />
+              </div>
+              <p className="mt-3 text-xs font-semibold text-cyan-200">
+                {parseBooleanString(settingsDraft.daily_chest_access_code_required, true)
+                  ? "Hoje o baú base exige a chave diária."
+                  : "Hoje o baú base está livre, sem exigir chave."}
+              </p>
+            </div>
+
             <Field label="Link da comunidade / grupo">
               <Input
                 value={settingsDraft.daily_chest_access_group_link ?? ""}
@@ -745,10 +766,19 @@ export default function DailyChestTab() {
             <Button
               type="button"
               onClick={() => generateAccessCodeMutation.mutate("")}
-              disabled={generateAccessCodeMutation.isPending}
+              disabled={
+                generateAccessCodeMutation.isPending ||
+                !parseBooleanString(settingsDraft.daily_chest_access_code_required, true)
+              }
               className="w-full bg-emerald-400 font-bold text-slate-950 hover:bg-emerald-300"
             >
-              {generateAccessCodeMutation.isPending ? "Gerando..." : settingsDraft.daily_chest_access_code ? "Gerar novamente" : "Gerar chave do dia"}
+              {generateAccessCodeMutation.isPending
+                ? "Gerando..."
+                : !parseBooleanString(settingsDraft.daily_chest_access_code_required, true)
+                ? "Chave desativada"
+                : settingsDraft.daily_chest_access_code
+                ? "Gerar novamente"
+                : "Gerar chave do dia"}
             </Button>
           </div>
         </div>

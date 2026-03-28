@@ -544,6 +544,7 @@ async function buildHomeFeedSharedPayload() {
       listEntity("UserPrizeGalleryItem", "-claimed_at", 120).then((items) =>
         items
           .filter((item) => ["validated", "applied"].includes(String(item.claim_status || "").trim().toLowerCase()))
+          .filter((item) => shouldShowPrizeInHomeFeed(item))
           .slice(0, 40)
       ),
     ]);
@@ -1842,6 +1843,18 @@ function buildPrizeRewardLabel(item = {}) {
   if (rewardType === "cash_prize") return `Prêmio R$ ${amount.toFixed(2)}`;
   if (amount > 0 && item.reward_unit) return `${amount} ${item.reward_unit}`;
   return String(item.special_label || item.title || "Prêmio").trim() || "Prêmio";
+}
+
+function shouldShowPrizeInHomeFeed(item = {}) {
+  const rewardType = String(item.reward_type || "").trim().toLowerCase();
+  return (
+    rewardType === "points_balance" ||
+    rewardType === "cash_prize" ||
+    rewardType === "tickets_active" ||
+    rewardType === "tickets_bonus" ||
+    rewardType === "ticket_bonus" ||
+    rewardType === "bilhetes"
+  );
 }
 
 async function buildGamificationStateFresh(options = {}) {
