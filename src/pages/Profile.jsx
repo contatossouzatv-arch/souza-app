@@ -2512,30 +2512,24 @@ export default function Profile() {
     retry: false,
   });
 
-  const randomizedOtherProfiles = useMemo(() => {
+  const randomizedOtherProfileIds = useMemo(() => {
     const selectedId = selectedPublicProfile?.id;
-    const prioritizedCandidates = simulatedProfiles.filter((profile) => {
-      if (selectedId && profile.id === selectedId) return false;
-      const state = simState[profile.id];
-      // Para rotacionar recomendaÃ§Ãµes, removemos perfis jÃ¡ "concluÃ­dos" (seguindo + curtido).
-      return !(state?.isFollowing && state?.isLiked);
-    });
-
-    const fallbackCandidates = simulatedProfiles.filter((profile) => {
-      if (selectedId && profile.id === selectedId) return false;
-      return true;
-    });
-    const candidates = prioritizedCandidates.length > 0 ? prioritizedCandidates : fallbackCandidates;
-
+    const candidates = simulatedProfiles.filter((profile) => !(selectedId && profile.id === selectedId));
     const shuffled = [...candidates];
     for (let index = shuffled.length - 1; index > 0; index -= 1) {
       const randomIndex = Math.floor(Math.random() * (index + 1));
       [shuffled[index], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[index]];
     }
-    return shuffled.slice(0, 50).map((profile) => {
+    return shuffled.slice(0, 5).map((profile) => String(profile.id || "").trim()).filter(Boolean);
+  }, [selectedPublicProfile?.id, simulatedProfiles]);
+
+  const randomizedOtherProfiles = useMemo(() => {
+    return randomizedOtherProfileIds.map((profileId) => {
+      const profile = simulatedProfiles.find((item) => String(item.id || "") === profileId);
+      if (!profile) return null;
       const realUser =
-        publicProfileBasicsMap.get(String(profile.id || "")) ||
-        realProfilesById[String(profile.id || "")] ||
+        publicProfileBasicsMap.get(profileId) ||
+        realProfilesById[profileId] ||
         null;
       const mergedProfile = {
         ...profile,
@@ -2553,8 +2547,8 @@ export default function Profile() {
         ...mergedProfile,
         avatarSrc,
       };
-    });
-  }, [avatarSrcById, publicProfileBasicsMap, realProfilesById, selectedPublicProfile?.id, simulatedProfiles, simState]);
+    }).filter(Boolean);
+  }, [avatarSrcById, publicProfileBasicsMap, randomizedOtherProfileIds, realProfilesById, simulatedProfiles]);
 
   useEffect(() => {
     debugEffect("badge-celebration-reset", {
@@ -5099,6 +5093,15 @@ export default function Profile() {
                   followers: profile.followers,
                   likes: profile.likes,
                 };
+                const publicOtherAvatarSrc =
+                  getProfileAvatarSrc(
+                    {
+                      ...profile,
+                      id: profile.id,
+                    },
+                    avatarSrcById,
+                    profile.avatarSrc || ""
+                  ) || "";
                 const podiumPosition = index + 1;
                 const isPodium = podiumPosition <= 3;
                 const podiumFrameSrc = podiumFrameByPosition[podiumPosition] || "";
@@ -5110,14 +5113,14 @@ export default function Profile() {
                         <button
                           type="button"
                           onClick={() => openPublicProfilePage(profile.id)}
-                          className={`h-11 w-11 overflow-hidden rounded-full transition ${
-                            isPodium ? "border border-transparent" : "border border-cyan-500/40 hover:border-cyan-300/70"
-                          }`}
-                          aria-label={`Abrir perfil de ${profile.nick}`}
-                        >
-                          {profile.avatarSrc ? (
+                        className={`h-11 w-11 overflow-hidden rounded-full transition ${
+                          isPodium ? "border border-transparent" : "border border-cyan-500/40 hover:border-cyan-300/70"
+                        }`}
+                        aria-label={`Abrir perfil de ${profile.nick}`}
+                      >
+                          {publicOtherAvatarSrc ? (
                             <img
-                              src={profile.avatarSrc}
+                              src={publicOtherAvatarSrc}
                               alt={profile.nick}
                               className="h-full w-full object-cover"
                               onError={(event) => {
