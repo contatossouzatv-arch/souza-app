@@ -2509,8 +2509,29 @@ export default function Profile() {
       const randomIndex = Math.floor(Math.random() * (index + 1));
       [shuffled[index], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[index]];
     }
-    return shuffled.slice(0, 50);
-  }, [selectedPublicProfile?.id, simulatedProfiles, simState]);
+    return shuffled.slice(0, 50).map((profile) => {
+      const realUser =
+        publicProfileBasicsMap.get(String(profile.id || "")) ||
+        realProfilesById[String(profile.id || "")] ||
+        null;
+      const mergedProfile = {
+        ...profile,
+        ...(realUser || {}),
+        id: profile.id,
+      };
+      const avatarMatch = avatarSrcById[String(mergedProfile.profile_avatar_id || "")] || "";
+      const avatarSrc =
+        getProfileAvatarSrc(mergedProfile, avatarSrcById, avatarMatch || profile.avatarSrc || "") ||
+        avatarMatch ||
+        profile.avatarSrc ||
+        "";
+
+      return {
+        ...mergedProfile,
+        avatarSrc,
+      };
+    });
+  }, [avatarSrcById, publicProfileBasicsMap, realProfilesById, selectedPublicProfile?.id, simulatedProfiles, simState]);
 
   useEffect(() => {
     debugEffect("badge-celebration-reset", {

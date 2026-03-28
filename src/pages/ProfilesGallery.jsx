@@ -24,7 +24,7 @@ const PAGE_SIZE = 24;
 
 function getProfilePriority(profile) {
   const hasPhoto =
-    String(profile?.profile_image_mode || "").toLowerCase() === "photo" &&
+    String(profile?.profile_image_status || "").toLowerCase() === "approved" &&
     Boolean(String(profile?.profile_image_url || "").trim());
   if (hasPhoto) return 0;
 
@@ -54,9 +54,14 @@ export default function ProfilesGallery() {
     queryKey: ["profiles-gallery"],
     queryFn: async ({ pageParam = 0, signal }) => {
       try {
-        const payload = await base44.profile.publicDirectory({ limit: PAGE_SIZE, offset: pageParam }, { signal });
-        if (Array.isArray(payload?.items) && payload.items.length > 0) {
-          return payload;
+        const publicDirectory = base44?.profile?.publicDirectory;
+        if (typeof publicDirectory === "function") {
+          const payload = await publicDirectory({ limit: PAGE_SIZE, offset: pageParam }, { signal });
+          if (Array.isArray(payload?.items) && payload.items.length > 0) {
+            return payload;
+          }
+        } else {
+          console.warn("[profiles-gallery] public-directory unavailable in client, using social.discover fallback");
         }
       } catch (primaryError) {
         console.warn("[profiles-gallery] public-directory failed, falling back to social.discover", primaryError);
