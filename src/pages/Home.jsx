@@ -58,6 +58,7 @@ export default function Home() {
   const posts = feedSummary?.posts || [];
   const winnerFeed = feedSummary?.winnerFeed || { items: [] };
   const feedLikes = feedSummary?.feedLikes || { counts: {}, likedPostIds: [] };
+  const hasFeedSummaryDegradedFallback = Boolean(feedSummary?._degraded);
 
   const {
     data: homeSummary,
@@ -438,6 +439,13 @@ export default function Home() {
           </div>
         )}
       </Card>
+
+      {hasFeedSummaryDegradedFallback ? (
+        <Card className="border-amber-500/20 bg-amber-500/10 p-4 text-amber-100">
+          <p className="text-sm font-semibold">O feed inicial respondeu em modo reduzido.</p>
+          <p className="mt-1 text-xs text-amber-50/80">Alguns posts podem aparecer depois. Atualize a tela em instantes.</p>
+        </Card>
+      ) : null}
 
       {feedItems.length === 0 ? (
         <Card className="border-slate-800 bg-slate-900/70 p-6 text-center">
