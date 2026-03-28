@@ -2318,7 +2318,7 @@ export default function Profile() {
   useEffect(() => {
     if (!isViewingPublicProfile) return;
     setActivePublicTab("overview");
-  }, [isViewingPublicProfile, selectedPublicProfile?.id, selectedPublicProfileHandle, selectedPublicProfileId]);
+  }, [isViewingPublicProfile, selectedPublicProfileHandle, selectedPublicProfileId]);
 
   const selectedPublicProfile = useMemo(() => {
     if (!selectedPublicProfileHandle && !selectedPublicProfileId) return null;
