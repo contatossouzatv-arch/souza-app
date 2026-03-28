@@ -19,8 +19,12 @@ import {
   upsertDailyChestAccessUnlock,
   updateEntity,
 } from "../db/index.js";
+import { deleteCacheByPrefix, deleteCacheKey, getOrComputeCacheJson } from "../lib/cache.js";
 
 const router = Router();
+const DAILY_CHEST_SETTINGS_TTL_MS = 15000;
+const DAILY_CHEST_REWARD_POOL_TTL_MS = 15000;
+const DAILY_CHEST_STATE_TTL_MS = 10000;
 
 const DEFAULT_DAILY_CHEST_SETTINGS = {
   enabled: false,
@@ -101,53 +105,55 @@ function getLocalWindow({ resetHour, resetMinute }) {
 }
 
 async function loadDailyChestSettings() {
-  const items = await listEntity("AppSettings");
-  const map = getSettingsMap(items);
-  return {
-    enabled: readBooleanSetting(map.get("daily_chest_enabled"), DEFAULT_DAILY_CHEST_SETTINGS.enabled),
-    tapGoal: readNumberSetting(map.get("daily_chest_tap_goal"), DEFAULT_DAILY_CHEST_SETTINGS.tapGoal, 1, 12),
-    messageOfDay: String(map.get("daily_chest_message_of_day") || DEFAULT_DAILY_CHEST_SETTINGS.messageOfDay).trim(),
-    resetHour: readNumberSetting(map.get("daily_chest_reset_hour"), DEFAULT_DAILY_CHEST_SETTINGS.resetHour, 0, 23),
-    resetMinute: readNumberSetting(map.get("daily_chest_reset_minute"), DEFAULT_DAILY_CHEST_SETTINGS.resetMinute, 0, 59),
-    timezone: String(map.get("daily_chest_timezone") || DEFAULT_DAILY_CHEST_SETTINGS.timezone).trim(),
-    rarityVisual: String(map.get("daily_chest_rarity_visual") || DEFAULT_DAILY_CHEST_SETTINGS.rarityVisual).trim(),
-    sceneTheme: String(map.get("daily_chest_scene_theme") || DEFAULT_DAILY_CHEST_SETTINGS.sceneTheme).trim(),
-    baseDailyChests: readNumberSetting(map.get("daily_chest_base_daily_chests"), DEFAULT_DAILY_CHEST_SETTINGS.baseDailyChests, 0, 20),
-    xpPerOpen: readNumberSetting(map.get("daily_chest_xp_per_open"), DEFAULT_DAILY_CHEST_SETTINGS.xpPerOpen, 0, 5000),
-    scheduleStartAt: String(map.get("daily_chest_schedule_start_at") || DEFAULT_DAILY_CHEST_SETTINGS.scheduleStartAt).trim(),
-    scheduleEndAt: String(map.get("daily_chest_schedule_end_at") || DEFAULT_DAILY_CHEST_SETTINGS.scheduleEndAt).trim(),
-    depositBonusEnabled: readBooleanSetting(
-      map.get("daily_chest_deposit_bonus_enabled"),
-      DEFAULT_DAILY_CHEST_SETTINGS.depositBonusEnabled
-    ),
-    bonusChestsPerApproved: readNumberSetting(
-      map.get("daily_chest_bonus_chests_per_approved"),
-      DEFAULT_DAILY_CHEST_SETTINGS.bonusChestsPerApproved,
-      0,
-      20
-    ),
-    bonusAmountStep: readNumberSetting(
-      map.get("daily_chest_bonus_amount_step"),
-      DEFAULT_DAILY_CHEST_SETTINGS.bonusAmountStep,
-      0,
-      1000000
-    ),
-    bonusChestsPerStep: readNumberSetting(
-      map.get("daily_chest_bonus_chests_per_step"),
-      DEFAULT_DAILY_CHEST_SETTINGS.bonusChestsPerStep,
-      0,
-      20
-    ),
-    balanceWinsPerUserDay: readNumberSetting(
-      map.get("daily_chest_balance_wins_per_user_day"),
-      DEFAULT_DAILY_CHEST_SETTINGS.balanceWinsPerUserDay,
-      0,
-      10
-    ),
-    accessCode: normalizeAccessCode(map.get("daily_chest_access_code")),
-    accessCodeDayKey: String(map.get("daily_chest_access_code_day_key") || "").trim(),
-    accessGroupLink: String(map.get("daily_chest_access_group_link") || DEFAULT_DAILY_CHEST_SETTINGS.accessGroupLink).trim(),
-  };
+  return getOrComputeCacheJson("daily-chest:settings", DAILY_CHEST_SETTINGS_TTL_MS, async () => {
+    const items = await listEntity("AppSettings");
+    const map = getSettingsMap(items);
+    return {
+      enabled: readBooleanSetting(map.get("daily_chest_enabled"), DEFAULT_DAILY_CHEST_SETTINGS.enabled),
+      tapGoal: readNumberSetting(map.get("daily_chest_tap_goal"), DEFAULT_DAILY_CHEST_SETTINGS.tapGoal, 1, 12),
+      messageOfDay: String(map.get("daily_chest_message_of_day") || DEFAULT_DAILY_CHEST_SETTINGS.messageOfDay).trim(),
+      resetHour: readNumberSetting(map.get("daily_chest_reset_hour"), DEFAULT_DAILY_CHEST_SETTINGS.resetHour, 0, 23),
+      resetMinute: readNumberSetting(map.get("daily_chest_reset_minute"), DEFAULT_DAILY_CHEST_SETTINGS.resetMinute, 0, 59),
+      timezone: String(map.get("daily_chest_timezone") || DEFAULT_DAILY_CHEST_SETTINGS.timezone).trim(),
+      rarityVisual: String(map.get("daily_chest_rarity_visual") || DEFAULT_DAILY_CHEST_SETTINGS.rarityVisual).trim(),
+      sceneTheme: String(map.get("daily_chest_scene_theme") || DEFAULT_DAILY_CHEST_SETTINGS.sceneTheme).trim(),
+      baseDailyChests: readNumberSetting(map.get("daily_chest_base_daily_chests"), DEFAULT_DAILY_CHEST_SETTINGS.baseDailyChests, 0, 20),
+      xpPerOpen: readNumberSetting(map.get("daily_chest_xp_per_open"), DEFAULT_DAILY_CHEST_SETTINGS.xpPerOpen, 0, 5000),
+      scheduleStartAt: String(map.get("daily_chest_schedule_start_at") || DEFAULT_DAILY_CHEST_SETTINGS.scheduleStartAt).trim(),
+      scheduleEndAt: String(map.get("daily_chest_schedule_end_at") || DEFAULT_DAILY_CHEST_SETTINGS.scheduleEndAt).trim(),
+      depositBonusEnabled: readBooleanSetting(
+        map.get("daily_chest_deposit_bonus_enabled"),
+        DEFAULT_DAILY_CHEST_SETTINGS.depositBonusEnabled
+      ),
+      bonusChestsPerApproved: readNumberSetting(
+        map.get("daily_chest_bonus_chests_per_approved"),
+        DEFAULT_DAILY_CHEST_SETTINGS.bonusChestsPerApproved,
+        0,
+        20
+      ),
+      bonusAmountStep: readNumberSetting(
+        map.get("daily_chest_bonus_amount_step"),
+        DEFAULT_DAILY_CHEST_SETTINGS.bonusAmountStep,
+        0,
+        1000000
+      ),
+      bonusChestsPerStep: readNumberSetting(
+        map.get("daily_chest_bonus_chests_per_step"),
+        DEFAULT_DAILY_CHEST_SETTINGS.bonusChestsPerStep,
+        0,
+        20
+      ),
+      balanceWinsPerUserDay: readNumberSetting(
+        map.get("daily_chest_balance_wins_per_user_day"),
+        DEFAULT_DAILY_CHEST_SETTINGS.balanceWinsPerUserDay,
+        0,
+        10
+      ),
+      accessCode: normalizeAccessCode(map.get("daily_chest_access_code")),
+      accessCodeDayKey: String(map.get("daily_chest_access_code_day_key") || "").trim(),
+      accessGroupLink: String(map.get("daily_chest_access_group_link") || DEFAULT_DAILY_CHEST_SETTINGS.accessGroupLink).trim(),
+    };
+  });
 }
 
 function normalizeRewardConfig(source, settings) {
@@ -271,6 +277,33 @@ async function loadRewardPoolForDay(chestDayKey, settings, now = new Date()) {
       settings
     ),
   ];
+}
+
+async function loadCachedRewardPoolForDay(chestDayKey, settings, now = new Date()) {
+  return getOrComputeCacheJson(
+    `daily-chest:reward-pool:${String(chestDayKey || "")}`,
+    DAILY_CHEST_REWARD_POOL_TTL_MS,
+    () => loadRewardPoolForDay(chestDayKey, settings, now)
+  );
+}
+
+async function listRecentInventoryPreview(userId) {
+  const result = await pool.query(
+    `SELECT id, data, created_at, updated_at
+       FROM entity_records
+      WHERE entity_name = 'UserPrizeGalleryItem'
+        AND COALESCE(data->>'user_id', '') = $1
+      ORDER BY COALESCE(NULLIF(data->>'claimed_at', ''), created_at::text)::timestamptz DESC
+      LIMIT 4`,
+    [String(userId || "")]
+  );
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    ...(row.data && typeof row.data === "object" ? row.data : {}),
+    created_date: row.created_at ? new Date(row.created_at).toISOString() : "",
+    updated_date: row.updated_at ? new Date(row.updated_at).toISOString() : "",
+  }));
 }
 
 function countRewardTypeWinsForDay(openings = [], rewardType) {
@@ -586,7 +619,7 @@ function buildResponseState({
 async function resolveChestStateForUser(userId) {
   const settings = await loadDailyChestSettings();
   const windowInfo = getLocalWindow(settings);
-  const rewardPool = await loadRewardPoolForDay(windowInfo.chestDayKey, settings, windowInfo.now);
+  const rewardPool = await loadCachedRewardPoolForDay(windowInfo.chestDayKey, settings, windowInfo.now);
   const openings = await listDailyChestOpeningsByUserDay(userId, windowInfo.chestDayKey);
   const filteredRewardPool = filterRewardPoolForUserDay(rewardPool, openings, settings);
   const rewardPreview = filteredRewardPool[0] || null;
@@ -603,9 +636,7 @@ async function resolveChestStateForUser(userId) {
     bonusSlots,
     baseUnlocked: accessGate.unlocked,
   });
-  const recentInventory = await listEntity("UserPrizeGalleryItem", "-claimed_at", 50).then((items) =>
-    items.filter((entry) => entry.user_id === userId).slice(0, 4)
-  );
+  const recentInventory = await listRecentInventoryPreview(userId);
 
   return buildResponseState({
     settings,
@@ -618,6 +649,25 @@ async function resolveChestStateForUser(userId) {
     recentInventory,
     slots: { ...slotSummary, grants: bonusGrants },
   });
+}
+
+async function invalidateDailyChestReadCache({ userId = "", chestDayKey = "" } = {}) {
+  await Promise.all([
+    deleteCacheKey("daily-chest:settings"),
+    chestDayKey ? deleteCacheKey(`daily-chest:state:${String(userId || "")}:${String(chestDayKey || "")}`) : Promise.resolve(),
+    chestDayKey ? deleteCacheKey(`daily-chest:reward-pool:${String(chestDayKey || "")}`) : Promise.resolve(),
+    userId ? deleteCacheByPrefix(`daily-chest:state:${String(userId || "")}:`) : Promise.resolve(),
+  ]);
+}
+
+async function resolveCachedChestStateForUser(userId) {
+  const settings = await loadDailyChestSettings();
+  const windowInfo = getLocalWindow(settings);
+  return getOrComputeCacheJson(
+    `daily-chest:state:${String(userId || "")}:${String(windowInfo.chestDayKey || "")}`,
+    DAILY_CHEST_STATE_TTL_MS,
+    () => resolveChestStateForUser(userId)
+  );
 }
 
 async function awardChestXp({ userId, openingId, chestDayKey, xpAmount }) {
@@ -981,7 +1031,7 @@ async function createDailyChestAuditRecord({ userId, opening, grantResult, chest
 }
 
 router.get("/state", requireAuth, async (req, res) => {
-  const state = await resolveChestStateForUser(req.auth.sub);
+  const state = await resolveCachedChestStateForUser(req.auth.sub);
   res.json(state);
 });
 
@@ -1013,13 +1063,18 @@ router.post("/unlock", requireAuth, async (req, res) => {
     codeValue: submittedCode,
   });
 
-  return res.json(await resolveChestStateForUser(req.auth.sub));
+  await invalidateDailyChestReadCache({
+    userId: req.auth.sub,
+    chestDayKey: windowInfo.chestDayKey,
+  });
+
+  return res.json(await resolveCachedChestStateForUser(req.auth.sub));
 });
 
 router.post("/open", requireAuth, async (req, res) => {
   const settings = await loadDailyChestSettings();
   const windowInfo = getLocalWindow(settings);
-  const rewardPool = await loadRewardPoolForDay(windowInfo.chestDayKey, settings, windowInfo.now);
+  const rewardPool = await loadCachedRewardPoolForDay(windowInfo.chestDayKey, settings, windowInfo.now);
   const openings = await listDailyChestOpeningsByUserDay(req.auth.sub, windowInfo.chestDayKey);
   const filteredRewardPool = filterRewardPoolForUserDay(rewardPool, openings, settings);
   const activeOpening =
@@ -1111,6 +1166,11 @@ router.post("/open", requireAuth, async (req, res) => {
     xp_grant_ref_id: xpGrant?.id || "",
   };
 
+  await invalidateDailyChestReadCache({
+    userId: req.auth.sub,
+    chestDayKey: windowInfo.chestDayKey,
+  });
+
   res.status(201).json(
     buildResponseState({
       settings,
@@ -1182,7 +1242,12 @@ router.post("/claim", requireAuth, async (req, res) => {
     grantResult: enrichedGrantResult,
   });
 
-  const state = await resolveChestStateForUser(req.auth.sub);
+  await invalidateDailyChestReadCache({
+    userId: req.auth.sub,
+    chestDayKey: windowInfo.chestDayKey,
+  });
+
+  const state = await resolveCachedChestStateForUser(req.auth.sub);
   return res.json({
     ...state,
     opening: {

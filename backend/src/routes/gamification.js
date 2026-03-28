@@ -46,6 +46,7 @@ const HOME_FEED_SHARED_TTL_MS = 30000;
 const WEEKLY_LEADERBOARD_TTL_MS = 15000;
 const PUBLIC_UI_CONFIG_TTL_MS = 60000;
 const PUBLIC_PROFILE_SUMMARY_TTL_MS = 30000;
+const PROFILE_PUBLIC_BASICS_TTL_MS = 60000;
 const PROFILE_PRIZE_GALLERY_TTL_MS = 20000;
 
 const DEFAULT_POINTS_RULES = {
@@ -2717,81 +2718,83 @@ function sortAdminUsers(items, sortBy = "weekly_points") {
 }
 
 async function buildAdminUsersDataset() {
-  const [state, users, balancesResult, pointsBalanceMap, lastActivityMap, recentAdjustments] = await Promise.all([
-    buildGamificationState(),
-    listEntity("User"),
-    pool.query("SELECT * FROM user_metric_balances"),
-    listPointsBalancesMap(),
-    listLastActivityMap(),
-    listRecentAdminAdjustments(200),
-  ]);
+  return getOrComputeCacheJson("admin:users:dataset", 10000, async () => {
+    const [state, users, balancesResult, pointsBalanceMap, lastActivityMap, recentAdjustments] = await Promise.all([
+      buildGamificationState(),
+      listEntity("User"),
+      pool.query("SELECT * FROM user_metric_balances"),
+      listPointsBalancesMap(),
+      listLastActivityMap(),
+      listRecentAdminAdjustments(200),
+    ]);
 
-  const balanceMap = new Map();
-  for (const row of balancesResult.rows) {
-    const userId = row.user_id;
-    if (!balanceMap.has(userId)) {
-      balanceMap.set(userId, {});
+    const balanceMap = new Map();
+    for (const row of balancesResult.rows) {
+      const userId = row.user_id;
+      if (!balanceMap.has(userId)) {
+        balanceMap.set(userId, {});
+      }
+      balanceMap.get(userId)[`${row.metric_key}::${row.cycle_key || ""}`] = Number(row.amount || 0);
     }
-    balanceMap.get(userId)[`${row.metric_key}::${row.cycle_key || ""}`] = Number(row.amount || 0);
-  }
 
-  const adjustmentCountMap = recentAdjustments.reduce((acc, entry) => {
-    const userId = entry.metadata?.user_id || entry.target_key;
-    if (!userId) return acc;
-    acc.set(userId, (acc.get(userId) || 0) + 1);
-    return acc;
-  }, new Map());
+    const adjustmentCountMap = recentAdjustments.reduce((acc, entry) => {
+      const userId = entry.metadata?.user_id || entry.target_key;
+      if (!userId) return acc;
+      acc.set(userId, (acc.get(userId) || 0) + 1);
+      return acc;
+    }, new Map());
 
-  const leaderboardMap = new Map(state.leaderboardEntries.map((entry) => [entry.user_id, entry]));
-  const items = users.map((user) => {
-    const metrics = state.snapshots[user.id] || createUserSnapshot({ id: user.id });
-    const leaderboard = leaderboardMap.get(user.id);
-    const balances = balanceMap.get(user.id) || {};
-    const xpTotal = Number(balances["xp_total::"] ?? metrics.xp_total ?? 0);
-    const weeklyPoints = Number(balances[`weekly_points::${state.cycle?.cycle_key || ""}`] ?? metrics.weekly_points ?? 0);
-    const engagementPoints = Number(balances["engagement_points::"] ?? metrics.engagement_points ?? 0);
-    const ticketsActive = Number(balances["tickets_active::"] ?? metrics.totalTickets ?? 0);
-    const ticketsBonus = Number(balances["tickets_bonus::"] ?? 0);
-    const prizeCounts = Number(balances["prize_counts::"] ?? metrics.prizeCounts ?? 0);
-    const levelProgress = getLevelProgress(xpTotal);
-    const item = {
-      id: user.id,
-      full_name: user.full_name || "",
-      nick: user.nick || "",
-      email: user.email || "",
-      phone: user.phone || "",
-      status: user.account_status || "active",
-      role: user.role || "user",
-      level: levelProgress.level,
-      xp_total: xpTotal,
-      weekly_points: weeklyPoints,
-      engagement_points: engagementPoints,
-      tickets_active: ticketsActive,
-      tickets_bonus: ticketsBonus,
-      points_balance: Number(pointsBalanceMap.get(user.id) || 0),
-      prize_counts: prizeCounts,
-      chest_rewards: Number(balances["chest_rewards::"] ?? metrics.chestRewards ?? 0),
-      social_followers: Number(balances["social_followers::"] ?? metrics.totalFollowers ?? 0),
-      social_likes: Number(balances["social_likes::"] ?? metrics.totalLikes ?? 0),
-      total_participations: Number(metrics.totalParticipations || 0),
-      ranking_position: Number(leaderboard?.position || 0),
-      last_activity_at: lastActivityMap.get(user.id) || toIso(user.updated_at),
-      had_manual_adjustment: adjustmentCountMap.has(user.id),
-      manual_adjustments_count: Number(adjustmentCountMap.get(user.id) || 0),
+    const leaderboardMap = new Map(state.leaderboardEntries.map((entry) => [entry.user_id, entry]));
+    const items = users.map((user) => {
+      const metrics = state.snapshots[user.id] || createUserSnapshot({ id: user.id });
+      const leaderboard = leaderboardMap.get(user.id);
+      const balances = balanceMap.get(user.id) || {};
+      const xpTotal = Number(balances["xp_total::"] ?? metrics.xp_total ?? 0);
+      const weeklyPoints = Number(balances[`weekly_points::${state.cycle?.cycle_key || ""}`] ?? metrics.weekly_points ?? 0);
+      const engagementPoints = Number(balances["engagement_points::"] ?? metrics.engagement_points ?? 0);
+      const ticketsActive = Number(balances["tickets_active::"] ?? metrics.totalTickets ?? 0);
+      const ticketsBonus = Number(balances["tickets_bonus::"] ?? 0);
+      const prizeCounts = Number(balances["prize_counts::"] ?? metrics.prizeCounts ?? 0);
+      const levelProgress = getLevelProgress(xpTotal);
+      const item = {
+        id: user.id,
+        full_name: user.full_name || "",
+        nick: user.nick || "",
+        email: user.email || "",
+        phone: user.phone || "",
+        status: user.account_status || "active",
+        role: user.role || "user",
+        level: levelProgress.level,
+        xp_total: xpTotal,
+        weekly_points: weeklyPoints,
+        engagement_points: engagementPoints,
+        tickets_active: ticketsActive,
+        tickets_bonus: ticketsBonus,
+        points_balance: Number(pointsBalanceMap.get(user.id) || 0),
+        prize_counts: prizeCounts,
+        chest_rewards: Number(balances["chest_rewards::"] ?? metrics.chestRewards ?? 0),
+        social_followers: Number(balances["social_followers::"] ?? metrics.totalFollowers ?? 0),
+        social_likes: Number(balances["social_likes::"] ?? metrics.totalLikes ?? 0),
+        total_participations: Number(metrics.totalParticipations || 0),
+        ranking_position: Number(leaderboard?.position || 0),
+        last_activity_at: lastActivityMap.get(user.id) || toIso(user.updated_at),
+        had_manual_adjustment: adjustmentCountMap.has(user.id),
+        manual_adjustments_count: Number(adjustmentCountMap.get(user.id) || 0),
+      };
+      item.anomaly_reasons = buildAnomalyReasons(item);
+      item.has_anomaly = item.anomaly_reasons.length > 0;
+      return item;
+    });
+
+    const dashboard = await buildAdminUserAccessDashboard(lastActivityMap);
+
+    return {
+      state,
+      items,
+      recentAdjustments: recentAdjustments.slice(0, 20),
+      dashboard,
     };
-    item.anomaly_reasons = buildAnomalyReasons(item);
-    item.has_anomaly = item.anomaly_reasons.length > 0;
-    return item;
   });
-
-  const dashboard = await buildAdminUserAccessDashboard(lastActivityMap);
-
-  return {
-    state,
-    items,
-    recentAdjustments: recentAdjustments.slice(0, 20),
-    dashboard,
-  };
 }
 
 async function buildAdminUserAccessDashboard(lastActivityMap = new Map()) {
@@ -4305,7 +4308,176 @@ router.get("/leaderboards/weekly", requireAuth, async (_req, res) => {
   }
 });
 
+async function buildAdminGamificationOverviewPayload() {
+  const state = await buildGamificationState();
+  const now = new Date();
+  const dayStart = new Date(now);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+  const chestDayKey = `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, "0")}-${String(dayStart.getDate()).padStart(2, "0")}`;
+
+  const [cycleRows, configAudits, chestRewards, xpTodayResult, ticketsTodayResult, weeklyPointsResult, prizeTypeRows, fallbackRows, todayTopRows] = await Promise.all([
+    pool.query("SELECT * FROM weekly_cycles ORDER BY starts_at DESC LIMIT 12"),
+    pool.query("SELECT * FROM admin_config_audit_logs ORDER BY created_at DESC LIMIT 20"),
+    listEntity("DailyChestRewardConfig", "-updated_date", 30),
+    pool.query(
+      `SELECT COALESCE(SUM(amount), 0) AS total
+         FROM user_metric_ledger
+        WHERE metric_key = 'xp_total'
+          AND occurred_at >= $1
+          AND occurred_at < $2`,
+      [dayStart.toISOString(), dayEnd.toISOString()],
+    ),
+    pool.query(
+      `SELECT COALESCE(SUM(amount), 0) AS total
+         FROM user_metric_ledger
+        WHERE metric_key IN ('tickets_active', 'tickets_bonus')
+          AND occurred_at >= $1
+          AND occurred_at < $2`,
+      [dayStart.toISOString(), dayEnd.toISOString()],
+    ),
+    state.cycle?.cycle_key
+      ? pool.query(
+          `SELECT COALESCE(SUM(amount), 0) AS total
+             FROM user_metric_balances
+            WHERE metric_key = 'weekly_points'
+              AND cycle_key = $1`,
+          [state.cycle.cycle_key],
+        )
+      : Promise.resolve({ rows: [{ total: 0 }] }),
+    pool.query(
+      `SELECT
+          COALESCE(data->>'reward_type', 'unknown') AS reward_type,
+          COUNT(*)::int AS count,
+          COALESCE(SUM(NULLIF(data->>'reward_amount', '')::numeric), 0) AS total_amount
+         FROM entity_records
+        WHERE entity_name = 'UserPrizeGalleryItem'
+          AND COALESCE(NULLIF(data->>'claimed_at', ''), created_at::text)::timestamptz >= $1
+          AND COALESCE(NULLIF(data->>'claimed_at', ''), created_at::text)::timestamptz < $2
+        GROUP BY 1
+        ORDER BY count DESC, reward_type ASC`,
+      [dayStart.toISOString(), dayEnd.toISOString()],
+    ),
+    pool.query(
+      `SELECT COUNT(*)::int AS total
+         FROM daily_chest_openings
+        WHERE chest_day_key = $1
+          AND COALESCE((reward_snapshot->>'isFallback')::boolean, false) = true`,
+      [chestDayKey],
+    ),
+    pool.query(
+      `SELECT
+          l.user_id,
+          COALESCE(u.nick, u.full_name, u.email, l.user_id::text) AS nick,
+          COALESCE(SUM(
+            CASE
+              WHEN l.metric_key = 'xp_total' THEN l.amount
+              WHEN l.metric_key = 'weekly_points' THEN l.amount
+              WHEN l.metric_key = 'engagement_points' THEN l.amount
+              ELSE 0
+            END
+          ), 0) AS score
+         FROM user_metric_ledger l
+         LEFT JOIN users u ON u.id = l.user_id
+        WHERE l.occurred_at >= $1
+          AND l.occurred_at < $2
+        GROUP BY l.user_id, u.nick, u.full_name, u.email
+        HAVING COALESCE(SUM(
+          CASE
+            WHEN l.metric_key = 'xp_total' THEN l.amount
+            WHEN l.metric_key = 'weekly_points' THEN l.amount
+            WHEN l.metric_key = 'engagement_points' THEN l.amount
+            ELSE 0
+          END
+        ), 0) > 0
+        ORDER BY score DESC, nick ASC
+        LIMIT 5`,
+      [dayStart.toISOString(), dayEnd.toISOString()],
+    ),
+  ]);
+
+  const dailyUsage = await listChestDailyUsage(chestDayKey);
+  const chestRewardHealth = chestRewards.map((entry) => {
+    const usage = dailyUsage.find((item) => item.reward_config_id === entry.id);
+    const claimedToday = Number(usage?.claimed_count || 0);
+    const dailyCap = Math.max(0, Number(entry.daily_cap || 0));
+    const usagePercent = dailyCap > 0 ? Math.min(100, Math.round((claimedToday / dailyCap) * 100)) : 0;
+    return {
+      id: entry.id,
+      title: entry.title || "PrÃªmio",
+      reward_type: entry.reward_type || "points_balance",
+      reward_amount: Number(entry.reward_amount || 0),
+      reward_unit: entry.reward_unit || "",
+      rarity: entry.rarity || "rare",
+      active: entry.active !== false,
+      weight: Number(entry.weight || 0),
+      is_fallback: entry.is_fallback !== false,
+      claimed_today: claimedToday,
+      daily_cap: dailyCap,
+      usage_percent: usagePercent,
+      near_limit: dailyCap > 0 && usagePercent >= 80,
+      out_of_stock_today: dailyCap > 0 && claimedToday >= dailyCap,
+    };
+  });
+
+  return {
+    activeCycle: state.cycle,
+    topWeekly: state.leaderboardEntries.slice(0, 10),
+    overview: {
+      users: Object.keys(state.snapshots).length,
+      configuredRules: state.rules.length,
+      activeRules: state.rules.filter((rule) => rule.active).length,
+      chestRewards: chestRewards.length,
+      xpToday: Number(xpTodayResult.rows[0]?.total || 0),
+      ticketsToday: Number(ticketsTodayResult.rows[0]?.total || 0),
+      weeklyPointsTotal: Number(weeklyPointsResult.rows[0]?.total || 0),
+      prizesToday: prizeTypeRows.rows.reduce((acc, row) => acc + Number(row.count || 0), 0),
+      fallbackToday: Number(fallbackRows.rows[0]?.total || 0),
+    },
+    todayTopUsers: todayTopRows.rows.map((row) => ({
+      user_id: row.user_id,
+      nick: row.nick,
+      score: Number(row.score || 0),
+    })),
+    rewardsTodayByType: prizeTypeRows.rows.map((row) => ({
+      reward_type: row.reward_type,
+      count: Number(row.count || 0),
+      total_amount: Number(row.total_amount || 0),
+    })),
+    chestHealth: chestRewardHealth,
+    weeklyConfig: state.weeklyConfig,
+    recentCycles: cycleRows.rows.map((row) => ({
+      id: row.id,
+      cycle_key: row.cycle_key,
+      title: row.title,
+      status: row.status,
+      starts_at: toIso(row.starts_at),
+      ends_at: toIso(row.ends_at),
+      closed_at: row.closed_at ? toIso(row.closed_at) : null,
+      winners_snapshot: row.winners_snapshot || [],
+    })),
+    configAudit: configAudits.rows.map((row) => ({
+      id: row.id,
+      domain: row.domain,
+      action: row.action,
+      target_key: row.target_key,
+      before_data: row.before_data || {},
+      after_data: row.after_data || {},
+      metadata: row.metadata || {},
+      admin_user_id: row.admin_user_id || "",
+      admin_email: row.admin_email || "",
+      created_at: toIso(row.created_at),
+    })),
+  };
+}
+
 router.get("/admin/gamification/overview", requireAuth, requireAdmin, async (_req, res) => {
+  const cached = await getOrComputeCacheJson("admin:gamification:overview", 10000, buildAdminGamificationOverviewPayload);
+  return res.json(cached);
+});
+
+router.get("/admin/gamification/overview-legacy-disabled", requireAuth, requireAdmin, async (_req, res) => {
   const state = await buildGamificationState();
   const now = new Date();
   const dayStart = new Date(now);

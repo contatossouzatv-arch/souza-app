@@ -195,6 +195,8 @@ export default function DepositsTab() {
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["admin-deposits-authoritative"] });
     queryClient.invalidateQueries({ queryKey: ["admin-deposits-pending-counter"] });
+    queryClient.invalidateQueries({ queryKey: ["admin-deposit-cycles-summary"] });
+    queryClient.refetchQueries({ queryKey: ["admin-deposits-authoritative"], type: "active" });
   };
 
   const approveMutation = useMutation({
@@ -257,6 +259,17 @@ export default function DepositsTab() {
       invalidateAll();
       setInvalidatingDeposit(null);
       setInvalidateForm(EMPTY_INVALIDATE_FORM);
+      toast({
+        title: "Depósito invalidado",
+        description: "O painel foi atualizado com sucesso.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Falha ao invalidar depósito",
+        description: error?.message || "A solicitação não foi concluída.",
+      });
     },
   });
 
@@ -266,6 +279,17 @@ export default function DepositsTab() {
       invalidateAll();
       setInvalidatingDeposit(null);
       setInvalidateForm(EMPTY_INVALIDATE_FORM);
+      toast({
+        title: "Depósito excluído",
+        description: "O painel foi atualizado sem precisar recarregar a página.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Falha ao excluir depósito",
+        description: error?.message || "A solicitação não foi concluída.",
+      });
     },
   });
 
@@ -349,16 +373,25 @@ export default function DepositsTab() {
 
   const submitInvalidate = () => {
     if (!invalidatingDeposit) return;
+    const reason = String(invalidateForm.reason || "").trim();
+    if (!reason) {
+      toast({
+        variant: "destructive",
+        title: "Motivo obrigatório",
+        description: "Informe o motivo antes de continuar.",
+      });
+      return;
+    }
     if (invalidatingDeposit.status === "approved" || invalidatingDeposit.status === "invalidated") {
       deleteMutation.mutate({
         depositId: invalidatingDeposit.id,
-        payload: { reason: invalidateForm.reason },
+        payload: { reason },
       });
       return;
     }
     invalidateMutation.mutate({
       depositId: invalidatingDeposit.id,
-      payload: { reason: invalidateForm.reason },
+      payload: { reason },
     });
   };
 

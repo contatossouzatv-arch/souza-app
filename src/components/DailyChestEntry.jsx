@@ -14,7 +14,7 @@ export default function DailyChestEntry({ onPress, loadState = false }) {
   const overlayRef = React.useRef(null);
   const [, setNowTick] = React.useState(() => Date.now());
   const { data: chestState } = useQuery({
-    queryKey: ["daily-chest-entry-state"],
+    queryKey: ["daily-chest-state"],
     queryFn: () => base44.dailyChest.getState(),
     enabled: loadState,
     staleTime: 60_000,

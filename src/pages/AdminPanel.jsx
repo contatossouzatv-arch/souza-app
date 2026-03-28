@@ -15,7 +15,6 @@ import {
   Share2,
   Building2,
   Camera,
-  Map,
   Gem,
   Users,
 } from "lucide-react";
@@ -38,9 +37,7 @@ import GamificationTab from "../components/admin/GamificationTab";
 import UsersAdminTab from "../components/admin/UsersAdminTab";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 
-const IslandGameTab = React.lazy(() => import("../components/admin/IslandGameTab"));
 const DailyChestTab = React.lazy(() => import("../components/admin/DailyChestTab"));
 
 export default function AdminPanel() {
@@ -204,12 +201,6 @@ export default function AdminPanel() {
               <Gem className="h-4 w-4" />
               <span className="hidden sm:inline">Baú Diário</span>
             </TabsTrigger>
-            {FEATURE_FLAGS.GAME_MAIN_ENABLED ? (
-              <TabsTrigger value="island-game" className="flex items-center gap-2 data-[state=active]:bg-cyan-700">
-                <Map className="h-4 w-4" />
-                <span className="hidden sm:inline">Jogo Ilhas</span>
-              </TabsTrigger>
-            ) : null}
           </TabsList>
 
           <TabsContent value="deposits">
@@ -266,11 +257,6 @@ export default function AdminPanel() {
           <TabsContent value="daily-chest">
             {activeTab === "daily-chest" ? <DailyChestTab /> : null}
           </TabsContent>
-          {FEATURE_FLAGS.GAME_MAIN_ENABLED ? (
-            <TabsContent value="island-game">
-              {activeTab === "island-game" ? <IslandGameTab /> : null}
-            </TabsContent>
-          ) : null}
         </Tabs>
       </div>
     </div>

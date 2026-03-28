@@ -8,7 +8,7 @@ import VisualEditAgent from '@/lib/VisualEditAgent'
 import NavigationTracker from '@/lib/NavigationTracker'
 import RealtimeSync from '@/lib/RealtimeSync'
 import MetricGainNotifier from '@/components/MetricGainNotifier'
-import { DAILY_CHEST_ROUTE_PATH, FEATURE_FLAGS, isMainGamePage, MAIN_GAME_ROUTE_PATH } from '@/lib/featureFlags';
+import { DAILY_CHEST_ROUTE_PATH, FEATURE_FLAGS, MAIN_GAME_ROUTE_PATH } from '@/lib/featureFlags';
 import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
@@ -33,11 +33,7 @@ const MAINTENANCE_BYPASS_PATH = String(import.meta.env.VITE_MAINTENANCE_BYPASS_P
 const MAINTENANCE_SESSION_KEY = "souza_maintenance_bypass_v1";
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
-const FULLSCREEN_PAGES = new Set(["DailyEvent"]);
-const visiblePages = Object.entries(Pages).filter(([pageKey]) => {
-  if (isMainGamePage(pageKey) && !FEATURE_FLAGS.GAME_MAIN_ENABLED) return false;
-  return true;
-});
+const visiblePages = Object.entries(Pages);
 
 const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
@@ -412,8 +408,6 @@ const AuthenticatedApp = () => {
           isAuthenticated ? (
             needsOnboarding(user) ? (
               <Navigate to="/onboarding" replace />
-            ) : FEATURE_FLAGS.GAME_MAIN_ENABLED ? (
-              <Pages.DailyEvent />
             ) : (
               <MainGameComingSoon />
             )
@@ -449,13 +443,9 @@ const AuthenticatedApp = () => {
               needsOnboarding(user) ? (
                 <Navigate to="/onboarding" replace />
               ) : (
-                FULLSCREEN_PAGES.has(path) ? (
+                <LayoutWrapper currentPageName={path}>
                   <Page key={getPageElementKey(path, location)} />
-                ) : (
-                  <LayoutWrapper currentPageName={path}>
-                    <Page key={getPageElementKey(path, location)} />
-                  </LayoutWrapper>
-                )
+                </LayoutWrapper>
               )
             ) : (
               <Navigate to="/login" replace />

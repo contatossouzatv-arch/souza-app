@@ -7,11 +7,15 @@ export function getProfileAvatarSrc(profile, avatarSrcById = {}, fallbackSrc = "
 
   const hasApprovedPhoto =
     String(profile.profile_image_mode || "").toLowerCase() === "photo" &&
-    String(profile.profile_image_status || "").toLowerCase() === "approved" &&
-    String(profile.profile_image_url || "").trim();
+    String(profile.profile_image_status || "").toLowerCase() === "approved";
 
   if (hasApprovedPhoto) {
-    return resolveAssetUrl(profile.profile_image_url);
+    const approvedPhotoUrl =
+      String(profile.profile_image_url || "").trim() ||
+      (profile.id ? `/api/auth/profile-image/${profile.id}` : "");
+    if (approvedPhotoUrl) {
+      return resolveAssetUrl(approvedPhotoUrl);
+    }
   }
 
   const avatarId = String(profile.profile_avatar_id || "").trim();

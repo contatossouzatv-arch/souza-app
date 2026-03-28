@@ -77,7 +77,7 @@ export default function Deposits() {
       }
       return [];
     },
-    enabled: !!user,
+    enabled: !!user && user?.role === "admin",
     staleTime: 120000,
     gcTime: 30 * 60 * 1000,
     refetchOnMount: false,

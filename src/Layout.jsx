@@ -10,7 +10,7 @@ import PlatformMigrationModal from "./components/PlatformMigrationModal";
 import PhoneAlert from "./components/PhoneAlert";
 import SocialMediaBar from "./components/SocialMediaBar";
 import DailyChestEntry from "./components/DailyChestEntry";
-import { DAILY_CHEST_ROUTE_PATH, FEATURE_FLAGS, MAIN_GAME_ROUTE_PATH } from "@/lib/featureFlags";
+import { DAILY_CHEST_ROUTE_PATH, FEATURE_FLAGS } from "@/lib/featureFlags";
 import mainMenuClickSound from "../assets-para-app/Songs/Song click menu principal.mp3";
 import { isMenuSoundEnabled } from "@/lib/soundPrefs";
 
@@ -65,7 +65,6 @@ export default function Layout({ children }) {
   const enableBlockingOverlays = import.meta.env.VITE_ENABLE_BLOCKING_OVERLAYS !== "false";
   const pathname = String(location.pathname || "").toLowerCase();
   const isAdminPanel = pathname === createPageUrl("AdminPanel");
-  const isMainGamePage = pathname === MAIN_GAME_ROUTE_PATH;
   const isDailyChestPage = pathname === DAILY_CHEST_ROUTE_PATH;
   const [isDailyChestLoadReady, setIsDailyChestLoadReady] = React.useState(false);
   const shouldLoadDailyChestState =
@@ -77,7 +76,8 @@ export default function Layout({ children }) {
       pathname === createPageUrl("Dashboard").toLowerCase()
     );
   const showDailyChestEntry =
-    FEATURE_FLAGS.DAILY_CHEST_3D_ENABLED && !isAdminPanel && !isMainGamePage && !isDailyChestPage;
+    FEATURE_FLAGS.DAILY_CHEST_3D_ENABLED && !isAdminPanel && !isDailyChestPage;
+  const hideBottomNav = isDailyChestPage;
 
   React.useEffect(() => {
     setIsDailyChestLoadReady(false);
@@ -107,39 +107,6 @@ export default function Layout({ children }) {
     menuClickAudioRef.current = audio;
     return () => {
       menuClickAudioRef.current = null;
-    };
-  }, []);
-
-  React.useEffect(() => {
-    if (!FEATURE_FLAGS.GAME_MAIN_ENABLED) return undefined;
-
-    let cancelled = false;
-    const idleScheduler = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 180));
-    const idleHandle = idleScheduler(() => {
-      import("@/lib/mainGameWarmup")
-        .then(({ warmMainGameEntryMedia }) => {
-          if (!cancelled) {
-            warmMainGameEntryMedia();
-          }
-        })
-        .catch(() => {});
-    });
-
-    import("@/lib/mainGameWarmup")
-      .then(({ warmMainGameAppShell }) => {
-        if (!cancelled) {
-          warmMainGameAppShell();
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-      if (typeof window.cancelIdleCallback === "function" && typeof idleHandle === "number") {
-        window.cancelIdleCallback(idleHandle);
-        return;
-      }
-      window.clearTimeout(idleHandle);
     };
   }, []);
 
@@ -228,19 +195,22 @@ export default function Layout({ children }) {
         <main
             data-app-scroll-root="true"
             onFocusCapture={handleFieldFocus}
-            className={`hide-scrollbar h-[calc(100dvh-4.5rem)] overflow-y-auto w-full pb-28 ${
-            showDailyChestEntry ? "pt-28" : "pt-4"
-            } ${isAdminPanel ? "px-3 sm:px-4" : "mx-auto max-w-md px-3 sm:px-4"}`}
+            className={`hide-scrollbar overflow-y-auto w-full ${
+            isDailyChestPage
+              ? "h-[100dvh] px-0 pt-0 pb-0"
+              : `h-[calc(100dvh-4.5rem)] pb-28 ${showDailyChestEntry ? "pt-28" : "pt-4"} ${isAdminPanel ? "px-3 sm:px-4" : "mx-auto max-w-md px-3 sm:px-4"}`
+            }`}
           >
           {children}
 
-          {!isAdminPanel ? (
+          {!isAdminPanel && !isDailyChestPage ? (
             <div className="mt-6">
               <SocialMediaBar />
             </div>
           ) : null}
         </main>
 
+        {!hideBottomNav ? (
         <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-800/80 bg-slate-950/95 backdrop-blur-xl">
           <div className="mx-auto flex w-full max-w-md items-center justify-between px-2 py-2 sm:px-3">
             {navItems.map((item) => {
@@ -271,6 +241,7 @@ export default function Layout({ children }) {
             })}
           </div>
         </nav>
+        ) : null}
       </div>
     </ErrorBoundary>
   );

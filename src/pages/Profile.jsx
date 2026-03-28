@@ -1,5 +1,5 @@
 ﻿import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -813,6 +813,7 @@ export default function Profile() {
   const [isPhotoViewerOpen, setIsPhotoViewerOpen] = useState(false);
   const [isPublicPhotoViewerOpen, setIsPublicPhotoViewerOpen] = useState(false);
   const [isProfileNotificationsOpen, setIsProfileNotificationsOpen] = useState(false);
+  const [hasRequestedProfileNotifications, setHasRequestedProfileNotifications] = useState(false);
   const [activeBadgeCelebration, setActiveBadgeCelebration] = useState(null);
   const [profileImageFallbackStep, setProfileImageFallbackStep] = useState(0);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -828,6 +829,7 @@ export default function Profile() {
   const [isPointsHistoryOpen, setIsPointsHistoryOpen] = useState(false);
   const [pointsHistoryTab, setPointsHistoryTab] = useState("weekly");
   const [isCheckInCalendarOpen, setIsCheckInCalendarOpen] = useState(false);
+  const [hasRequestedDailyCheckInState, setHasRequestedDailyCheckInState] = useState(false);
   const [isProfileSwitchLoading, setIsProfileSwitchLoading] = useState(false);
   const [profileSwitchProgress, setProfileSwitchProgress] = useState(0);
   const [initialProfileLoadProgress, setInitialProfileLoadProgress] = useState(12);
@@ -972,6 +974,16 @@ export default function Profile() {
     setActivePrivateTab("overview");
   }, [isViewingPublicProfile, user?.id]);
 
+  useEffect(() => {
+    if (!isProfileNotificationsOpen) return;
+    setHasRequestedProfileNotifications(true);
+  }, [isProfileNotificationsOpen]);
+
+  useEffect(() => {
+    if (!isCheckInCalendarOpen) return;
+    setHasRequestedDailyCheckInState(true);
+  }, [isCheckInCalendarOpen]);
+
   const { data: discoverProfilesData, isLoading: discoverProfilesLoading, isFetching: discoverProfilesFetching } = useQuery({
     queryKey: ["profile-discover-profiles", user?.id],
     queryFn: () => base44.social.discover({ limit: 12, offset: 0 }),
@@ -990,7 +1002,7 @@ export default function Profile() {
           id: profile.id,
           nick: profile.nick || "Usuário",
           handle: profile.handle || String(profile.nick || "usuario").toLowerCase().replace(/\s+/g, "."),
-          avatarSrc: getProfileAvatarSrc(profile, avatarSrcById, defaultAvatar) || defaultAvatar,
+          avatarSrc: getProfileAvatarSrc(profile, avatarSrcById, "") || "",
           followers: Number(profile.followers || 0),
           following: Number(profile.following || 0),
           likes: Number(profile.likes || 0),
@@ -1349,6 +1361,23 @@ export default function Profile() {
   const canLoadDeferredPublicProfileQueries =
     Boolean(user) &&
     loadNonCriticalProfileData;
+  const shouldLoadEngagementProfiles = canLoadDeferredProfileQueries && isEngagementTabActive;
+  const shouldLoadMySocialState =
+    canLoadDeferredProfileQueries &&
+    !isViewingPublicProfile &&
+    hasResolvedAuthBootstrap &&
+    (isSocialListOpen || isEngagementTabActive);
+  const shouldLoadDailyCheckInState =
+    canLoadDeferredProfileQueries &&
+    !isViewingPublicProfile &&
+    hasResolvedAuthBootstrap &&
+    hasRequestedDailyCheckInState;
+  const shouldLoadProfileNotifications =
+    Boolean(user?.id) &&
+    !isLoadingAuth &&
+    !isViewingPublicProfile &&
+    canLoadDeferredProfileQueries &&
+    hasRequestedProfileNotifications;
 
   useEffect(() => {
     setLoadDiscoverProfiles(false);
@@ -1423,7 +1452,7 @@ export default function Profile() {
   const { data: mySocialState } = useQuery({
     queryKey: ["social-my-state", user?.id],
     queryFn: () => base44.social.state("me"),
-    enabled: canLoadDeferredProfileQueries && !isViewingPublicProfile && hasResolvedAuthBootstrap,
+    enabled: shouldLoadMySocialState,
     staleTime: 120000,
     gcTime: 30 * 60 * 1000,
     refetchOnMount: false,
@@ -1459,7 +1488,7 @@ export default function Profile() {
   const { data: dailyCheckInState } = useQuery({
     queryKey: ["daily-checkin-state", user?.id],
     queryFn: () => base44.social.checkInState(),
-    enabled: canLoadDeferredProfileQueries && !isViewingPublicProfile && hasResolvedAuthBootstrap,
+    enabled: shouldLoadDailyCheckInState,
     staleTime: 120000,
     gcTime: 30 * 60 * 1000,
     refetchOnMount: false,
@@ -1819,26 +1848,16 @@ export default function Profile() {
     myFollowingProfiles,
     realProfilesById,
   ]);
-  const engagedProfileSummaryQueries = useQueries({
-    queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
-      queryKey: ["public-profile-summary", profile.id, "engaged-card"],
-      queryFn: ({ signal }) => base44.gamification.publicProfileSummary(profile.id, { signal }),
-      enabled: PROFILE_PUBLIC_ENRICHMENT_ENABLED && canLoadDeferredProfileQueries && !!profile?.id,
-      staleTime: 60000,
-      refetchOnWindowFocus: false,
-      retry: false,
-    })),
-  });
   const publicProfileBasicIds = useMemo(() => {
     const ids = [];
     if (selectedPublicProfileId) ids.push(selectedPublicProfileId);
-    if (canLoadDeferredProfileQueries) {
+    if (shouldLoadEngagementProfiles) {
       engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).forEach((profile) => {
         if (profile?.id) ids.push(profile.id);
       });
     }
     return Array.from(new Set(ids.map((item) => String(item || "").trim()).filter(Boolean)));
-  }, [canLoadDeferredProfileQueries, engagedProfiles, selectedPublicProfileId]);
+  }, [engagedProfiles, selectedPublicProfileId, shouldLoadEngagementProfiles]);
   const {
     data: publicProfileBasicsPayload,
     isLoading: publicProfileBasicsLoading,
@@ -1911,48 +1930,19 @@ export default function Profile() {
       publicProfileLookupStatus === 404 ||
       (!(publicProfileBasicsPayload?.items || []).length && !publicProfileBasicsError)
     );
-  const engagedProfileSocialQueries = useQueries({
-    queries: engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).map((profile) => ({
-      queryKey: ["social-target-state", user?.id, profile.id, "engaged-card"],
-      queryFn: ({ signal }) => base44.social.state(profile.id, { signal }),
-      enabled:
-        !isLoadingAuth &&
-        hasResolvedAuthBootstrap &&
-        Boolean(user?.id) &&
-        canLoadDeferredProfileQueries &&
-        !!profile?.id &&
-        String(profile.id || "") !== String(user?.id || ""),
-      staleTime: 30000,
-      refetchOnWindowFocus: false,
-      retry: false,
-    })),
-  });
   const engagedProfilesWithSummary = useMemo(() => {
-    const summaryMap = new Map();
-    const socialMap = new Map();
-    engagedProfiles.slice(0, PROFILE_ENGAGED_QUERY_LIMIT).forEach((profile, index) => {
-      const payload = engagedProfileSummaryQueries[index]?.data || null;
-      if (payload) summaryMap.set(profile.id, payload);
-      const socialPayload = engagedProfileSocialQueries[index]?.data || null;
-      if (socialPayload) socialMap.set(profile.id, socialPayload);
-    });
-
     return engagedProfiles
       .map((profile) => {
         const realUser = publicProfileBasicsMap.get(String(profile.id || "")) || null;
-        const summary = summaryMap.get(profile.id) || null;
-        const summaryMetrics = summary?.metrics || {};
-        const summaryEntry = summary?.currentCompetitionEntry || {};
-        const socialState = socialMap.get(profile.id) || null;
-        const xpTotal = Math.max(0, Number(summaryMetrics.xpTotal ?? summaryMetrics.xp_total ?? profile.xpTotal ?? 0));
+        const xpTotal = Math.max(0, Number(profile.xpTotal ?? profile.xp_total ?? 0));
         const level = getLevelProgress(xpTotal).level;
-        const points = Math.max(0, Number(summaryEntry.weekly_points ?? profile.points ?? 0));
-        const weeklyPosition = Math.max(0, Number(summaryEntry.position ?? profile.weeklyPosition ?? 0));
-        const totalWins = Math.max(0, Number(summaryMetrics.totalWins ?? profile.totalWins ?? 0));
-        const participations = Math.max(0, Number(summaryMetrics.totalParticipations ?? profile.participations ?? 0));
-        const followers = Math.max(0, Number(socialState?.followers ?? summaryMetrics.totalFollowers ?? profile.followers ?? 0));
-        const likes = Math.max(0, Number(socialState?.likes ?? summaryMetrics.totalLikes ?? profile.likes ?? 0));
-        const engagementPoints = Math.max(0, Number(summaryMetrics.points ?? profile.engagementPoints ?? 0));
+        const points = Math.max(0, Number(profile.points ?? 0));
+        const weeklyPosition = Math.max(0, Number(profile.weeklyPosition ?? 0));
+        const totalWins = Math.max(0, Number(profile.totalWins ?? 0));
+        const participations = Math.max(0, Number(profile.participations ?? 0));
+        const followers = Math.max(0, Number(profile.followers ?? 0));
+        const likes = Math.max(0, Number(profile.likes ?? 0));
+        const engagementPoints = Math.max(0, Number(profile.engagementPoints ?? 0));
         const participationStrength =
           participations * 1000000 +
           level * 100000 +
@@ -1963,10 +1953,10 @@ export default function Profile() {
           likes;
         const avatarMatch = avatarSrcById[realUser?.profile_avatar_id || ""] || "";
         const avatarSrc =
-          getProfileAvatarSrc(realUser || profile, avatarSrcById, avatarMatch || profile.avatarSrc || defaultAvatar) ||
+          getProfileAvatarSrc(realUser || profile, avatarSrcById, avatarMatch || profile.avatarSrc || "") ||
           avatarMatch ||
           profile.avatarSrc ||
-          defaultAvatar;
+          "";
 
         return {
           ...profile,
@@ -1979,8 +1969,8 @@ export default function Profile() {
           participations,
           followers,
           likes,
-          isFollowing: Boolean(socialState?.isFollowing ?? profile.isFollowing),
-          isLiked: Boolean(socialState?.isLiked ?? profile.isLiked),
+          isFollowing: Boolean(profile.isFollowing),
+          isLiked: Boolean(profile.isLiked),
           engagementPoints,
           participationStrength,
         };
@@ -2005,7 +1995,7 @@ export default function Profile() {
         ...profile,
         position: index + 1,
       }));
-  }, [avatarSrcById, engagedProfileSocialQueries, engagedProfileSummaryQueries, engagedProfiles, publicProfileBasicsMap]);
+  }, [avatarSrcById, engagedProfiles, publicProfileBasicsMap]);
 
   useEffect(() => {
     if (!simulatedProfiles.length) return;
@@ -2310,9 +2300,9 @@ export default function Profile() {
         nick: resolvedProfile.nick || entry.nick,
         handle: resolvedProfile.handle || String(resolvedProfile.nick || entry.nick || "usuario").toLowerCase().replace(/\s+/g, "."),
         avatarSrc:
-          getProfileAvatarSrc(resolvedProfile, avatarSrcById, avatarMatch?.src || defaultAvatar) ||
+          getProfileAvatarSrc(resolvedProfile, avatarSrcById, avatarMatch?.src || "") ||
           avatarMatch?.src ||
-          defaultAvatar,
+          "",
         avatar_emoji: String(resolvedProfile.avatar_emoji || entry.avatar_emoji || ""),
         profile_avatar_id: String(resolvedProfile.profile_avatar_id || entry.profile_avatar_id || ""),
         profile_image_mode: String(resolvedProfile.profile_image_mode || entry.profile_image_mode || "avatar"),
@@ -2344,7 +2334,7 @@ export default function Profile() {
           String(selectedPublicUser.nick || "usuario")
             .toLowerCase()
             .replace(/\s+/g, "."),
-        avatarSrc: getProfileAvatarSrc(selectedPublicUser, avatarSrcById, defaultAvatar) || defaultAvatar,
+        avatarSrc: getProfileAvatarSrc(selectedPublicUser, avatarSrcById, "") || "",
         avatar_emoji: String(selectedPublicUser.avatar_emoji || ""),
         profile_avatar_id: String(selectedPublicUser.profile_avatar_id || ""),
         profile_image_mode: String(selectedPublicUser.profile_image_mode || "avatar"),
@@ -2376,9 +2366,9 @@ export default function Profile() {
     return {
       ...baseProfile,
       avatarSrc:
-        getProfileAvatarSrc(resolvedBaseProfile, avatarSrcById, baseProfile.avatarSrc || defaultAvatar) ||
+        getProfileAvatarSrc(resolvedBaseProfile, avatarSrcById, baseProfile.avatarSrc || "") ||
         baseProfile.avatarSrc ||
-        defaultAvatar,
+        "",
       profile_avatar_id: String(resolvedBaseProfile.profile_avatar_id || baseProfile.profile_avatar_id || ""),
       profile_image_mode: String(resolvedBaseProfile.profile_image_mode || baseProfile.profile_image_mode || "avatar"),
       profile_image_status: String(resolvedBaseProfile.profile_image_status || baseProfile.profile_image_status || ""),
@@ -2418,7 +2408,7 @@ export default function Profile() {
       const response = await base44.profile.notifications({ limit: 50 });
       return response?.items || [];
     },
-    enabled: Boolean(user?.id) && !isLoadingAuth && !isViewingPublicProfile && canLoadDeferredProfileQueries,
+    enabled: shouldLoadProfileNotifications,
     staleTime: 15000,
     refetchOnWindowFocus: false,
     retry: false,
@@ -4199,7 +4189,10 @@ export default function Profile() {
     <div className="absolute left-2 top-2 z-20">
       <button
         type="button"
-        onClick={() => setIsProfileNotificationsOpen(true)}
+        onClick={() => {
+          setHasRequestedProfileNotifications(true);
+          setIsProfileNotificationsOpen(true);
+        }}
         className="relative inline-flex items-center justify-center rounded-full border border-fuchsia-400/45 bg-slate-950/90 p-2 text-fuchsia-100 shadow-[0_0_0_1px_rgba(232,121,249,0.18),0_8px_18px_rgba(126,34,206,0.22)] backdrop-blur-sm transition hover:border-fuchsia-300/70 hover:text-white"
         aria-label="Abrir notificações do perfil"
       >
@@ -4740,10 +4733,22 @@ export default function Profile() {
                     src={selectedPublicProfile.avatarSrc}
                     alt={selectedPublicProfile.nick}
                     className="h-full w-full object-cover"
+                    onError={(event) => {
+                      event.currentTarget.style.display = "none";
+                      const fallbackNode = event.currentTarget.nextElementSibling;
+                      if (fallbackNode instanceof HTMLElement) {
+                        fallbackNode.style.display = "flex";
+                      }
+                    }}
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center text-sm text-white">AV</div>
+                  <div className="flex h-full w-full items-center justify-center text-2xl text-white">
+                    {getProfileAvatarFallback(selectedPublicProfile, "AV")}
+                  </div>
                 )}
+                <div className="hidden h-full w-full items-center justify-center text-2xl text-white">
+                  {getProfileAvatarFallback(selectedPublicProfile, "AV")}
+                </div>
               </button>
               <p className="mt-2 text-xl font-bold text-white">{selectedPublicProfile.nick}</p>
               <p className="text-sm text-cyan-300">@{selectedPublicProfile.handle}</p>
@@ -4978,7 +4983,11 @@ export default function Profile() {
                               alt={profile.nick}
                               className="h-full w-full object-cover"
                               onError={(event) => {
-                                event.currentTarget.src = defaultAvatar;
+                                event.currentTarget.style.display = "none";
+                                const fallbackNode = event.currentTarget.nextElementSibling;
+                                if (fallbackNode instanceof HTMLElement) {
+                                  fallbackNode.style.display = "flex";
+                                }
                               }}
                             />
                           ) : (
@@ -4986,6 +4995,9 @@ export default function Profile() {
                               {getProfileAvatarFallback(profile, "AV")}
                             </div>
                           )}
+                          <div className="hidden h-full w-full items-center justify-center text-xs text-white">
+                            {getProfileAvatarFallback(profile, "AV")}
+                          </div>
                         </button>
                         {isPodium && podiumFrameSrc ? (
                           <SmartVideo
@@ -5255,7 +5267,10 @@ export default function Profile() {
               </button>
               <button
                 type="button"
-                onClick={() => setIsCheckInCalendarOpen(true)}
+                onClick={() => {
+                  setHasRequestedDailyCheckInState(true);
+                  setIsCheckInCalendarOpen(true);
+                }}
                 className={`inline-flex items-center justify-center rounded-2xl px-3 py-2 text-xs font-bold transition ${
                   dailyCheckInState?.checkedIn
                     ? "bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/30"
@@ -5411,7 +5426,11 @@ export default function Profile() {
                             alt={profile.nick}
                             className="h-full w-full object-cover"
                             onError={(event) => {
-                              event.currentTarget.src = defaultAvatar;
+                              event.currentTarget.style.display = "none";
+                              const fallbackNode = event.currentTarget.nextElementSibling;
+                              if (fallbackNode instanceof HTMLElement) {
+                                fallbackNode.style.display = "flex";
+                              }
                             }}
                           />
                         ) : (
@@ -5419,6 +5438,9 @@ export default function Profile() {
                             {getProfileAvatarFallback(profile, "AV")}
                           </div>
                         )}
+                        <div className="hidden h-full w-full items-center justify-center text-xs text-white">
+                          {getProfileAvatarFallback(profile, "AV")}
+                        </div>
                       </button>
                       {isPodium && podiumFrameSrc ? (
                         <SmartVideo
@@ -6170,10 +6192,26 @@ export default function Profile() {
                 >
                   <div className="h-12 w-12 overflow-hidden rounded-full border border-cyan-500/40">
                     {profile.avatarSrc ? (
-                      <img src={profile.avatarSrc} alt={profile.nick} className="h-full w-full object-cover" />
+                      <img
+                        src={profile.avatarSrc}
+                        alt={profile.nick}
+                        className="h-full w-full object-cover"
+                        onError={(event) => {
+                          event.currentTarget.style.display = "none";
+                          const fallbackNode = event.currentTarget.nextElementSibling;
+                          if (fallbackNode instanceof HTMLElement) {
+                            fallbackNode.style.display = "flex";
+                          }
+                        }}
+                      />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-xs text-white">AV</div>
+                      <div className="flex h-full w-full items-center justify-center text-xs text-white">
+                        {getProfileAvatarFallback(profile, "AV")}
+                      </div>
                     )}
+                    <div className="hidden h-full w-full items-center justify-center text-xs text-white">
+                      {getProfileAvatarFallback(profile, "AV")}
+                    </div>
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold text-white">{profile.nick}</p>

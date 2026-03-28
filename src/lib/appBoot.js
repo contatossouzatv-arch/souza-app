@@ -1,5 +1,4 @@
 import mainMenuClickSound from "../../assets-para-app/Songs/Song click menu principal.mp3";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 
 const modulePromiseCache = new Map();
 const audioPromiseCache = new Map();
@@ -47,9 +46,6 @@ export function warmAppShell() {
     warmModule("dashboard", () => import("../pages/Dashboard")),
     warmModule("home", () => import("../pages/Home")),
     warmAudio(mainMenuClickSound),
-    ...(FEATURE_FLAGS.GAME_MAIN_ENABLED
-      ? [import("@/lib/mainGameWarmup").then(({ warmMainGameAppShell }) => warmMainGameAppShell())]
-      : []),
   ]).catch(() => {});
   return Promise.resolve();
 }

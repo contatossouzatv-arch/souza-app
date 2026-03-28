@@ -128,6 +128,7 @@ function resolveTimeoutMs(path = "", timeoutMs) {
     return RAFFLE_PARTICIPANT_TIMEOUT_MS;
   }
   if (
+    normalizedPath === "/api/daily-chest/state" ||
     normalizedPath === "/api/home/summary" ||
     normalizedPath === "/api/home/feed-summary" ||
     normalizedPath.startsWith("/api/home/feed-summary?") ||
@@ -144,6 +145,8 @@ function resolveTimeoutMs(path = "", timeoutMs) {
     return 25000;
   }
   if (
+    normalizedPath === "/api/admin/gamification/overview" ||
+    normalizedPath.startsWith("/api/admin/users") ||
     normalizedPath.includes("/api/admin/instant-raffles/participants/") ||
     normalizedPath.includes("/api/admin/deposit-draws/winners/") ||
     normalizedPath.includes("/api/admin/audits/winners/") ||

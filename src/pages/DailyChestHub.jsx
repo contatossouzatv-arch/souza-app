@@ -15,7 +15,7 @@ const DailyChestScene = lazy(() => import("@/components/daily-chest/DailyChestSc
 
 function SceneLoader() {
   return (
-    <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_28%),linear-gradient(180deg,#020617_0%,#06111d_45%,#030712_100%)] px-6 text-center">
+    <div className="flex min-h-[100dvh] w-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_28%),linear-gradient(180deg,#020617_0%,#06111d_45%,#030712_100%)] px-6 text-center">
       <div className="max-w-md rounded-[2rem] border border-cyan-200/15 bg-slate-950/75 px-6 py-7 shadow-[0_24px_80px_rgba(2,6,23,0.45)]">
         <div className="mx-auto h-12 w-12 animate-spin rounded-full border-2 border-cyan-300/20 border-t-cyan-300" />
         <p className="mt-4 text-lg font-black text-cyan-100">Preparando o Baú Diário</p>
@@ -214,12 +214,16 @@ export default function DailyChestHub() {
   }, [claimChest, playAudio]);
 
   if (isLoading) {
-    return <SceneLoader />;
+    return (
+      <div className="fixed inset-0 z-[120] bg-slate-950 text-white">
+        <SceneLoader />
+      </div>
+    );
   }
 
   if (error || !state) {
     return (
-      <div className="flex h-[100dvh] max-h-[100dvh] items-center justify-center overflow-hidden bg-slate-950 px-4 text-white">
+      <div className="fixed inset-0 z-[120] flex items-center justify-center overflow-hidden bg-slate-950 px-4 text-white">
         <div className="max-w-sm rounded-[2rem] border border-white/10 bg-slate-950/80 p-6 text-center">
           <p className="text-lg font-black">Falha ao carregar o Baú Diário</p>
           <p className="mt-2 text-sm text-slate-400">A experiência continua salva no backend. Tente novamente.</p>
@@ -245,7 +249,7 @@ export default function DailyChestHub() {
       : displayState;
 
   return (
-    <div className="relative h-[100dvh] max-h-[100dvh] overflow-hidden bg-slate-950 text-white">
+    <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(34,211,238,0.18),transparent_32%),linear-gradient(180deg,#020617_0%,#04111d_48%,#030712_100%)]" />
       <div className="absolute inset-0 lg:flex lg:items-center lg:justify-center lg:p-6">
         <div className="h-full w-full lg:h-[min(100dvh-3rem,100vw-3rem)] lg:w-[min(100dvh-3rem,100vw-3rem)] lg:overflow-hidden lg:rounded-[2rem] lg:border lg:border-white/10 lg:bg-slate-950/40 lg:shadow-[0_24px_80px_rgba(2,6,23,0.45)]">

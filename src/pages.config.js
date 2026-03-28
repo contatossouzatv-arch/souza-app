@@ -50,7 +50,6 @@
 import { lazyWithRecovery } from "@/lib/lazyWithRecovery";
 
 const AdminPanel = lazyWithRecovery(() => import("./pages/AdminPanel"));
-const DailyEvent = lazyWithRecovery(() => import("./pages/DailyEvent"));
 const Dashboard = lazyWithRecovery(() => import("./pages/Dashboard"));
 const Deposits = lazyWithRecovery(() => import("./pages/Deposits"));
 const Home = lazyWithRecovery(() => import("./pages/Home"));
@@ -63,7 +62,6 @@ const __Layout = lazyWithRecovery(() => import("./Layout.jsx"));
 
 export const PAGES = {
     "AdminPanel": AdminPanel,
-    "DailyEvent": DailyEvent,
     "Dashboard": Dashboard,
     "Deposits": Deposits,
     "Home": Home,

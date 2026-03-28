@@ -145,11 +145,15 @@ export default function Home() {
       .slice(0, 40)
       .map((item) => {
         const profile = usersById.get(item.user_id);
-        const profileAvatarId = item.profile_avatar_id || profile?.profile_avatar_id || "";
-        const profilePhoto =
-          item.profile_image_mode === "photo" && item.profile_image_url
-            ? resolveAssetUrl(item.profile_image_url)
-            : null;
+        const resolvedWinnerProfile = {
+          ...(profile || {}),
+          id: item.user_id || profile?.id || "",
+          avatar_emoji: item.user_avatar || profile?.avatar_emoji || "",
+          profile_avatar_id: item.profile_avatar_id || profile?.profile_avatar_id || "",
+          profile_image_mode: item.profile_image_mode || profile?.profile_image_mode || "avatar",
+          profile_image_status: item.profile_image_status || profile?.profile_image_status || "",
+          profile_image_url: item.profile_image_url || profile?.profile_image_url || "",
+        };
 
         return {
           id: `winner-${item.id}`,
@@ -162,7 +166,7 @@ export default function Home() {
           userName: item.user_name || profile?.full_name || "Participante",
           userNick: item.user_nick || profile?.nick || "",
           avatarEmoji: item.user_avatar || profile?.avatar_emoji || "U",
-          avatarUrl: profilePhoto || avatarById[profileAvatarId] || null,
+          avatarUrl: getProfileAvatarSrc(resolvedWinnerProfile, avatarById, "") || "",
           prizeTitle: item.source_label || "Premiação do app",
           rewardLabel: item.reward_label || item.title || "Prêmio",
           prizeAmount: Number(item.reward_amount) || 0,
@@ -271,7 +275,6 @@ export default function Home() {
   });
 
   const handleLike = (postId) => {
-    if (String(postId || "").startsWith("winner-")) return;
     const likedPostIds = Array.isArray(feedLikes?.likedPostIds) ? feedLikes.likedPostIds : [];
     if (!postId || likedPostIds.includes(postId) || likePostMutation.isPending) return;
     likePostMutation.mutate(postId);
@@ -521,7 +524,15 @@ export default function Home() {
                       <Trophy className="h-3.5 w-3.5" />
                       Post automático de ganhador
                     </span>
-                    <span className="text-xs text-slate-400">Interação indisponível nesse post</span>
+                    <Button
+                      onClick={() => handleLike(item.id)}
+                      variant="outline"
+                      disabled={isLiked}
+                      className="h-8 border-emerald-700/50 bg-emerald-950/30 px-3 text-xs text-emerald-100 hover:bg-emerald-900/40 disabled:cursor-default disabled:opacity-100"
+                    >
+                      <Heart className="mr-1 h-3.5 w-3.5" />
+                      {isLiked ? `Curtido (${likesCount})` : `Curtir (${likesCount})`}
+                    </Button>
                   </div>
                 </Card>
               );
