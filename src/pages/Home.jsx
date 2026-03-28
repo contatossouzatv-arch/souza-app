@@ -114,7 +114,6 @@ export default function Home() {
     const admin = homeSummary?.creator || null;
     if (!admin) return null;
     const creatorPhoto =
-      admin.profile_image_mode === "photo" &&
       admin.profile_image_status === "approved" &&
       admin.profile_image_url
         ? resolveAssetUrl(admin.profile_image_url)

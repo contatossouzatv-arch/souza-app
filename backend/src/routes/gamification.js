@@ -590,6 +590,7 @@ async function buildHomeFeedSharedPayload() {
             user_avatar: user?.avatar_emoji || "",
             profile_avatar_id: user?.profile_avatar_id || "",
             profile_image_mode: user?.profile_image_mode || "avatar",
+            profile_image_status: user?.profile_image_status || "none",
             profile_image_url: getApprovedProfileImageUrl(user),
             source_type: item.source_type || "",
             source_label: mapPrizeSourceLabel(item.source_type),
@@ -2069,12 +2070,11 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
              ROW_NUMBER() OVER (ORDER BY w.amount DESC, COALESCE(e.amount, 0) DESC, u.nick ASC, u.id ASC) AS position,
              u.nick,
              u.full_name,
-             u.profile_avatar_id,
-             u.profile_image_mode,
-             u.profile_image_status,
-             CASE
-               WHEN LOWER(COALESCE(u.profile_image_mode, 'avatar')) = 'photo'
-                AND LOWER(COALESCE(u.profile_image_status, 'none')) = 'approved'
+            u.profile_avatar_id,
+            u.profile_image_mode,
+            u.profile_image_status,
+            CASE
+               WHEN LOWER(COALESCE(u.profile_image_status, 'none')) = 'approved'
                THEN COALESCE(NULLIF(BTRIM(u.profile_image_url), ''), '/api/auth/profile-image/' || u.id::text)
                ELSE ''
              END AS profile_image_url
@@ -3070,9 +3070,7 @@ router.get("/profile/public-directory", async (req, res) => {
            WHERE COALESCE(u.account_status, 'active') <> 'deactivated'
            ORDER BY
              CASE
-               WHEN LOWER(COALESCE(u.profile_image_mode, '')) = 'photo'
-                AND LOWER(COALESCE(u.profile_image_status, '')) = 'approved'
-                AND COALESCE(NULLIF(BTRIM(u.profile_image_url), ''), '') <> ''
+               WHEN LOWER(COALESCE(u.profile_image_status, '')) = 'approved'
                  THEN 0
                WHEN COALESCE(NULLIF(BTRIM(u.profile_avatar_id), ''), '') <> ''
                  OR COALESCE(NULLIF(BTRIM(u.avatar_emoji), ''), '') <> ''
@@ -3395,10 +3393,8 @@ router.get("/prizes/winners-history", requireAuth, async (req, res) => {
 
     const drawBucket = dayBucket.draws_map.get(drawKey);
     const profileImageUrl =
-      user?.profile_image_mode === "photo" &&
-      user?.profile_image_status === "approved" &&
-      user?.id
-        ? `/api/auth/profile-image/${user.id}`
+      String(user?.profile_image_status || "").toLowerCase() === "approved"
+        ? String(user?.profile_image_url || "").trim() || (user?.id ? `/api/auth/profile-image/${user.id}` : "")
         : "";
 
     drawBucket.winners.push({
@@ -3716,9 +3712,8 @@ router.get("/admin/audits/winners", requireAuth, requireAdmin, async (req, res) 
     const avatarUrlRaw = audit.user_profile_image_url || user?.profile_image_url || "";
     const canUseApprovedPhoto =
       Boolean(audit.user_profile_image_url) ||
-      (user?.profile_image_mode === "photo" &&
-        user?.profile_image_status === "approved" &&
-        user?.profile_image_url);
+      (String(user?.profile_image_status || "").toLowerCase() === "approved" &&
+        (user?.profile_image_url || user?.id));
 
     return {
       ...audit,
@@ -4917,6 +4912,14 @@ router.get("/admin/daily-chest/config", requireAuth, requireAdmin, async (_req, 
   });
 });
 
+async function invalidateAdminDailyChestCaches() {
+  await Promise.all([
+    deleteCacheKey("daily-chest:settings"),
+    deleteCacheByPrefix("daily-chest:state:"),
+    deleteCacheByPrefix("daily-chest:reward-pool:"),
+  ]);
+}
+
 router.put("/admin/daily-chest/settings", requireAuth, requireAdmin, async (req, res) => {
   const payload = req.body && typeof req.body === "object" ? req.body : {};
   const beforeMap = await listAppSettingsMap();
@@ -4933,6 +4936,7 @@ router.put("/admin/daily-chest/settings", requireAuth, requireAdmin, async (req,
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
   });
+  await invalidateAdminDailyChestCaches();
   emitEntityChanged(req, "DailyChestSettings", "daily_chest_settings", "updated");
   res.json({ ok: true });
 });
@@ -4962,6 +4966,7 @@ router.post("/admin/daily-chest/access-code/generate", requireAuth, requireAdmin
     adminEmail: req.auth.email,
   });
 
+  await invalidateAdminDailyChestCaches();
   emitEntityChanged(req, "DailyChestSettings", "daily_chest_access_code", "updated");
   res.json({ code, chestDayKey });
 });
@@ -4985,6 +4990,7 @@ router.post("/admin/daily-chest/rewards", requireAuth, requireAdmin, async (req,
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
   });
+  await invalidateAdminDailyChestCaches();
   emitEntityChanged(req, "DailyChestRewardConfig", created.id, "created");
   res.status(201).json(created);
 });
@@ -5013,6 +5019,7 @@ router.patch("/admin/daily-chest/rewards/:id", requireAuth, requireAdmin, async 
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
   });
+  await invalidateAdminDailyChestCaches();
   emitEntityChanged(req, "DailyChestRewardConfig", rewardId, "updated");
   res.json(updated);
 });
@@ -5041,6 +5048,7 @@ router.delete("/admin/daily-chest/rewards/:id", requireAuth, requireAdmin, async
     adminEmail: req.auth.email,
   });
 
+  await invalidateAdminDailyChestCaches();
   emitEntityChanged(req, "DailyChestRewardConfig", rewardId, "deleted");
   res.json({ ok: true, id: rewardId });
 });

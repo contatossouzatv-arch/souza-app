@@ -58,6 +58,7 @@ const PUBLIC_APP_SETTINGS_KEYS = new Set([
   "cta_box_link",
   "cta_box_title",
   "daily_chest_base_daily_chests",
+  "daily_chest_access_code_required",
   "daily_chest_bonus_amount_step",
   "daily_chest_bonus_chests_per_approved",
   "daily_chest_bonus_chests_per_step",

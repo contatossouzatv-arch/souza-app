@@ -66,6 +66,9 @@ export default function DailyChestEntry({ onPress, loadState = false }) {
   };
 
   const remaining = Math.max(0, Number(chestState?.slots?.remaining || 0));
+  if (loadState && chestState?.enabled === false) {
+    return null;
+  }
   const statusLabel = !loadState
     ? "Abra para conferir seus premios"
     : remaining > 0

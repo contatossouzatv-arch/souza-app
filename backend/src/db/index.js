@@ -4029,6 +4029,7 @@ export async function seedDefaults() {
     { key: "daily_chest_xp_per_open", value: "18", description: "XP ganho ao abrir um baú" },
     { key: "daily_chest_schedule_start_at", value: "", description: "Data inicial opcional para ativar o Baú Diário" },
     { key: "daily_chest_schedule_end_at", value: "", description: "Data final opcional para encerrar o Baú Diário" },
+    { key: "daily_chest_access_code_required", value: "true", description: "Exige chave diária para liberar o baú base" },
     { key: "daily_chest_deposit_bonus_enabled", value: "false", description: "Permite ganhar baús extras por depósitos aprovados" },
     { key: "daily_chest_bonus_chests_per_approved", value: "1", description: "Baús extras por depósito aprovado" },
     { key: "daily_chest_bonus_amount_step", value: "0", description: "Valor para gerar baús extras por faixa de depósito" },

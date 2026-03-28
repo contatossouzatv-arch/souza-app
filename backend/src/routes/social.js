@@ -353,9 +353,7 @@ async function listDiscoverProfiles(client, viewerUserId, { limit = 12, offset =
   const orderByClause =
     normalizedSort === "priority"
       ? `CASE
-           WHEN LOWER(COALESCE(u.profile_image_mode, '')) = 'photo'
-            AND LOWER(COALESCE(u.profile_image_status, '')) = 'approved'
-            AND COALESCE(NULLIF(BTRIM(u.profile_image_url), ''), '') <> ''
+           WHEN LOWER(COALESCE(u.profile_image_status, '')) = 'approved'
              THEN 0
            WHEN COALESCE(NULLIF(BTRIM(u.profile_avatar_id), ''), '') <> ''
              OR COALESCE(NULLIF(BTRIM(u.avatar_emoji), ''), '') <> ''

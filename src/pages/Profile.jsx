@@ -141,6 +141,12 @@ const PROFILE_PRIVATE_TABS = [
   { id: "achievements", label: "Conquistas" },
   { id: "prizes", label: "Prêmios" },
 ];
+const PROFILE_PUBLIC_TABS = [
+  { id: "overview", label: "Resumo" },
+  { id: "achievements", label: "Conquistas" },
+  { id: "prizes", label: "Prêmios" },
+  { id: "engagement", label: "Perfis" },
+];
 
 function profileDebugLog() {}
 
@@ -835,6 +841,7 @@ export default function Profile() {
   const [initialProfileLoadProgress, setInitialProfileLoadProgress] = useState(12);
   const [competitionRemainingMsLive, setCompetitionRemainingMsLive] = useState(0);
   const [activePrivateTab, setActivePrivateTab] = useState("overview");
+  const [activePublicTab, setActivePublicTab] = useState("overview");
   const [shouldLoadCoreProfileData, setShouldLoadCoreProfileData] = useState(false);
   const [isDocumentVisible, setIsDocumentVisible] = useState(() =>
     typeof document === "undefined" ? true : document.visibilityState === "visible"
@@ -881,6 +888,10 @@ export default function Profile() {
   const isEngagementTabActive = activePrivateTab === "engagement";
   const isAchievementsTabActive = activePrivateTab === "achievements";
   const isPrizesTabActive = activePrivateTab === "prizes";
+  const isPublicOverviewTabActive = activePublicTab === "overview";
+  const isPublicEngagementTabActive = activePublicTab === "engagement";
+  const isPublicAchievementsTabActive = activePublicTab === "achievements";
+  const isPublicPrizesTabActive = activePublicTab === "prizes";
 
   const debugNavigate = React.useCallback(
     (target, options = undefined, reason = "unknown") => {
@@ -1506,6 +1517,11 @@ export default function Profile() {
     () => normalizeBadgeRules(deferredProfileGamification?.badgeRules || DEFAULT_BADGE_RULES),
     [deferredProfileGamification]
   );
+  const dailyCheckInConfig = useMemo(
+    () => deferredProfileGamification?.dailyCheckInConfig || DEFAULT_DAILY_CHECKIN_CONFIG,
+    [deferredProfileGamification]
+  );
+  const isDailyCheckInEnabled = dailyCheckInConfig?.enabled !== false;
 
   const competitionBoard = useMemo(
     () =>
@@ -2288,6 +2304,11 @@ export default function Profile() {
     }
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [isViewingPublicProfile, selectedPublicProfileHandle, selectedPublicProfileId]);
+
+  useEffect(() => {
+    if (!isViewingPublicProfile) return;
+    setActivePublicTab("overview");
+  }, [isViewingPublicProfile, selectedPublicProfile?.id, selectedPublicProfileHandle, selectedPublicProfileId]);
 
   const selectedPublicProfile = useMemo(() => {
     if (!selectedPublicProfileHandle && !selectedPublicProfileId) return null;
@@ -3362,10 +3383,7 @@ export default function Profile() {
     (profile) => {
       const leaderboardProfile = competitionEntryByUserId[profile.id];
       const avatarMatch = avatarSrcById[profile.profile_avatar_id] || "";
-      const avatarSrc =
-        profile.profile_image_mode === "photo" && profile.profile_image_url
-          ? resolveAssetUrl(profile.profile_image_url)
-          : avatarMatch;
+      const avatarSrc = getProfileAvatarSrc(profile, avatarSrcById, avatarMatch || "") || avatarMatch;
 
       return {
         id: profile.id,
@@ -4323,7 +4341,7 @@ export default function Profile() {
     };
 
     const getRankingAvatarSrc = (item) => {
-      if (item?.profile_image_mode === "photo" && item?.profile_image_url) {
+      if (String(item?.profile_image_status || "").toLowerCase() === "approved" && item?.profile_image_url) {
         return resolveAssetUrl(item.profile_image_url);
       }
       if (item?.profile_avatar_id && avatarSrcById[item.profile_avatar_id]) {
@@ -4874,11 +4892,34 @@ export default function Profile() {
             </div>
           </Card>
 
-          {renderCompetitionCard({
+          <Card className="border-slate-800 bg-slate-900/70 p-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {PROFILE_PUBLIC_TABS.map((tab) => {
+                const isActive = activePublicTab === tab.id;
+                return (
+                  <button
+                    key={`public-tab-${tab.id}`}
+                    type="button"
+                    onClick={() => setActivePublicTab(tab.id)}
+                    className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
+                      isActive
+                        ? "bg-cyan-500 text-slate-950"
+                        : "bg-slate-950/60 text-slate-300 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </Card>
+
+          {isPublicOverviewTabActive ? renderCompetitionCard({
             entry: publicCompetitionEntry,
             titleSuffix: "Visivel para todos que abrirem este perfil.",
-          })}
+          }) : null}
 
+          {isPublicOverviewTabActive ? (
           <Card className="border-slate-800 bg-slate-900/70 p-4">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Resumo Publico</h2>
             <div className="grid grid-cols-3 gap-2">
@@ -4908,7 +4949,9 @@ export default function Profile() {
               </div>
             </div>
           </Card>
+          ) : null}
 
+          {isPublicAchievementsTabActive ? (
           <Card className="border-slate-800 bg-slate-900/70 p-4">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Selos e Conquistas</h2>
             <div className="mb-2 flex items-center justify-between text-[11px]">
@@ -4978,7 +5021,9 @@ export default function Profile() {
               ))}
             </div>
           </Card>
+          ) : null}
 
+          {isPublicPrizesTabActive ? (
           <Suspense fallback={null}>
             <PrizeGalleryCard
               userId={selectedPublicProfile?.id}
@@ -4990,7 +5035,9 @@ export default function Profile() {
               privateView={false}
             />
           </Suspense>
+          ) : null}
 
+          {isPublicEngagementTabActive ? (
           <Card className="border-slate-800 bg-slate-900/70 p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Outros Perfis</h2>
@@ -5136,6 +5183,7 @@ export default function Profile() {
               ) : null}
             </div>
           </Card>
+          ) : null}
 
           <Dialog open={isPublicPhotoViewerOpen} onOpenChange={setIsPublicPhotoViewerOpen}>
             <DialogContent className="rounded-3xl border border-slate-700/90 bg-slate-950/95 text-white shadow-2xl">
@@ -5319,20 +5367,22 @@ export default function Profile() {
               >
                 Historico de Pontos
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setHasRequestedDailyCheckInState(true);
-                  setIsCheckInCalendarOpen(true);
-                }}
-                className={`inline-flex items-center justify-center rounded-2xl px-3 py-2 text-xs font-bold transition ${
-                  dailyCheckInState?.checkedIn
-                    ? "bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/30"
-                    : "bg-emerald-500 text-slate-950 hover:bg-emerald-400"
-                }`}
-              >
-                Check-in diario
-              </button>
+              {isDailyCheckInEnabled ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHasRequestedDailyCheckInState(true);
+                    setIsCheckInCalendarOpen(true);
+                  }}
+                  className={`inline-flex items-center justify-center rounded-2xl px-3 py-2 text-xs font-bold transition ${
+                    dailyCheckInState?.checkedIn
+                      ? "bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/30"
+                      : "bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+                  }`}
+                >
+                  Check-in diario
+                </button>
+              ) : null}
             </div>
           </div>
 
