@@ -884,6 +884,10 @@ async function loadGamificationRules() {
     ]);
     const rules = configured.length > 0 ? configured.map(normalizeRule) : buildLegacyRules(settingsMap);
     const badgeRules = parseJsonValue(settingsMap.get(BADGE_RULES_KEY)?.value, DEFAULT_BADGE_RULES);
+    const pointsRules = {
+      ...DEFAULT_POINTS_RULES,
+      ...parseJsonValue(settingsMap.get(POINTS_RULES_KEY)?.value, DEFAULT_POINTS_RULES),
+    };
     const weeklyConfig = normalizeWeeklyConfig(
       parseJsonValue(settingsMap.get(WEEKLY_TOP_CONFIG_KEY)?.value, null) ||
         parseJsonValue(settingsMap.get(PROFILE_COMPETITION_KEY)?.value, DEFAULT_WEEKLY_CONFIG)
@@ -894,6 +898,7 @@ async function loadGamificationRules() {
     );
     const payload = {
       rules: rules.sort((a, b) => a.priority - b.priority),
+      pointsRules,
       badgeRules: Array.isArray(badgeRules) ? badgeRules : DEFAULT_BADGE_RULES,
       weeklyConfig,
       dailyCheckInConfig,
@@ -2021,11 +2026,8 @@ function buildSharedCompetitionBoardPayload(userId, state) {
 
 async function buildLightweightProfileMetricsFresh(userId, options = {}) {
   const includeCompetitionBoard = options?.includeCompetitionBoard !== false;
-  const [{ badgeRules, weeklyConfig, dailyCheckInConfig }, settingsMap] = await Promise.all([
-    loadGamificationRules(),
-    listAppSettingsMap(),
-  ]);
-  const cycle = await ensureActiveWeeklyCycle(weeklyConfig);
+  const { badgeRules, pointsRules, weeklyConfig, dailyCheckInConfig } = await loadGamificationRules();
+  const cycle = includeCompetitionBoard ? await ensureActiveWeeklyCycle(weeklyConfig) : null;
 
   const queryTasks = [
     pool.query(
@@ -2092,11 +2094,6 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
   }
 
   const [balanceRows, participationRows, leaderboardRowsResult = { rows: [] }] = await Promise.all(queryTasks);
-
-  const pointsRules = {
-    ...DEFAULT_POINTS_RULES,
-    ...parseJsonValue(settingsMap.get(POINTS_RULES_KEY)?.value, DEFAULT_POINTS_RULES),
-  };
 
   const balanceMap = new Map(
     balanceRows.rows.map((row) => [`${row.metric_key}::${row.cycle_key || ""}`, Number(row.amount || 0)])

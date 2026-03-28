@@ -1314,8 +1314,7 @@ export default function Profile() {
   const shouldLoadCompetitionBoard =
     Boolean(user) &&
     !isViewingPublicProfile &&
-    hasResolvedAuthBootstrap &&
-    !Array.isArray(profileSummaryData?.competitionBoard?.entries);
+    hasResolvedAuthBootstrap;
   const {
     data: profileCompetitionBoardData,
     isFetching: fetchingProfileCompetitionBoard,
