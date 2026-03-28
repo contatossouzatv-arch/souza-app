@@ -1355,7 +1355,9 @@ function readNumberSetting(value, fallback, min = Number.NEGATIVE_INFINITY, max 
 function getDailyChestSettingsMap(settings = []) {
   const map = new Map();
   settings.forEach((entry) => {
-    map.set(String(entry?.key || ""), entry?.value);
+    const key = String(entry?.key || "");
+    if (!key || map.has(key)) return;
+    map.set(key, entry?.value);
   });
   return map;
 }
@@ -1822,9 +1824,9 @@ export async function getAppSettingsMap() {
   const map = new Map();
   result.rows.forEach((row) => {
     const data = row.data || {};
-    if (data?.key) {
-      map.set(String(data.key), data.value);
-    }
+    const key = String(data?.key || "");
+    if (!key || map.has(key)) return;
+    map.set(key, data.value);
   });
   return map;
 }

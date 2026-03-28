@@ -20,6 +20,16 @@ import {
 } from "../services/profileReadService.js";
 import { getCurrentPlatform, listActivePlatforms } from "../services/platformReadService.js";
 import {
+  getHomeFeedSharedReadModel,
+  getHomeFeedUserReadModel,
+  getHomeSummaryReadModel,
+  getProfileCompetitionReadModel,
+  getProfileSummaryReadModel,
+  getPublicProfileSummaryReadModel,
+  invalidateHomeReadModels,
+  invalidateProfileReadModels,
+} from "../services/appReadModelService.js";
+import {
   deleteCacheByPrefix,
   deleteCacheKey,
   getCacheJson,
@@ -510,6 +520,8 @@ function invalidateGamificationStateCache() {
   profileMetricsCache = new Map();
   profileMetricsPromises = new Map();
   void Promise.all([
+    invalidateHomeReadModels(),
+    invalidateProfileReadModels(),
     deleteCacheKey("gamification:home-summary"),
     deleteCacheKey("gamification:home-feed-shared"),
     deleteCacheKey("gamification:feed:wins"),
@@ -3000,16 +3012,21 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
       await deleteCacheKey(`gamification:profile-metrics:${safeUserId}:summary`);
     }
 
-    const payload = extractProfileSummaryPayload(
-      await withSoftTimeout(
-        buildLightweightProfileMetrics(userId, {
-          forceFresh: shouldForceRefresh,
-          includeCompetitionBoard: false,
-        }),
-        PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
-        "Profile summary soft timeout"
-      )
-    );
+    const payload = await getProfileSummaryReadModel(userId, {
+      forceFresh: shouldForceRefresh,
+      ttlMs: PROFILE_METRICS_TTL_MS,
+      loader: async () =>
+        extractProfileSummaryPayload(
+          await withSoftTimeout(
+            buildLightweightProfileMetrics(userId, {
+              forceFresh: shouldForceRefresh,
+              includeCompetitionBoard: false,
+            }),
+            PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
+            "Profile summary soft timeout"
+          )
+        ),
+    });
 
     return res.json(payload);
   } catch (error) {
@@ -3030,26 +3047,32 @@ router.get("/profile/competition-board", requireAuth, async (req, res) => {
   const userId = req.auth?.sub || "";
   const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
   try {
-    let resolvedCompetitionBoard;
-    if (shouldForceRefresh) {
-      const state = await buildGamificationState({ forceFresh: true });
-      resolvedCompetitionBoard = buildCompetitionBoard(
-        Array.isArray(state?.leaderboardEntries) ? state.leaderboardEntries : [],
-        state?.cycle || { remainingMs: 0, progressPct: 0 },
-        state?.weeklyConfig || DEFAULT_PROFILE_COMPETITION_CONFIG
-      );
-    } else {
-      resolvedCompetitionBoard = await withSoftTimeout(
-        buildCachedWeeklyCompetitionBoard(),
-        PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
-        "Profile competition board soft timeout"
-      );
-    }
-    const payload = buildSharedCompetitionBoardPayloadFromBoard(
-      userId,
-      resolvedCompetitionBoard,
-      shouldForceRefresh ? GAMIFICATION_STATE_TTL_MS : WEEKLY_LEADERBOARD_TTL_MS
-    );
+    const payload = await getProfileCompetitionReadModel(userId, {
+      forceFresh: shouldForceRefresh,
+      ttlMs: WEEKLY_LEADERBOARD_TTL_MS,
+      loader: async () => {
+        let resolvedCompetitionBoard;
+        if (shouldForceRefresh) {
+          const state = await buildGamificationState({ forceFresh: true });
+          resolvedCompetitionBoard = buildCompetitionBoard(
+            Array.isArray(state?.leaderboardEntries) ? state.leaderboardEntries : [],
+            state?.cycle || { remainingMs: 0, progressPct: 0 },
+            state?.weeklyConfig || DEFAULT_PROFILE_COMPETITION_CONFIG
+          );
+        } else {
+          resolvedCompetitionBoard = await withSoftTimeout(
+            buildCachedWeeklyCompetitionBoard(),
+            PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
+            "Profile competition board soft timeout"
+          );
+        }
+        return buildSharedCompetitionBoardPayloadFromBoard(
+          userId,
+          resolvedCompetitionBoard,
+          shouldForceRefresh ? GAMIFICATION_STATE_TTL_MS : WEEKLY_LEADERBOARD_TTL_MS
+        );
+      },
+    });
 
     return res.json(payload);
   } catch (error) {
@@ -3073,7 +3096,7 @@ router.get("/profile/public/:userId/summary", async (req, res) => {
       return res.status(400).json({ error: "Usuario invalido." });
     }
 
-    const payload = await getOrComputeCacheJson(`gamification:public-profile-summary:${targetUserId}`, PUBLIC_PROFILE_SUMMARY_TTL_MS, async () => (
+    const payload = await getPublicProfileSummaryReadModel(targetUserId, PUBLIC_PROFILE_SUMMARY_TTL_MS, async () => (
       buildFallbackProfileMetricsFromState(targetUserId, await buildGamificationState())
     ));
     return res.json({
@@ -3498,7 +3521,7 @@ router.get("/prizes/winners-history", requireAuth, async (req, res) => {
 
 router.get("/home/summary", requireAuth, async (_req, res) => {
   try {
-    const payload = await getOrComputeCacheJson("gamification:home-summary", HOME_SUMMARY_TTL_MS, async () => {
+    const payload = await getHomeSummaryReadModel(async () => {
     const [totalMembersResult, creatorResult, recentProfilesResult] = await Promise.all([
       pool.query("SELECT COUNT(*)::int AS total FROM users"),
       pool.query(
@@ -3546,7 +3569,7 @@ router.get("/home/summary", requireAuth, async (_req, res) => {
       };
 
       return payload;
-    });
+    }, HOME_SUMMARY_TTL_MS);
 
     return res.json(payload);
   } catch (error) {
@@ -3571,8 +3594,15 @@ router.get("/feed/wins", requireAuth, async (_req, res) => {
 router.get("/home/feed-summary", requireAuth, async (req, res) => {
   const userId = String(req.auth?.sub || "").trim();
   try {
-    const sharedPayload = await buildHomeFeedSharedPayload();
-    const userFeedLikes = await buildUserFeedLikeState(userId, sharedPayload.targetPostIds || []);
+    const sharedPayload = await getHomeFeedSharedReadModel(
+      () => buildHomeFeedSharedPayload(),
+      HOME_FEED_SHARED_TTL_MS
+    );
+    const userFeedLikes = await getHomeFeedUserReadModel(
+      userId,
+      () => buildUserFeedLikeState(userId, sharedPayload.targetPostIds || []),
+      HOME_FEED_SUMMARY_TTL_MS
+    );
     return res.json({
       posts: sharedPayload.posts,
       winnerFeed: sharedPayload.winnerFeed,

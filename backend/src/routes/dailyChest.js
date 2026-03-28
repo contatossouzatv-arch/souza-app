@@ -65,7 +65,9 @@ function readNumberSetting(value, fallback, min, max) {
 function getSettingsMap(items = []) {
   const map = new Map();
   items.forEach((item) => {
-    map.set(String(item.key || ""), item.value);
+    const key = String(item.key || "");
+    if (!key || map.has(key)) return;
+    map.set(key, item.value);
   });
   return map;
 }
