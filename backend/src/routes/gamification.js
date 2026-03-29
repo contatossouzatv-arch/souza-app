@@ -19,6 +19,7 @@ import {
   markProfileNotificationsRead,
 } from "../services/profileReadService.js";
 import { getProfileSummary } from "../services/profileSummaryReadService.js";
+import { getProfileCompetitionBoard } from "../services/profileCompetitionBoardReadService.js";
 import { getWeeklyLeaderboard } from "../services/weeklyLeaderboardReadService.js";
 import { getCurrentPlatform, listActivePlatforms } from "../services/platformReadService.js";
 import {
@@ -3064,28 +3065,17 @@ router.get("/profile/competition-board", requireAuth, async (req, res) => {
     const payload = await getProfileCompetitionReadModel(userId, {
       forceFresh: shouldForceRefresh,
       ttlMs: WEEKLY_LEADERBOARD_TTL_MS,
-      loader: async () => {
-        let resolvedCompetitionBoard;
-        if (shouldForceRefresh) {
-          const state = await buildGamificationState({ forceFresh: true });
-          resolvedCompetitionBoard = buildCompetitionBoard(
-            Array.isArray(state?.leaderboardEntries) ? state.leaderboardEntries : [],
-            state?.cycle || { remainingMs: 0, progressPct: 0 },
-            state?.weeklyConfig || DEFAULT_PROFILE_COMPETITION_CONFIG
-          );
-        } else {
-          resolvedCompetitionBoard = await withSoftTimeout(
-            buildCachedWeeklyCompetitionBoard(),
-            PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
-            "Profile competition board soft timeout"
-          );
-        }
-        return buildSharedCompetitionBoardPayloadFromBoard(
-          userId,
-          resolvedCompetitionBoard,
-          shouldForceRefresh ? GAMIFICATION_STATE_TTL_MS : WEEKLY_LEADERBOARD_TTL_MS
-        );
-      },
+      loader: async () =>
+        await withSoftTimeout(
+          getProfileCompetitionBoard({
+            userId,
+            limit: 50,
+            forceFresh: shouldForceRefresh,
+            ttlMs: WEEKLY_LEADERBOARD_TTL_MS,
+          }),
+          PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
+          "Profile competition board soft timeout"
+        ),
     });
 
     return res.json(payload);

@@ -14,7 +14,7 @@ function addKeys(target, keys = []) {
 
 export default function RealtimeSync() {
   const queryClient = useQueryClient();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const invalidateTimerRef = useRef(null);
   const retryTimerRef = useRef(null);
   const reconnectAttemptRef = useRef(0);
@@ -25,11 +25,16 @@ export default function RealtimeSync() {
     let socket = null;
     let cancelled = false;
 
-    const invalidatePrefixes = (prefixes = []) => {
+    const invalidatePrefixes = (prefixes = [], matcher = null) => {
       const allowed = new Set(prefixes.filter(Boolean));
-      if (allowed.size === 0) return;
+      if (allowed.size === 0 && typeof matcher !== "function") return;
       queryClient.invalidateQueries({
-        predicate: (query) => allowed.has(String(query.queryKey?.[0] || "")),
+        predicate: (query) => {
+          const firstKey = String(query.queryKey?.[0] || "");
+          if (allowed.has(firstKey)) return true;
+          if (typeof matcher === "function") return matcher(query.queryKey || []);
+          return false;
+        },
       });
     };
 
@@ -104,6 +109,35 @@ export default function RealtimeSync() {
       });
 
       socket.on("entity:changed", scheduleInvalidate);
+      socket.on("dashboard:live-updated", () => {
+        invalidatePrefixes(["dashboard-dynamics-summary", "active-live-raffle-box", "active-raffle", "raffle-participants", "validated-winners", "my-live-participation"]);
+      });
+      socket.on("dashboard:instant-updated", () => {
+        invalidatePrefixes(["dashboard-dynamics-summary"]);
+      });
+      socket.on("dashboard:gamecall-updated", () => {
+        invalidatePrefixes(["dashboard-dynamics-summary", "admin-active-gamecall", "active-gamecall-raffle", "admin-gamecall-participants", "validated-gamecall-winners", "my-gamecall-participation"]);
+      });
+      socket.on("deposit:user-updated", (event = {}) => {
+        const eventUserId = String(event?.userId || "").trim();
+        const currentUserId = String(user?.id || "").trim();
+        if (eventUserId && currentUserId && eventUserId !== currentUserId) return;
+        invalidatePrefixes(
+          ["deposits", "deposits-dashboard-summary", "profile-gamification-authoritative"],
+          (queryKey) =>
+            String(queryKey?.[0] || "") === "profile-competition-board-authoritative" ||
+            String(queryKey?.[0] || "") === "deposit-cycle-leaderboard"
+        );
+      });
+      socket.on("deposit:leaderboard-updated", () => {
+        invalidatePrefixes(["deposits-dashboard-summary"], (queryKey) => String(queryKey?.[0] || "") === "deposit-cycle-leaderboard");
+      });
+      socket.on("profile:competition-board-updated", (event = {}) => {
+        const eventUserId = String(event?.userId || "").trim();
+        const currentUserId = String(user?.id || "").trim();
+        if (eventUserId && currentUserId && eventUserId !== currentUserId) return;
+        invalidatePrefixes(["profile-gamification-authoritative"], (queryKey) => String(queryKey?.[0] || "") === "profile-competition-board-authoritative");
+      });
       socket.on("connect_error", () => {
         if (socket) {
           socket.off("entity:changed", scheduleInvalidate);
@@ -136,7 +170,7 @@ export default function RealtimeSync() {
       }
       reconnectAttemptRef.current = 0;
     };
-  }, [isAuthenticated, queryClient]);
+  }, [isAuthenticated, queryClient, user?.id]);
 
   return null;
 }

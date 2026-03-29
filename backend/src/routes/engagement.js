@@ -14,16 +14,13 @@ import {
   submitGameCall,
 } from "../db/index.js";
 import {
-  findActiveEntity,
   findEntityById,
-  getGameCallSummary,
-  getInstantRaffleSummary,
   getLiveDrawDisplaySummary,
-  getLiveDrawSummary,
   getWinningSummary,
-  listActivePromoBoxes,
 } from "../services/raffleReadService.js";
-import { getOrComputeCacheJson } from "../lib/cache.js";
+import { emitDashboardGamecallUpdated, emitDashboardInstantUpdated, emitDashboardLiveUpdated } from "../lib/realtimeEvents.js";
+import { getDashboardDynamicsReadModel } from "../services/appReadModelService.js";
+import { getDashboardDynamicsSummary, invalidateDashboardDynamicsSummary } from "../services/dashboardDynamicsReadService.js";
 
 const router = Router();
 const DYNAMICS_SUMMARY_TTL_MS = 10_000;
@@ -60,52 +57,23 @@ router.post("/live-draws/:id/join", requireAuth, async (req, res) => {
     participant_id: result.participation?.id || "",
     idempotent: result.idempotent,
   });
+  await invalidateDashboardDynamicsSummary(req.auth.sub);
+  emitDashboardLiveUpdated(req.app?.locals?.io, {
+    raffleId,
+    userId: req.auth.sub,
+    reason: "participant_joined",
+  });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
 });
 
 router.get("/dynamics/summary", requireAuth, async (req, res) => {
   const userId = req.auth.sub;
-  const payload = await getOrComputeCacheJson(`engagement:dynamics-summary:${userId}`, DYNAMICS_SUMMARY_TTL_MS, async () => {
-    const [promoBoxes, activeInstantRaffle, activeLiveDraw, activeGameCall] = await Promise.all([
-      listActivePromoBoxes(),
-      findActiveEntity("InstantRaffle"),
-      findActiveEntity("LiveDrawRaffle"),
-      findActiveEntity("GameCallRaffle"),
-    ]);
-
-    const [instantSummary, liveDrawSummary, gameCallSummary] = await Promise.all([
-      activeInstantRaffle?.id
-        ? getInstantRaffleSummary(activeInstantRaffle.id, userId)
-        : Promise.resolve({
-            myParticipation: [],
-            participantsPreview: [],
-            participantsCount: 0,
-            winners: [],
-          }),
-      activeLiveDraw?.id
-        ? getLiveDrawSummary(activeLiveDraw.id, userId)
-        : Promise.resolve({ myParticipation: [] }),
-      activeGameCall?.id
-        ? getGameCallSummary(activeGameCall.id, userId)
-        : Promise.resolve({ myParticipation: null }),
-    ]);
-
-    return {
-      promoBoxes,
-      instantRaffle: {
-        raffle: activeInstantRaffle,
-        ...instantSummary,
-      },
-      liveDraw: {
-        raffle: activeLiveDraw,
-        ...liveDrawSummary,
-      },
-      gameCall: {
-        raffle: activeGameCall,
-        ...gameCallSummary,
-      },
-    };
+  const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
+  const payload = await getDashboardDynamicsReadModel(userId, {
+    forceFresh: shouldForceRefresh,
+    ttlMs: DYNAMICS_SUMMARY_TTL_MS,
+    loader: async () => getDashboardDynamicsSummary({ userId }),
   });
 
   res.json(payload);
@@ -156,6 +124,12 @@ router.post("/game-call/:id/join", requireAuth, async (req, res) => {
     participant_id: result.participation?.id || "",
     idempotent: result.idempotent,
   });
+  await invalidateDashboardDynamicsSummary(req.auth.sub);
+  emitDashboardGamecallUpdated(req.app?.locals?.io, {
+    raffleId,
+    userId: req.auth.sub,
+    reason: "participant_joined",
+  });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
 });
@@ -178,6 +152,12 @@ router.post("/game-call/:id/submit", requireAuth, async (req, res) => {
     participant_id: result.participation?.id || "",
     idempotent: result.idempotent,
   });
+  await invalidateDashboardDynamicsSummary(req.auth.sub);
+  emitDashboardGamecallUpdated(req.app?.locals?.io, {
+    raffleId,
+    userId: req.auth.sub,
+    reason: "participant_submitted",
+  });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
 });
@@ -199,6 +179,12 @@ router.post("/instant-raffles/:id/join", requireAuth, async (req, res) => {
     participant_id: result.participation?.id || "",
     idempotent: result.idempotent,
   });
+  await invalidateDashboardDynamicsSummary(req.auth.sub);
+  emitDashboardInstantUpdated(req.app?.locals?.io, {
+    raffleId,
+    userId: req.auth.sub,
+    reason: "participant_joined",
+  });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
 });
@@ -217,6 +203,12 @@ router.post("/instant-raffles/:id/dismiss", requireAuth, async (req, res) => {
     raffle_id: raffleId,
     participant_id: result.participation?.id || "",
     idempotent: result.idempotent,
+  });
+  await invalidateDashboardDynamicsSummary(req.auth.sub);
+  emitDashboardInstantUpdated(req.app?.locals?.io, {
+    raffleId,
+    userId: req.auth.sub,
+    reason: "participant_dismissed",
   });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
