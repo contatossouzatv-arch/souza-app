@@ -22,6 +22,12 @@ export function requireAuth(req, res, next) {
   const token = bearerToken || cookieToken;
   const payload = parseToken(token);
 
+  console.log("[DEBUG AUTH HEADERS]", {
+    path: req.originalUrl,
+    authorization: req.headers.authorization || null,
+    cookie: req.headers.cookie || null,
+  });
+
   console.info("[auth-check]", {
     path: req.originalUrl,
     method: req.method,

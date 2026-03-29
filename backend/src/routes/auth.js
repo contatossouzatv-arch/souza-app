@@ -392,12 +392,15 @@ function normalizeCookieDomain(value) {
 }
 
 function buildCookieOptions(maxAgeMs) {
-  const sameSite = ["lax", "strict", "none"].includes(env.authCookieSameSite)
-    ? env.authCookieSameSite
-    : "lax";
+  const sameSite =
+    env.nodeEnv === "production"
+      ? "none"
+      : ["lax", "strict", "none"].includes(env.authCookieSameSite)
+        ? env.authCookieSameSite
+        : "lax";
   const options = {
-    httpOnly: env.authCookieHttpOnly,
-    secure: env.authCookieSecure,
+    httpOnly: env.nodeEnv === "production" ? true : env.authCookieHttpOnly,
+    secure: env.nodeEnv === "production" ? true : env.authCookieSecure,
     sameSite,
     path: env.authCookiePath || "/",
     maxAge: maxAgeMs,
@@ -427,6 +430,16 @@ function setSessionCookies(res, session) {
   const refreshMaxAgeMs = Math.max(1, Number(env.refreshTokenTtlDays || 30)) * 24 * 60 * 60 * 1000;
   const accessOptions = buildCookieOptions(accessMaxAgeMs);
   const refreshOptions = buildCookieOptions(refreshMaxAgeMs);
+  console.info("[auth-cookie] setting session cookies", {
+    nodeEnv: env.nodeEnv,
+    accessCookieName: env.authAccessCookieName,
+    refreshCookieName: env.authRefreshCookieName,
+    sameSite: accessOptions.sameSite,
+    secure: accessOptions.secure,
+    httpOnly: accessOptions.httpOnly,
+    hasDomain: Boolean(accessOptions.domain),
+    domain: accessOptions.domain || null,
+  });
   try {
     res.cookie(env.authAccessCookieName, session.token, accessOptions);
     res.cookie(env.authRefreshCookieName, session.refreshToken, refreshOptions);

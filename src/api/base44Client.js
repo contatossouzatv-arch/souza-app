@@ -15,6 +15,7 @@ const RAFFLE_PARTICIPANT_TIMEOUT_MS = 30000;
 const AUTH_RECOVERABLE_RETRY_DELAY_MS = 1200;
 const REQUEST_DIAGNOSTIC_SLOW_MS = 1200;
 const REQUEST_DIAGNOSTIC_NOISY_CONCURRENCY = 4;
+const DEFAULT_FETCH_CREDENTIALS = "include";
 
 function logAuthClient(message, details) {
   console.info(`[auth-client] ${message}`, details || {});
@@ -381,7 +382,7 @@ async function tryRefreshSession() {
       const response = await fetchWithTimeout("/api/auth/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        credentials: DEFAULT_FETCH_CREDENTIALS,
         body: JSON.stringify(refreshToken ? { refreshToken } : {}),
       });
       if (!response.ok) {
@@ -465,7 +466,7 @@ async function request(path, options = {}) {
     response = await fetchWithTimeout(path, {
       ...fetchOptions,
       headers,
-      credentials: "include",
+      credentials: DEFAULT_FETCH_CREDENTIALS,
     });
   } catch (error) {
     if (isAbortError(error)) throw error;
@@ -500,7 +501,7 @@ async function request(path, options = {}) {
       response = await fetchWithTimeout(path, {
         ...fetchOptions,
         headers: retryHeaders,
-        credentials: "include",
+        credentials: DEFAULT_FETCH_CREDENTIALS,
         __timeoutMs,
       });
     }
@@ -551,7 +552,7 @@ async function requestBlob(path, options = {}) {
     response = await fetchWithTimeout(path, {
       ...fetchOptions,
       headers,
-      credentials: "include",
+      credentials: DEFAULT_FETCH_CREDENTIALS,
     });
   } catch (error) {
     if (isAbortError(error)) throw error;
@@ -580,7 +581,7 @@ async function requestBlob(path, options = {}) {
       response = await fetchWithTimeout(path, {
         ...fetchOptions,
         headers: retryHeaders,
-        credentials: "include",
+        credentials: DEFAULT_FETCH_CREDENTIALS,
         __timeoutMs,
       });
     }
