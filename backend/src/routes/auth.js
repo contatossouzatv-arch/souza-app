@@ -406,11 +406,6 @@ function buildCookieOptions(maxAgeMs) {
     maxAge: maxAgeMs,
   };
 
-  const cookieDomain = normalizeCookieDomain(env.authCookieDomain);
-  if (cookieDomain) {
-    options.domain = cookieDomain;
-  }
-
   return options;
 }
 
@@ -430,6 +425,12 @@ function setSessionCookies(res, session) {
   const refreshMaxAgeMs = Math.max(1, Number(env.refreshTokenTtlDays || 30)) * 24 * 60 * 60 * 1000;
   const accessOptions = buildCookieOptions(accessMaxAgeMs);
   const refreshOptions = buildCookieOptions(refreshMaxAgeMs);
+  console.log("[auth-cookie-final]", {
+    sameSite: accessOptions.sameSite,
+    secure: accessOptions.secure,
+    httpOnly: accessOptions.httpOnly,
+    domain: "REMOVED",
+  });
   console.info("[auth-cookie] setting session cookies", {
     nodeEnv: env.nodeEnv,
     accessCookieName: env.authAccessCookieName,
@@ -437,8 +438,8 @@ function setSessionCookies(res, session) {
     sameSite: accessOptions.sameSite,
     secure: accessOptions.secure,
     httpOnly: accessOptions.httpOnly,
-    hasDomain: Boolean(accessOptions.domain),
-    domain: accessOptions.domain || null,
+    hasDomain: false,
+    domain: null,
   });
   try {
     res.cookie(env.authAccessCookieName, session.token, accessOptions);
@@ -453,6 +454,12 @@ function setSessionCookies(res, session) {
 
 function clearSessionCookies(res) {
   const options = buildCookieOptions(0);
+  console.log("[auth-cookie-final]", {
+    sameSite: options.sameSite,
+    secure: options.secure,
+    httpOnly: options.httpOnly,
+    domain: "REMOVED",
+  });
   try {
     res.clearCookie(env.authAccessCookieName, options);
     res.clearCookie(env.authRefreshCookieName, options);
