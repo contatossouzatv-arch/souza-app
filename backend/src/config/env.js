@@ -45,6 +45,11 @@ function assertRequiredEnv(condition, message) {
   }
 }
 
+function isRedisUrl(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized.startsWith("redis://") || normalized.startsWith("rediss://");
+}
+
 export const env = {
   nodeEnv,
   port: Number(process.env.PORT || 8080),
@@ -139,6 +144,11 @@ assertProductionEnv(Boolean(String(env.appBaseUrl || "").trim()), "APP_BASE_URL 
 assertProductionEnv(
   String(env.appBaseUrl || "").startsWith("https://"),
   "APP_BASE_URL must use https in production"
+);
+assertProductionEnv(Boolean(String(env.redisUrl || "").trim()), "REDIS_URL is required in production");
+assertProductionEnv(
+  isRedisUrl(env.redisUrl),
+  "REDIS_URL must start with redis:// or rediss:// in production"
 );
 assertProductionEnv(env.authCookieSecure, "AUTH_COOKIE_SECURE must be true in production");
 assertProductionEnv(env.authCookieHttpOnly, "AUTH_COOKIE_HTTPONLY must be true in production");
