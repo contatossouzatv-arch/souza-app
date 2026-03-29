@@ -26,8 +26,6 @@ import {
   getHomeFeedSharedReadModel,
   getHomeFeedUserReadModel,
   getHomeSummaryReadModel,
-  getProfileCompetitionReadModel,
-  getProfileSummaryReadModel,
   getPublicProfileSummaryReadModel,
   invalidateHomeReadModels,
   invalidateProfileReadModels,
@@ -3110,34 +3108,21 @@ router.get("/profile/metrics", requireAuth, async (req, res) => {
 
 router.get("/profile/summary", requireAuth, async (req, res) => {
   const userId = req.auth?.sub || "";
-  const safeUserId = String(userId || "").trim();
-  const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
   const startedAt = Date.now();
   try {
-    if (shouldForceRefresh) {
-      profileMetricsCache.delete(`${safeUserId}:summary`);
-      profileMetricsPromises.delete(`${safeUserId}:summary`);
-      await deleteCacheKey(`gamification:profile-metrics:${safeUserId}:summary`);
-    }
-
-    const payload = await getProfileSummaryReadModel(userId, {
-      forceFresh: shouldForceRefresh,
-      ttlMs: PROFILE_METRICS_TTL_MS,
-      loader: async () =>
-        await withSoftTimeout(
-          getProfileSummary({
-            viewerId: userId,
-            targetUserId: userId,
-          }),
-          PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
-          "Profile summary soft timeout"
-        ),
-    });
+    const payload = await withSoftTimeout(
+      getProfileSummary({
+        viewerId: userId,
+        targetUserId: userId,
+      }),
+      2000,
+      "Profile summary emergency timeout"
+    );
 
     const durationMs = Date.now() - startedAt;
     if (durationMs >= 800) {
       console.warn("[profile-route] summary slow", {
-        userId: safeUserId,
+        userId: String(userId || "").trim(),
         durationMs,
         degraded: Boolean(payload?._degraded),
       });
@@ -3156,24 +3141,17 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
 
 router.get("/profile/competition-board", requireAuth, async (req, res) => {
   const userId = req.auth?.sub || "";
-  const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
   const startedAt = Date.now();
   try {
-    const payload = await getProfileCompetitionReadModel(userId, {
-      forceFresh: shouldForceRefresh,
-      ttlMs: WEEKLY_LEADERBOARD_TTL_MS,
-      loader: async () =>
-        await withSoftTimeout(
-          getProfileCompetitionBoard({
-            userId,
-            limit: 50,
-            forceFresh: shouldForceRefresh,
-            ttlMs: WEEKLY_LEADERBOARD_TTL_MS,
-          }),
-          PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
-          "Profile competition board soft timeout"
-        ),
-    });
+    const payload = await withSoftTimeout(
+      getProfileCompetitionBoard({
+        userId,
+        limit: 50,
+        ttlMs: WEEKLY_LEADERBOARD_TTL_MS,
+      }),
+      2000,
+      "Profile competition board emergency timeout"
+    );
 
     const durationMs = Date.now() - startedAt;
     if (durationMs >= 800) {
