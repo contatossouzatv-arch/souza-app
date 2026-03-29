@@ -146,10 +146,11 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
     throw new Error("Invalid target user id");
   }
 
-  const [{ badgeRules, pointsRules, dailyCheckInConfig }, weeklyContext, weeklyEntry, userResult, balancesResult, participationResult, socialResult, pointsBalanceResult] =
+  const weeklyContext = await getWeeklyCompetitionContext();
+
+  const [{ badgeRules, pointsRules, dailyCheckInConfig }, weeklyEntry, userResult, balancesResult, participationResult, socialResult, pointsBalanceResult] =
     await Promise.all([
       loadProfileSummaryConfig(),
-      getWeeklyCompetitionContext(),
       getWeeklyCompetitionEntry({ userId: safeTargetUserId }),
       pool.query(
         `SELECT

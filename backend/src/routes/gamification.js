@@ -174,6 +174,96 @@ async function withSoftTimeout(promise, timeoutMs, errorMessage = "Operation tim
   }
 }
 
+function buildFastDegradedProfileSummary(userId = "", auth = {}) {
+  const safeUserId = String(userId || "").trim();
+  return {
+    user: {
+      id: safeUserId,
+      email: String(auth?.email || ""),
+      full_name: String(auth?.name || ""),
+      nick: "",
+      avatar_emoji: "🎰",
+      profile_avatar_id: "",
+      profile_image_mode: "avatar",
+      profile_image_status: "none",
+      profile_image_url: "",
+      account_status: "active",
+      created_at: null,
+    },
+    viewerState: {
+      isFollowing: false,
+      isLiked: false,
+    },
+    metrics: {
+      position: 0,
+      totalApproved: 0,
+      totalTickets: 0,
+      totalParticipations: 0,
+      totalWins: 0,
+      liveParticipations: 0,
+      totalFollowers: 0,
+      totalLikes: 0,
+      totalCheckins: 0,
+      followingCount: 0,
+      points: 0,
+      progress: 0,
+      xpTotal: 0,
+      xp_total: 0,
+      weeklyPoints: 0,
+      weekly_points: 0,
+      chestRewards: 0,
+      prizeCounts: 0,
+      pointsBalance: 0,
+      points_balance: 0,
+    },
+    pointsRules: DEFAULT_POINTS_RULES,
+    badgeRules: DEFAULT_BADGE_RULES,
+    dailyCheckInConfig: DEFAULT_DAILY_CHECKIN_CONFIG,
+    achievements: [],
+    progressBadges: [],
+    currentCompetitionEntry: {
+      user_id: safeUserId,
+      position: 0,
+      weekly_points: 0,
+      points: 0,
+    },
+    competitionBoard: {
+      config: DEFAULT_WEEKLY_CONFIG,
+      cycle: { remainingMs: 0, progressPct: 0 },
+      entries: [],
+      rewardLabel: "",
+    },
+    levelProgress: {
+      level: 1,
+      inLevelPoints: 0,
+      pointsRequired: 120,
+      pointsToNext: 120,
+      progressPct: 0,
+    },
+    _degraded: true,
+  };
+}
+
+function buildFastDegradedCompetitionBoard(userId = "") {
+  return {
+    competitionBoard: {
+      config: DEFAULT_WEEKLY_CONFIG,
+      cycle: { remainingMs: 0, progressPct: 0 },
+      entries: [],
+      rewardLabel: "",
+    },
+    currentCompetitionEntry: {
+      user_id: String(userId || "").trim(),
+      position: 0,
+      weekly_points: 0,
+      points: 0,
+    },
+    updatedAt: new Date().toISOString(),
+    refreshInMs: WEEKLY_LEADERBOARD_TTL_MS,
+    _degraded: true,
+  };
+}
+
 function xpRequiredForLevel(level) {
   const safeLevel = Math.max(1, Number(level || 1));
   const base = 120;
@@ -3049,12 +3139,7 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
       userId,
       message: error?.message || String(error),
     });
-    try {
-      const fallbackPayload = extractProfileSummaryPayload(buildFallbackProfileMetricsFromState(userId, await buildGamificationState()));
-      return res.json({ ...fallbackPayload, _degraded: true });
-    } catch {
-      return res.status(500).json({ error: "Nao foi possivel carregar o resumo do perfil agora." });
-    }
+    return res.json(buildFastDegradedProfileSummary(userId, req.auth || {}));
   }
 });
 
@@ -3084,12 +3169,7 @@ router.get("/profile/competition-board", requireAuth, async (req, res) => {
       userId,
       message: error?.message || String(error),
     });
-    try {
-      const fallbackPayload = buildSharedCompetitionBoardPayload(userId, await buildGamificationState());
-      return res.json({ ...fallbackPayload, _degraded: true });
-    } catch {
-      return res.status(500).json({ error: "Nao foi possivel carregar o ranking do perfil agora." });
-    }
+    return res.json(buildFastDegradedCompetitionBoard(userId));
   }
 });
 
