@@ -3112,6 +3112,7 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
   const userId = req.auth?.sub || "";
   const safeUserId = String(userId || "").trim();
   const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
+  const startedAt = Date.now();
   try {
     if (shouldForceRefresh) {
       profileMetricsCache.delete(`${safeUserId}:summary`);
@@ -3133,11 +3134,21 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
         ),
     });
 
+    const durationMs = Date.now() - startedAt;
+    if (durationMs >= 800) {
+      console.warn("[profile-route] summary slow", {
+        userId: safeUserId,
+        durationMs,
+        degraded: Boolean(payload?._degraded),
+      });
+    }
+
     return res.json(payload);
   } catch (error) {
     console.error("Failed to load profile summary", {
       userId,
       message: error?.message || String(error),
+      durationMs: Date.now() - startedAt,
     });
     return res.json(buildFastDegradedProfileSummary(userId, req.auth || {}));
   }
@@ -3146,6 +3157,7 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
 router.get("/profile/competition-board", requireAuth, async (req, res) => {
   const userId = req.auth?.sub || "";
   const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
+  const startedAt = Date.now();
   try {
     const payload = await getProfileCompetitionReadModel(userId, {
       forceFresh: shouldForceRefresh,
@@ -3163,11 +3175,21 @@ router.get("/profile/competition-board", requireAuth, async (req, res) => {
         ),
     });
 
+    const durationMs = Date.now() - startedAt;
+    if (durationMs >= 800) {
+      console.warn("[profile-route] competition-board slow", {
+        userId: String(userId || "").trim(),
+        durationMs,
+        degraded: Boolean(payload?._degraded),
+      });
+    }
+
     return res.json(payload);
   } catch (error) {
     console.error("Failed to load profile competition board", {
       userId,
       message: error?.message || String(error),
+      durationMs: Date.now() - startedAt,
     });
     return res.json(buildFastDegradedCompetitionBoard(userId));
   }

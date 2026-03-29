@@ -1,5 +1,5 @@
 import { getAppSettingsMap, pool } from "../db/index.js";
-import { getWeeklyCompetitionContext, getWeeklyCompetitionEntry } from "./weeklyLeaderboardReadService.js";
+import { getWeeklyCompetitionContext } from "./weeklyLeaderboardReadService.js";
 
 const BADGE_RULES_KEY = "achievement_badge_rules_v1";
 const POINTS_RULES_KEY = "achievement_points_rules_v1";
@@ -140,6 +140,7 @@ async function loadProfileSummaryConfig() {
 }
 
 export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
+  const startedAt = Date.now();
   const safeTargetUserId = String(targetUserId || "").trim();
   const safeViewerId = String(viewerId || "").trim();
   if (!safeTargetUserId) {
@@ -148,10 +149,9 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
 
   const weeklyContext = await getWeeklyCompetitionContext();
 
-  const [{ badgeRules, pointsRules, dailyCheckInConfig }, weeklyEntry, userResult, balancesResult, participationResult, socialResult, pointsBalanceResult] =
+  const [{ badgeRules, pointsRules, dailyCheckInConfig }, userResult, balancesResult, participationResult, socialResult, pointsBalanceResult] =
     await Promise.all([
       loadProfileSummaryConfig(),
-      getWeeklyCompetitionEntry({ userId: safeTargetUserId }),
       pool.query(
         `SELECT
            id,
@@ -221,11 +221,12 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
   );
   const participation = participationResult.rows[0] || {};
   const social = socialResult.rows[0] || {};
-  const currentCompetitionEntry = weeklyEntry?.currentCompetitionEntry || {
+  const currentCompetitionEntry = {
     user_id: safeTargetUserId,
     position: 0,
-    weekly_points: 0,
-    points: 0,
+    weekly_points: Number(balanceMap.get(`weekly_points::${String(weeklyContext?.cycle?.cycle_key || "")}`) || 0),
+    engagement_points: Number(balanceMap.get("engagement_points::") || 0),
+    points: Number(balanceMap.get(`weekly_points::${String(weeklyContext?.cycle?.cycle_key || "")}`) || 0),
   };
 
   const metrics = {
@@ -275,6 +276,14 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
     entries: currentCompetitionEntry?.user_id ? [currentCompetitionEntry] : [],
     rewardLabel: String(weeklyContext?.rewardLabel || ""),
   };
+
+  const durationMs = Date.now() - startedAt;
+  if (durationMs >= 800) {
+    console.warn("[profile-summary] slow read model", {
+      userId: safeTargetUserId,
+      durationMs,
+    });
+  }
 
   return {
     user: {
