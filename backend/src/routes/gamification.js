@@ -3109,6 +3109,12 @@ router.get("/profile/metrics", requireAuth, async (req, res) => {
 router.get("/profile/summary", requireAuth, async (req, res) => {
   const userId = req.auth?.sub || "";
   const startedAt = Date.now();
+  console.info("[profile-route-enter] summary", {
+    userId: String(userId || "").trim(),
+    force: String(req.query.force || "").trim().toLowerCase() === "true",
+    requestId: String(req.headers["x-request-id"] || ""),
+    path: req.originalUrl,
+  });
   try {
     const payload = await withSoftTimeout(
       getProfileSummary({
@@ -3128,12 +3134,24 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
       });
     }
 
+    console.info("[profile-route-exit] summary", {
+      userId: String(userId || "").trim(),
+      durationMs,
+      degraded: Boolean(payload?._degraded),
+      path: req.originalUrl,
+    });
+
     return res.json(payload);
   } catch (error) {
     console.error("Failed to load profile summary", {
       userId,
       message: error?.message || String(error),
       durationMs: Date.now() - startedAt,
+    });
+    console.warn("[profile-route-fallback] summary", {
+      userId: String(userId || "").trim(),
+      durationMs: Date.now() - startedAt,
+      path: req.originalUrl,
     });
     return res.json(buildFastDegradedProfileSummary(userId, req.auth || {}));
   }
@@ -3142,6 +3160,12 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
 router.get("/profile/competition-board", requireAuth, async (req, res) => {
   const userId = req.auth?.sub || "";
   const startedAt = Date.now();
+  console.info("[profile-route-enter] competition-board", {
+    userId: String(userId || "").trim(),
+    force: String(req.query.force || "").trim().toLowerCase() === "true",
+    requestId: String(req.headers["x-request-id"] || ""),
+    path: req.originalUrl,
+  });
   try {
     const payload = await withSoftTimeout(
       getProfileCompetitionBoard({
@@ -3162,12 +3186,24 @@ router.get("/profile/competition-board", requireAuth, async (req, res) => {
       });
     }
 
+    console.info("[profile-route-exit] competition-board", {
+      userId: String(userId || "").trim(),
+      durationMs,
+      degraded: Boolean(payload?._degraded),
+      path: req.originalUrl,
+    });
+
     return res.json(payload);
   } catch (error) {
     console.error("Failed to load profile competition board", {
       userId,
       message: error?.message || String(error),
       durationMs: Date.now() - startedAt,
+    });
+    console.warn("[profile-route-fallback] competition-board", {
+      userId: String(userId || "").trim(),
+      durationMs: Date.now() - startedAt,
+      path: req.originalUrl,
     });
     return res.json(buildFastDegradedCompetitionBoard(userId));
   }
