@@ -29,16 +29,24 @@ async function bootstrapRuntime(io) {
   let socketAdapterMode = "memory";
   if (env.redisUrl) {
     try {
-      const pubClient = new Redis(env.redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: false });
+      const pubClient = new Redis(env.redisUrl, {
+        maxRetriesPerRequest: null,
+        enableReadyCheck: false,
+      });
       const subClient = pubClient.duplicate();
       await Promise.all([pubClient.ping(), subClient.ping()]);
       io.adapter(createAdapter(pubClient, subClient));
       socketAdapterMode = "redis";
     } catch (error) {
-      console.error("[startup] redis adapter init failed, falling back to memory", {
+      console.error("[startup] redis adapter init failed", {
         message: error?.message || "Unknown Redis startup error",
         stack: error?.stack || null,
+        nodeEnv: env.nodeEnv,
       });
+      if (env.nodeEnv === "production") {
+        throw new Error("Redis adapter initialization failed in production");
+      }
+      console.warn("[startup] falling back to memory Socket.IO adapter outside production");
     }
   }
   console.log(`Socket.IO adapter: ${socketAdapterMode}`);
