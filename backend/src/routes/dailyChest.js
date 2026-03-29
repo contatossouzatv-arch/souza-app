@@ -8,6 +8,7 @@ import {
   findEntityRecordByNameAndIdForUpdate,
   findLatestDailyChestOpeningByUserDay,
   findPointsLedgerByRequestId,
+  getAppSettingsMap,
   getEntityById,
   getPointsBalanceByUserId,
   getDailyChestAccessUnlock,
@@ -109,9 +110,8 @@ function getLocalWindow({ resetHour, resetMinute }) {
 
 async function loadDailyChestSettings() {
   return getOrComputeCacheJson("daily-chest:settings", DAILY_CHEST_SETTINGS_TTL_MS, async () => {
-    const items = await listEntity("AppSettings");
-    const map = getSettingsMap(items);
-    return {
+    const map = await getAppSettingsMap();
+    const settings = {
       enabled: readBooleanSetting(map.get("daily_chest_enabled"), DEFAULT_DAILY_CHEST_SETTINGS.enabled),
       tapGoal: readNumberSetting(map.get("daily_chest_tap_goal"), DEFAULT_DAILY_CHEST_SETTINGS.tapGoal, 1, 12),
       messageOfDay: String(map.get("daily_chest_message_of_day") || DEFAULT_DAILY_CHEST_SETTINGS.messageOfDay).trim(),
@@ -160,6 +160,11 @@ async function loadDailyChestSettings() {
       accessCodeDayKey: String(map.get("daily_chest_access_code_day_key") || "").trim(),
       accessGroupLink: String(map.get("daily_chest_access_group_link") || DEFAULT_DAILY_CHEST_SETTINGS.accessGroupLink).trim(),
     };
+    console.info("[daily-chest-read] settings", {
+      daily_chest_access_code_required: settings.accessCodeRequired,
+      sourceValue: map.get("daily_chest_access_code_required"),
+    });
+    return settings;
   });
 }
 

@@ -3109,12 +3109,6 @@ router.get("/profile/metrics", requireAuth, async (req, res) => {
 router.get("/profile/summary", requireAuth, async (req, res) => {
   const userId = req.auth?.sub || "";
   const startedAt = Date.now();
-  console.info("[profile-route-enter] summary", {
-    userId: String(userId || "").trim(),
-    force: String(req.query.force || "").trim().toLowerCase() === "true",
-    requestId: String(req.headers["x-request-id"] || ""),
-    path: req.originalUrl,
-  });
   try {
     const payload = await withSoftTimeout(
       getProfileSummary({
@@ -3134,28 +3128,12 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
       });
     }
 
-    console.info("[profile-route-exit] summary", {
-      userId: String(userId || "").trim(),
-      durationMs,
-      degraded: Boolean(payload?._degraded),
-      path: req.originalUrl,
-    });
-
     return res.json(payload);
   } catch (error) {
-    console.error("[route-error] summary", {
-      message: error?.message || String(error),
-      stack: error?.stack || null,
-    });
     console.error("Failed to load profile summary", {
       userId,
       message: error?.message || String(error),
       durationMs: Date.now() - startedAt,
-    });
-    console.warn("[profile-route-fallback] summary", {
-      userId: String(userId || "").trim(),
-      durationMs: Date.now() - startedAt,
-      path: req.originalUrl,
     });
     return res.json(buildFastDegradedProfileSummary(userId, req.auth || {}));
   }
@@ -3164,12 +3142,6 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
 router.get("/profile/competition-board", requireAuth, async (req, res) => {
   const userId = req.auth?.sub || "";
   const startedAt = Date.now();
-  console.info("[profile-route-enter] competition-board", {
-    userId: String(userId || "").trim(),
-    force: String(req.query.force || "").trim().toLowerCase() === "true",
-    requestId: String(req.headers["x-request-id"] || ""),
-    path: req.originalUrl,
-  });
   try {
     const payload = await withSoftTimeout(
       getProfileCompetitionBoard({
@@ -3190,28 +3162,12 @@ router.get("/profile/competition-board", requireAuth, async (req, res) => {
       });
     }
 
-    console.info("[profile-route-exit] competition-board", {
-      userId: String(userId || "").trim(),
-      durationMs,
-      degraded: Boolean(payload?._degraded),
-      path: req.originalUrl,
-    });
-
     return res.json(payload);
   } catch (error) {
-    console.error("[route-error] competition-board", {
-      message: error?.message || String(error),
-      stack: error?.stack || null,
-    });
     console.error("Failed to load profile competition board", {
       userId,
       message: error?.message || String(error),
       durationMs: Date.now() - startedAt,
-    });
-    console.warn("[profile-route-fallback] competition-board", {
-      userId: String(userId || "").trim(),
-      durationMs: Date.now() - startedAt,
-      path: req.originalUrl,
     });
     return res.json(buildFastDegradedCompetitionBoard(userId));
   }
@@ -4373,6 +4329,10 @@ router.post("/admin/users/:id/reset-metrics", requireAuth, requireAdmin, async (
     }
   }
 
+  const afterMap = await listAppSettingsMap();
+  console.info("[daily-chest-save] persisted", {
+    daily_chest_access_code_required: afterMap.get("daily_chest_access_code_required")?.value ?? null,
+  });
   await appendAdminAudit({
     domain: "user_metric_reset",
     action: "reset_metrics",
@@ -5084,27 +5044,27 @@ router.get("/admin/daily-chest/config", requireAuth, requireAdmin, async (_req, 
   }, 0);
   res.json({
     settings: {
-      daily_chest_enabled: settingsMap.get("daily_chest_enabled")?.value || "true",
-      daily_chest_tap_goal: settingsMap.get("daily_chest_tap_goal")?.value || "4",
-      daily_chest_base_daily_chests: settingsMap.get("daily_chest_base_daily_chests")?.value || "1",
-      daily_chest_xp_per_open: settingsMap.get("daily_chest_xp_per_open")?.value || "18",
-      daily_chest_balance_wins_per_user_day: settingsMap.get("daily_chest_balance_wins_per_user_day")?.value || "1",
-      daily_chest_access_code_required: settingsMap.get("daily_chest_access_code_required")?.value || "true",
+      daily_chest_enabled: settingsMap.get("daily_chest_enabled")?.value ?? "true",
+      daily_chest_tap_goal: settingsMap.get("daily_chest_tap_goal")?.value ?? "4",
+      daily_chest_base_daily_chests: settingsMap.get("daily_chest_base_daily_chests")?.value ?? "1",
+      daily_chest_xp_per_open: settingsMap.get("daily_chest_xp_per_open")?.value ?? "18",
+      daily_chest_balance_wins_per_user_day: settingsMap.get("daily_chest_balance_wins_per_user_day")?.value ?? "1",
+      daily_chest_access_code_required: settingsMap.get("daily_chest_access_code_required")?.value ?? "true",
       daily_chest_message_of_day: settingsMap.get("daily_chest_message_of_day")?.value || "Toque no baú para abrir",
-      daily_chest_reset_hour: settingsMap.get("daily_chest_reset_hour")?.value || "0",
-      daily_chest_reset_minute: settingsMap.get("daily_chest_reset_minute")?.value || "0",
-      daily_chest_timezone: settingsMap.get("daily_chest_timezone")?.value || "America/Sao_Paulo",
-      daily_chest_rarity_visual: settingsMap.get("daily_chest_rarity_visual")?.value || "rare",
-      daily_chest_scene_theme: settingsMap.get("daily_chest_scene_theme")?.value || "aurora",
-      daily_chest_schedule_start_at: settingsMap.get("daily_chest_schedule_start_at")?.value || "",
-      daily_chest_schedule_end_at: settingsMap.get("daily_chest_schedule_end_at")?.value || "",
-      daily_chest_deposit_bonus_enabled: settingsMap.get("daily_chest_deposit_bonus_enabled")?.value || "true",
-      daily_chest_bonus_chests_per_approved: settingsMap.get("daily_chest_bonus_chests_per_approved")?.value || "1",
-      daily_chest_bonus_amount_step: settingsMap.get("daily_chest_bonus_amount_step")?.value || "0",
-      daily_chest_bonus_chests_per_step: settingsMap.get("daily_chest_bonus_chests_per_step")?.value || "0",
-      daily_chest_access_group_link: settingsMap.get("daily_chest_access_group_link")?.value || "",
-      daily_chest_access_code: settingsMap.get("daily_chest_access_code")?.value || "",
-      daily_chest_access_code_day_key: settingsMap.get("daily_chest_access_code_day_key")?.value || "",
+      daily_chest_reset_hour: settingsMap.get("daily_chest_reset_hour")?.value ?? "0",
+      daily_chest_reset_minute: settingsMap.get("daily_chest_reset_minute")?.value ?? "0",
+      daily_chest_timezone: settingsMap.get("daily_chest_timezone")?.value ?? "America/Sao_Paulo",
+      daily_chest_rarity_visual: settingsMap.get("daily_chest_rarity_visual")?.value ?? "rare",
+      daily_chest_scene_theme: settingsMap.get("daily_chest_scene_theme")?.value ?? "aurora",
+      daily_chest_schedule_start_at: settingsMap.get("daily_chest_schedule_start_at")?.value ?? "",
+      daily_chest_schedule_end_at: settingsMap.get("daily_chest_schedule_end_at")?.value ?? "",
+      daily_chest_deposit_bonus_enabled: settingsMap.get("daily_chest_deposit_bonus_enabled")?.value ?? "true",
+      daily_chest_bonus_chests_per_approved: settingsMap.get("daily_chest_bonus_chests_per_approved")?.value ?? "1",
+      daily_chest_bonus_amount_step: settingsMap.get("daily_chest_bonus_amount_step")?.value ?? "0",
+      daily_chest_bonus_chests_per_step: settingsMap.get("daily_chest_bonus_chests_per_step")?.value ?? "0",
+      daily_chest_access_group_link: settingsMap.get("daily_chest_access_group_link")?.value ?? "",
+      daily_chest_access_code: settingsMap.get("daily_chest_access_code")?.value ?? "",
+      daily_chest_access_code_day_key: settingsMap.get("daily_chest_access_code_day_key")?.value ?? "",
     },
     rewards,
     dailyUsage,
@@ -5145,6 +5105,10 @@ router.put("/admin/daily-chest/settings", requireAuth, requireAdmin, async (req,
   const payload = req.body && typeof req.body === "object" ? req.body : {};
   const beforeMap = await listAppSettingsMap();
   const nextEntries = Object.entries(payload).filter(([key]) => String(key).startsWith("daily_chest_"));
+  console.info("[daily-chest-save] payload", {
+    daily_chest_access_code_required: payload?.daily_chest_access_code_required,
+    keys: nextEntries.map(([key]) => key),
+  });
   for (const [key, value] of nextEntries) {
     await upsertAppSetting(key, String(value ?? ""), `Configuração do Baú Diário: ${key}`);
   }

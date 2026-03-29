@@ -425,22 +425,6 @@ function setSessionCookies(res, session) {
   const refreshMaxAgeMs = Math.max(1, Number(env.refreshTokenTtlDays || 30)) * 24 * 60 * 60 * 1000;
   const accessOptions = buildCookieOptions(accessMaxAgeMs);
   const refreshOptions = buildCookieOptions(refreshMaxAgeMs);
-  console.log("[auth-cookie-final]", {
-    sameSite: accessOptions.sameSite,
-    secure: accessOptions.secure,
-    httpOnly: accessOptions.httpOnly,
-    domain: "REMOVED",
-  });
-  console.info("[auth-cookie] setting session cookies", {
-    nodeEnv: env.nodeEnv,
-    accessCookieName: env.authAccessCookieName,
-    refreshCookieName: env.authRefreshCookieName,
-    sameSite: accessOptions.sameSite,
-    secure: accessOptions.secure,
-    httpOnly: accessOptions.httpOnly,
-    hasDomain: false,
-    domain: null,
-  });
   try {
     res.cookie(env.authAccessCookieName, session.token, accessOptions);
     res.cookie(env.authRefreshCookieName, session.refreshToken, refreshOptions);
@@ -454,12 +438,6 @@ function setSessionCookies(res, session) {
 
 function clearSessionCookies(res) {
   const options = buildCookieOptions(0);
-  console.log("[auth-cookie-final]", {
-    sameSite: options.sameSite,
-    secure: options.secure,
-    httpOnly: options.httpOnly,
-    domain: "REMOVED",
-  });
   try {
     res.clearCookie(env.authAccessCookieName, options);
     res.clearCookie(env.authRefreshCookieName, options);

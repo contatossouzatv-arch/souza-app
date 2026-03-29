@@ -143,13 +143,11 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
   const startedAt = Date.now();
   const safeTargetUserId = String(targetUserId || "").trim();
   const safeViewerId = String(viewerId || "").trim();
+  if (!safeTargetUserId) {
+    throw new Error("Invalid target user id");
+  }
 
-  try {
-    if (!safeTargetUserId) {
-      throw new Error("Invalid target user id");
-    }
-
-    const weeklyContext = await getWeeklyCompetitionContext();
+  const weeklyContext = await getWeeklyCompetitionContext();
 
     const [{ badgeRules, pointsRules, dailyCheckInConfig }, userResult, balancesResult, participationResult, socialResult, pointsBalanceResult] =
       await Promise.all([
@@ -287,7 +285,7 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
       });
     }
 
-    return {
+  return {
       user: {
         id: user.id,
         email: String(user.email || ""),
@@ -314,15 +312,5 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
       currentCompetitionEntry,
       competitionBoard: summaryCompetitionBoard,
       levelProgress,
-    };
-  } catch (error) {
-    console.error("[profile-summary-service]", {
-      viewerId: safeViewerId,
-      targetUserId: safeTargetUserId,
-      message: error?.message || String(error),
-      stack: error?.stack || null,
-      durationMs: Date.now() - startedAt,
-    });
-    throw error;
-  }
+  };
 }

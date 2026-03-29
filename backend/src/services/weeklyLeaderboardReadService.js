@@ -238,117 +238,90 @@ function buildRankingQuery(whereClause) {
 }
 
 export async function getWeeklyCompetitionContext() {
-  try {
-    const weeklyConfig = await loadWeeklyLeaderboardConfig();
-    const cycle = await resolveLeaderboardCycle(weeklyConfig);
-    const resolvedConfig = normalizeWeeklyConfig(cycle?.config_snapshot || weeklyConfig);
-    const cycleMetrics = buildCompetitionBoard([], cycle, resolvedConfig).cycle;
-    return {
-      cycle: cycleMetrics,
-      weeklyConfig: resolvedConfig,
-      rewardLabel: `O TOP ${Math.max(1, Number(resolvedConfig.winners_count || 10))} vai levar bancas garantidas!`,
-    };
-  } catch (error) {
-    console.error("[weekly-leaderboard-service] context", {
-      message: error?.message || String(error),
-      stack: error?.stack || null,
-    });
-    throw error;
-  }
+  const weeklyConfig = await loadWeeklyLeaderboardConfig();
+  const cycle = await resolveLeaderboardCycle(weeklyConfig);
+  const resolvedConfig = normalizeWeeklyConfig(cycle?.config_snapshot || weeklyConfig);
+  const cycleMetrics = buildCompetitionBoard([], cycle, resolvedConfig).cycle;
+  return {
+    cycle: cycleMetrics,
+    weeklyConfig: resolvedConfig,
+    rewardLabel: `O TOP ${Math.max(1, Number(resolvedConfig.winners_count || 10))} vai levar bancas garantidas!`,
+  };
 }
 
 export async function getWeeklyCompetitionEntry({ userId = "" } = {}) {
   const safeUserId = String(userId || "").trim();
-  try {
-    const { cycle, weeklyConfig } = await getWeeklyCompetitionContext();
-    if (!safeUserId) {
-      return {
-        cycle,
-        weeklyConfig,
-        currentCompetitionEntry: {
-          user_id: "",
+  const { cycle, weeklyConfig } = await getWeeklyCompetitionContext();
+  if (!safeUserId) {
+    return {
+      cycle,
+      weeklyConfig,
+      currentCompetitionEntry: {
+        user_id: "",
+        position: 0,
+        weekly_points: 0,
+        engagement_points: 0,
+        points: 0,
+      },
+    };
+  }
+
+  const cycleKey = String(cycle?.cycle_key || "");
+  const result = await pool.query(`${buildRankingQuery("WHERE user_id::text = $2 LIMIT 1")}`, [cycleKey, safeUserId]);
+
+  return {
+    cycle,
+    weeklyConfig,
+    currentCompetitionEntry: result.rows[0]
+      ? mapLeaderboardRow(result.rows[0])
+      : {
+          user_id: safeUserId,
           position: 0,
           weekly_points: 0,
           engagement_points: 0,
           points: 0,
         },
-      };
-    }
-
-    const cycleKey = String(cycle?.cycle_key || "");
-    const result = await pool.query(`${buildRankingQuery("WHERE user_id::text = $2 LIMIT 1")}`, [cycleKey, safeUserId]);
-
-    return {
-      cycle,
-      weeklyConfig,
-      currentCompetitionEntry: result.rows[0]
-        ? mapLeaderboardRow(result.rows[0])
-        : {
-            user_id: safeUserId,
-            position: 0,
-            weekly_points: 0,
-            engagement_points: 0,
-            points: 0,
-          },
-    };
-  } catch (error) {
-    console.error("[weekly-leaderboard-service] entry", {
-      userId: safeUserId,
-      message: error?.message || String(error),
-      stack: error?.stack || null,
-    });
-    throw error;
-  }
+  };
 }
 
 export async function getWeeklyLeaderboard({ userId = "", limit = 50 } = {}) {
   const safeUserId = String(userId || "").trim();
   const safeLimit = Math.max(1, Math.min(100, Number(limit || 50)));
-  try {
-    const { cycle, weeklyConfig: resolvedConfig } = await getWeeklyCompetitionContext();
-    const cycleKey = String(cycle?.cycle_key || "");
+  const { cycle, weeklyConfig: resolvedConfig } = await getWeeklyCompetitionContext();
+  const cycleKey = String(cycle?.cycle_key || "");
 
-    const result = await pool.query(
-      `${buildRankingQuery("WHERE position <= $2 OR ($3 <> '' AND user_id::text = $3) ORDER BY position ASC")}`,
-      [cycleKey, safeLimit, safeUserId]
-    );
+  const result = await pool.query(
+    `${buildRankingQuery("WHERE position <= $2 OR ($3 <> '' AND user_id::text = $3) ORDER BY position ASC")}`,
+    [cycleKey, safeLimit, safeUserId]
+  );
 
-    const topEntries = [];
-    let currentCompetitionEntry = {
-      user_id: safeUserId,
-      position: 0,
-      weekly_points: 0,
-      engagement_points: 0,
-      points: 0,
-    };
+  const topEntries = [];
+  let currentCompetitionEntry = {
+    user_id: safeUserId,
+    position: 0,
+    weekly_points: 0,
+    engagement_points: 0,
+    points: 0,
+  };
 
-    for (const row of result.rows || []) {
-      const entry = mapLeaderboardRow(row);
+  for (const row of result.rows || []) {
+    const entry = mapLeaderboardRow(row);
 
-      if (entry.position <= safeLimit) {
-        topEntries.push(entry);
-      }
-
-      if (safeUserId && entry.user_id === safeUserId) {
-        currentCompetitionEntry = entry;
-      }
+    if (entry.position <= safeLimit) {
+      topEntries.push(entry);
     }
 
-    return {
-      cycle,
-      weeklyConfig: resolvedConfig,
-      topEntries,
-      userWeeklyPoints: Number(currentCompetitionEntry.weekly_points || 0),
-      currentCompetitionEntry,
-      competitionBoard: buildCompetitionBoard(topEntries, cycle, resolvedConfig),
-    };
-  } catch (error) {
-    console.error("[weekly-leaderboard-service] leaderboard", {
-      userId: safeUserId,
-      limit: safeLimit,
-      message: error?.message || String(error),
-      stack: error?.stack || null,
-    });
-    throw error;
+    if (safeUserId && entry.user_id === safeUserId) {
+      currentCompetitionEntry = entry;
+    }
   }
+
+  return {
+    cycle,
+    weeklyConfig: resolvedConfig,
+    topEntries,
+    userWeeklyPoints: Number(currentCompetitionEntry.weekly_points || 0),
+    currentCompetitionEntry,
+    competitionBoard: buildCompetitionBoard(topEntries, cycle, resolvedConfig),
+  };
 }

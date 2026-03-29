@@ -152,11 +152,6 @@ export function createApp(io) {
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
 
     if (req.method === "OPTIONS") {
-      console.info("[cors-preflight]", {
-        path: req.originalUrl,
-        origin: origin || null,
-        allowOrigin,
-      });
       return res.sendStatus(204);
     }
 
