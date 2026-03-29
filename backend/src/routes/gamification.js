@@ -3143,6 +3143,10 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
 
     return res.json(payload);
   } catch (error) {
+    console.error("[route-error] summary", {
+      message: error?.message || String(error),
+      stack: error?.stack || null,
+    });
     console.error("Failed to load profile summary", {
       userId,
       message: error?.message || String(error),
@@ -3195,6 +3199,10 @@ router.get("/profile/competition-board", requireAuth, async (req, res) => {
 
     return res.json(payload);
   } catch (error) {
+    console.error("[route-error] competition-board", {
+      message: error?.message || String(error),
+      stack: error?.stack || null,
+    });
     console.error("Failed to load profile competition board", {
       userId,
       message: error?.message || String(error),

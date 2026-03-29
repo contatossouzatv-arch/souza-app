@@ -295,6 +295,13 @@ export function createApp(io) {
   });
 
   app.use((error, req, res, _next) => {
+    console.error("[global-error-handler]", {
+      path: req.originalUrl,
+      method: req.method,
+      message: error?.message || "Internal server error",
+      stack: error?.stack || null,
+    });
+
     if (error?.message === "Not allowed by CORS") {
       return res.status(403).json({ error: error.message });
     }
