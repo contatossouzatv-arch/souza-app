@@ -18,6 +18,8 @@ import {
   listPublicProfileBasics,
   markProfileNotificationsRead,
 } from "../services/profileReadService.js";
+import { getProfileSummary } from "../services/profileSummaryReadService.js";
+import { getWeeklyLeaderboard } from "../services/weeklyLeaderboardReadService.js";
 import { getCurrentPlatform, listActivePlatforms } from "../services/platformReadService.js";
 import {
   getHomeFeedSharedReadModel,
@@ -552,8 +554,8 @@ function invalidateGamificationStateCache() {
 
 async function buildCachedWeeklyCompetitionBoard() {
   return getOrComputeCacheJson("gamification:leaderboards:weekly", WEEKLY_LEADERBOARD_TTL_MS, async () => {
-    const state = await buildGamificationState();
-    return buildCompetitionBoard(state.leaderboardEntries, state.cycle, state.weeklyConfig);
+    const payload = await getWeeklyLeaderboard();
+    return payload.competitionBoard;
   });
 }
 
@@ -3030,15 +3032,13 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
       forceFresh: shouldForceRefresh,
       ttlMs: PROFILE_METRICS_TTL_MS,
       loader: async () =>
-        extractProfileSummaryPayload(
-          await withSoftTimeout(
-            buildLightweightProfileMetrics(userId, {
-              forceFresh: shouldForceRefresh,
-              includeCompetitionBoard: false,
-            }),
-            PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
-            "Profile summary soft timeout"
-          )
+        await withSoftTimeout(
+          getProfileSummary({
+            viewerId: userId,
+            targetUserId: userId,
+          }),
+          PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
+          "Profile summary soft timeout"
         ),
     });
 
@@ -4392,9 +4392,15 @@ router.post("/admin/users/:id/restore-last-reset", requireAuth, requireAdmin, as
   });
 });
 
-router.get("/leaderboards/weekly", requireAuth, async (_req, res) => {
+router.get("/leaderboards/weekly", requireAuth, async (req, res) => {
   try {
-    const payload = await buildCachedWeeklyCompetitionBoard();
+    const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
+    if (shouldForceRefresh) {
+      await deleteCacheKey("gamification:leaderboards:weekly");
+    }
+    const payload = shouldForceRefresh
+      ? (await getWeeklyLeaderboard({ userId: req.auth?.sub || "" })).competitionBoard
+      : await buildCachedWeeklyCompetitionBoard();
     return res.json(payload);
   } catch (error) {
     console.error("Failed to load weekly leaderboard", error);
