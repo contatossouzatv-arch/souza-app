@@ -21,6 +21,11 @@ import { genericUploadsDir, uploadsDir } from "./lib/paths.js";
 import { getHttpMetricsSnapshot, recordHttpMetric } from "./lib/httpMetrics.js";
 
 const SLOW_HTTP_THRESHOLD_MS = 700;
+const EXPLICIT_CORS_ORIGINS = [
+  "https://souzatv.app",
+  "https://www.souzatv.app",
+  "http://localhost:3000",
+];
 
 function normalizeMetricPath(req) {
   const basePath = String(req.baseUrl || "").trim();
@@ -44,13 +49,12 @@ function normalizeMetricPath(req) {
 }
 
 function buildCors() {
-  if (env.origin === "*") {
-    return cors({ origin: true, credentials: false });
-  }
+  const allowedOrigins = [...new Set([...EXPLICIT_CORS_ORIGINS, ...(env.origins || [])])];
 
   return cors({
     origin(origin, callback) {
-      if (isAllowedOrigin(origin)) return callback(null, true);
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin) || isAllowedOrigin(origin)) return callback(null, true);
       console.warn("[cors] blocked origin", { origin: origin || null });
       return callback(new Error("Not allowed by CORS"));
     },
@@ -134,7 +138,30 @@ export function createApp(io) {
     })
   );
   app.use(buildCors());
-  app.options(/.*/, buildCors());
+  app.use((req, res, next) => {
+    const origin = String(req.headers.origin || "").trim();
+    const allowedOrigins = [...new Set([...EXPLICIT_CORS_ORIGINS, ...(env.origins || [])])];
+    const allowOrigin = allowedOrigins.includes(origin) || isAllowedOrigin(origin) ? origin : allowedOrigins[0];
+
+    if (allowOrigin) {
+      res.header("Access-Control-Allow-Origin", allowOrigin);
+    }
+    res.header("Vary", "Origin");
+    res.header("Access-Control-Allow-Credentials", "true");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+
+    if (req.method === "OPTIONS") {
+      console.info("[cors-preflight]", {
+        path: req.originalUrl,
+        origin: origin || null,
+        allowOrigin,
+      });
+      return res.sendStatus(204);
+    }
+
+    next();
+  });
   app.use((req, res, next) => {
     req._startedAtMs = Date.now();
     const shouldLogStart = shouldLogRouteTiming(req.path);
