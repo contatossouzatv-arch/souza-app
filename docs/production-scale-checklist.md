@@ -37,6 +37,9 @@ When `REDIS_URL` is configured:
 - duplicated recomputation drops
 - cache invalidation becomes more useful under scale
 
+Deploy note:
+- review production env vars before promoting a new revision
+
 ## Immediate next phase
 - create persisted read models for:
   - profile summary
