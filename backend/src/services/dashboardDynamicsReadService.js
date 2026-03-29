@@ -1,8 +1,7 @@
 import { normalizeRecord, pool } from "../db/index.js";
-import { deleteCacheByPrefix, getOrComputeCacheJson } from "../lib/cache.js";
+import { deleteCacheByPrefix } from "../lib/cache.js";
 
-const DASHBOARD_DYNAMICS_TTL_MS = 10_000;
-const DASHBOARD_DYNAMICS_PREFIX = "dashboard:dynamics-summary:";
+const DASHBOARD_DYNAMICS_READ_PREFIX = "app-read:dashboard-dynamics:";
 
 function dedupeRecordsByUser(records = []) {
   const uniqueRecords = new Map();
@@ -128,54 +127,52 @@ async function getGameCallSummary(raffleId, userId) {
 
 export async function getDashboardDynamicsSummary({ userId } = {}) {
   const safeUserId = String(userId || "").trim();
-  return getOrComputeCacheJson(`${DASHBOARD_DYNAMICS_PREFIX}${safeUserId}`, DASHBOARD_DYNAMICS_TTL_MS, async () => {
-    const [promoBoxes, activeInstantRaffle, activeLiveDraw, activeGameCall] = await Promise.all([
-      listActivePromoBoxes(),
-      findActiveEntity("InstantRaffle"),
-      findActiveEntity("LiveDrawRaffle"),
-      findActiveEntity("GameCallRaffle"),
-    ]);
+  const [promoBoxes, activeInstantRaffle, activeLiveDraw, activeGameCall] = await Promise.all([
+    listActivePromoBoxes(),
+    findActiveEntity("InstantRaffle"),
+    findActiveEntity("LiveDrawRaffle"),
+    findActiveEntity("GameCallRaffle"),
+  ]);
 
-    const [instantSummary, liveDrawSummary, gameCallSummary] = await Promise.all([
-      activeInstantRaffle?.id
-        ? getInstantRaffleSummary(activeInstantRaffle.id, safeUserId)
-        : Promise.resolve({
-            myParticipation: [],
-            participantsPreview: [],
-            participantsCount: 0,
-            winners: [],
-          }),
-      activeLiveDraw?.id
-        ? getLiveDrawSummary(activeLiveDraw.id, safeUserId)
-        : Promise.resolve({ myParticipation: [] }),
-      activeGameCall?.id
-        ? getGameCallSummary(activeGameCall.id, safeUserId)
-        : Promise.resolve({ myParticipation: null }),
-    ]);
+  const [instantSummary, liveDrawSummary, gameCallSummary] = await Promise.all([
+    activeInstantRaffle?.id
+      ? getInstantRaffleSummary(activeInstantRaffle.id, safeUserId)
+      : Promise.resolve({
+          myParticipation: [],
+          participantsPreview: [],
+          participantsCount: 0,
+          winners: [],
+        }),
+    activeLiveDraw?.id
+      ? getLiveDrawSummary(activeLiveDraw.id, safeUserId)
+      : Promise.resolve({ myParticipation: [] }),
+    activeGameCall?.id
+      ? getGameCallSummary(activeGameCall.id, safeUserId)
+      : Promise.resolve({ myParticipation: null }),
+  ]);
 
-    return {
-      promoBoxes,
-      instantRaffle: {
-        raffle: activeInstantRaffle,
-        ...instantSummary,
-      },
-      liveDraw: {
-        raffle: activeLiveDraw,
-        ...liveDrawSummary,
-      },
-      gameCall: {
-        raffle: activeGameCall,
-        ...gameCallSummary,
-      },
-    };
-  });
+  return {
+    promoBoxes,
+    instantRaffle: {
+      raffle: activeInstantRaffle,
+      ...instantSummary,
+    },
+    liveDraw: {
+      raffle: activeLiveDraw,
+      ...liveDrawSummary,
+    },
+    gameCall: {
+      raffle: activeGameCall,
+      ...gameCallSummary,
+    },
+  };
 }
 
 export async function invalidateDashboardDynamicsSummary(userId = "") {
   const safeUserId = String(userId || "").trim();
   if (safeUserId) {
-    await deleteCacheByPrefix(`${DASHBOARD_DYNAMICS_PREFIX}${safeUserId}`);
+    await deleteCacheByPrefix(`${DASHBOARD_DYNAMICS_READ_PREFIX}${safeUserId}`);
     return;
   }
-  await deleteCacheByPrefix(DASHBOARD_DYNAMICS_PREFIX);
+  await deleteCacheByPrefix(DASHBOARD_DYNAMICS_READ_PREFIX);
 }

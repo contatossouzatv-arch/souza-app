@@ -46,34 +46,8 @@ export default function RealtimeSync() {
         const entity = String(event?.entity || "").trim().toLowerCase();
         const prefixes = new Set();
 
-        if (["livedrawraffle", "livedrawparticipant"].includes(entity)) {
-          addKeys(prefixes, [
-            "dashboard-dynamics-summary",
-            "active-live-raffle-box",
-            "active-raffle",
-            "raffle-participants",
-            "validated-winners",
-            "my-live-participation",
-          ]);
-        }
-
-        if (["gamecallraffle", "gamecallparticipant"].includes(entity)) {
-          addKeys(prefixes, [
-            "dashboard-dynamics-summary",
-            "admin-active-gamecall",
-            "active-gamecall-raffle",
-            "admin-gamecall-participants",
-            "validated-gamecall-winners",
-            "my-gamecall-participation",
-          ]);
-        }
-
-        if (["instantraffle", "instantraffleparticipant", "promobox"].includes(entity)) {
-          addKeys(prefixes, [
-            "dashboard-dynamics-summary",
-          ]);
-        }
-
+        // Dashboard, deposits e board de competicao ja migraram para eventos segmentados.
+        // O legado fica aqui apenas como fallback para fluxos ainda nao migrados.
         if (["appsettings", "bannercarousel", "socialmedia"].includes(entity)) {
           addKeys(prefixes, ["public-ui-config", "app-settings"]);
         }

@@ -1327,8 +1327,8 @@ export default function Profile() {
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchInterval: 30000,
-    refetchIntervalInBackground: true,
+    refetchInterval: false,
+    refetchIntervalInBackground: false,
     retry: false,
   });
   const profileGamification = useMemo(() => ({

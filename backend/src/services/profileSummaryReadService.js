@@ -1,5 +1,5 @@
 import { getAppSettingsMap, pool } from "../db/index.js";
-import { getWeeklyLeaderboard } from "./weeklyLeaderboardReadService.js";
+import { getWeeklyCompetitionContext, getWeeklyCompetitionEntry } from "./weeklyLeaderboardReadService.js";
 
 const BADGE_RULES_KEY = "achievement_badge_rules_v1";
 const POINTS_RULES_KEY = "achievement_points_rules_v1";
@@ -146,10 +146,11 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
     throw new Error("Invalid target user id");
   }
 
-  const [{ badgeRules, pointsRules, dailyCheckInConfig }, weeklyLeaderboard, userResult, balancesResult, participationResult, socialResult, pointsBalanceResult] =
+  const [{ badgeRules, pointsRules, dailyCheckInConfig }, weeklyContext, weeklyEntry, userResult, balancesResult, participationResult, socialResult, pointsBalanceResult] =
     await Promise.all([
       loadProfileSummaryConfig(),
-      getWeeklyLeaderboard({ userId: safeTargetUserId, limit: 20 }),
+      getWeeklyCompetitionContext(),
+      getWeeklyCompetitionEntry({ userId: safeTargetUserId }),
       pool.query(
         `SELECT
            id,
@@ -179,7 +180,7 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
         [
           safeTargetUserId,
           ["tickets_active", "prize_counts", "social_followers", "social_likes", "daily_checkins", "social_following", "engagement_points", "xp_total", "chest_rewards"],
-          String(weeklyLeaderboard?.cycle?.cycle_key || ""),
+          String(weeklyContext?.cycle?.cycle_key || ""),
         ]
       ),
       pool.query(
@@ -219,7 +220,7 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
   );
   const participation = participationResult.rows[0] || {};
   const social = socialResult.rows[0] || {};
-  const currentCompetitionEntry = weeklyLeaderboard?.currentCompetitionEntry || {
+  const currentCompetitionEntry = weeklyEntry?.currentCompetitionEntry || {
     user_id: safeTargetUserId,
     position: 0,
     weekly_points: 0,
@@ -263,6 +264,16 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
 
   const achievements = computeAchievements(metrics, badgeRules);
   const levelProgress = getLevelProgress(metrics.xpTotal);
+  const summaryCompetitionBoard = {
+    config: weeklyContext?.weeklyConfig || {},
+    cycle: {
+      ...(weeklyContext?.cycle || {}),
+      remainingMs: Number(weeklyContext?.cycle?.remainingMs || 0),
+      progressPct: Number(weeklyContext?.cycle?.progressPct || 0),
+    },
+    entries: currentCompetitionEntry?.user_id ? [currentCompetitionEntry] : [],
+    rewardLabel: String(weeklyContext?.rewardLabel || ""),
+  };
 
   return {
     user: {
@@ -289,12 +300,7 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
     achievements,
     progressBadges: [buildProgressBadge(metrics, pointsRules)],
     currentCompetitionEntry,
-    competitionBoard: weeklyLeaderboard?.competitionBoard || {
-      config: weeklyLeaderboard?.weeklyConfig || {},
-      cycle: weeklyLeaderboard?.cycle || { remainingMs: 0, progressPct: 0 },
-      entries: [],
-      rewardLabel: "",
-    },
+    competitionBoard: summaryCompetitionBoard,
     levelProgress,
   };
 }

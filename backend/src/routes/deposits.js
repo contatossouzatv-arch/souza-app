@@ -16,7 +16,7 @@ import {
   rejectDepositRecord,
   updateDepositAdminRecord,
 } from "../db/index.js";
-import { deleteCacheByPrefix, deleteCacheKey, getOrComputeCacheJson } from "../lib/cache.js";
+import { getOrComputeCacheJson } from "../lib/cache.js";
 import { emitLegacyEntityChanged } from "../lib/realtimeEvents.js";
 import { projectDepositMutation } from "../services/depositProjectionService.js";
 import { scheduleGamificationRefresh } from "./gamification.js";
@@ -108,17 +108,6 @@ function normalizeAdminPatchPayload(body = {}) {
       : [];
   }
   return patch;
-}
-
-async function refreshDepositReadModels({ refreshGamification = false } = {}) {
-  await Promise.all([
-    deleteCacheKey("deposits:dashboard-summary"),
-    deleteCacheByPrefix("deposits:leaderboard:"),
-  ]);
-
-  if (refreshGamification) {
-    scheduleGamificationRefresh({ persistDerived: true });
-  }
 }
 
 async function runDepositProjection(req, deposit, action, { refreshGamification = false } = {}) {
@@ -324,7 +313,6 @@ router.post("/admin/deposits/:id/approve", requireAuth, requireAdmin, asyncHandl
     user_id: result?.deposit?.user_id || "",
     reason: "deposit_approved",
   });
-  await refreshDepositReadModels({ refreshGamification: true });
   await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "approve-idempotent" : "approve", {
     refreshGamification: true,
   });
@@ -366,7 +354,6 @@ router.patch("/admin/deposits/:id", requireAuth, requireAdmin, asyncHandler(asyn
     user_id: result?.deposit?.user_id || "",
     status: result?.deposit?.status || "",
   });
-  await refreshDepositReadModels();
   await runDepositProjection(req, result?.deposit || {}, "update");
 
   return res.status(result.idempotent ? 200 : 200).json(result);
@@ -411,7 +398,6 @@ router.post("/admin/deposits/:id/adjust-tickets", requireAuth, requireAdmin, asy
     user_id: result?.deposit?.user_id || "",
     reason: "deposit_tickets_adjusted",
   });
-  await refreshDepositReadModels({ refreshGamification: true });
   await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "adjust-idempotent" : "adjust-tickets", {
     refreshGamification: true,
   });
@@ -452,7 +438,6 @@ router.post("/admin/deposits/:id/reject", requireAuth, requireAdmin, asyncHandle
     user_id: result?.deposit?.user_id || "",
     status: result?.deposit?.status || "rejected",
   });
-  await refreshDepositReadModels();
   await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "reject-idempotent" : "reject");
 
   return res.status(result.idempotent ? 200 : 201).json(result);
@@ -495,7 +480,6 @@ router.post("/admin/deposits/:id/invalidate", requireAuth, requireAdmin, asyncHa
     user_id: result?.deposit?.user_id || "",
     reason: "deposit_invalidated",
   });
-  await refreshDepositReadModels({ refreshGamification: true });
   await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "invalidate-idempotent" : "invalidate", {
     refreshGamification: true,
   });
@@ -540,7 +524,6 @@ router.delete("/admin/deposits/:id", requireAuth, requireAdmin, asyncHandler(asy
     user_id: result?.deposit?.user_id || "",
     reason: "deposit_deleted",
   });
-  await refreshDepositReadModels({ refreshGamification: true });
   await runDepositProjection(req, result?.deposit || {}, "delete", {
     refreshGamification: true,
   });

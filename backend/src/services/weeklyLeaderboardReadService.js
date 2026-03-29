@@ -177,16 +177,25 @@ function buildCompetitionBoard(entries, cycle, config) {
   };
 }
 
-export async function getWeeklyLeaderboard({ userId = "", limit = 50 } = {}) {
-  const safeUserId = String(userId || "").trim();
-  const safeLimit = Math.max(1, Math.min(100, Number(limit || 50)));
-  const weeklyConfig = await loadWeeklyLeaderboardConfig();
-  const cycle = await resolveLeaderboardCycle(weeklyConfig);
-  const resolvedConfig = normalizeWeeklyConfig(cycle?.config_snapshot || weeklyConfig);
-  const cycleKey = String(cycle?.cycle_key || "");
+function mapLeaderboardRow(row = {}) {
+  return {
+    user_id: String(row.user_id || ""),
+    nick: String(row.nick || row.full_name || "Usuario"),
+    avatar_emoji: String(row.avatar_emoji || "🎰"),
+    profile_avatar_id: String(row.profile_avatar_id || ""),
+    profile_image_mode: String(row.profile_image_mode || "avatar"),
+    profile_image_status: String(row.profile_image_status || "none"),
+    profile_image_url: getApprovedProfileImageUrl(row),
+    weekly_points: Number(row.weekly_points || 0),
+    engagement_points: Number(row.engagement_points || 0),
+    position: Number(row.position || 0),
+    points: Number(row.weekly_points || 0),
+    stats: { approvedAmount: 0 },
+  };
+}
 
-  const result = await pool.query(
-    `WITH weekly AS (
+function buildRankingQuery(whereClause) {
+  return `WITH weekly AS (
        SELECT user_id, amount
          FROM user_metric_balances
         WHERE metric_key = 'weekly_points'
@@ -225,9 +234,64 @@ export async function getWeeklyLeaderboard({ userId = "", limit = 50 } = {}) {
      )
      SELECT *
        FROM ranked
-      WHERE position <= $2
-         OR ($3 <> '' AND user_id::text = $3)
-      ORDER BY position ASC`,
+      ${whereClause}`;
+}
+
+export async function getWeeklyCompetitionContext() {
+  const weeklyConfig = await loadWeeklyLeaderboardConfig();
+  const cycle = await resolveLeaderboardCycle(weeklyConfig);
+  const resolvedConfig = normalizeWeeklyConfig(cycle?.config_snapshot || weeklyConfig);
+  const cycleMetrics = buildCompetitionBoard([], cycle, resolvedConfig).cycle;
+  return {
+    cycle: cycleMetrics,
+    weeklyConfig: resolvedConfig,
+    rewardLabel: `O TOP ${Math.max(1, Number(resolvedConfig.winners_count || 10))} vai levar bancas garantidas!`,
+  };
+}
+
+export async function getWeeklyCompetitionEntry({ userId = "" } = {}) {
+  const safeUserId = String(userId || "").trim();
+  const { cycle, weeklyConfig } = await getWeeklyCompetitionContext();
+  if (!safeUserId) {
+    return {
+      cycle,
+      weeklyConfig,
+      currentCompetitionEntry: {
+        user_id: "",
+        position: 0,
+        weekly_points: 0,
+        engagement_points: 0,
+        points: 0,
+      },
+    };
+  }
+
+  const cycleKey = String(cycle?.cycle_key || "");
+  const result = await pool.query(`${buildRankingQuery("WHERE user_id::text = $2 LIMIT 1")}`, [cycleKey, safeUserId]);
+
+  return {
+    cycle,
+    weeklyConfig,
+    currentCompetitionEntry: result.rows[0]
+      ? mapLeaderboardRow(result.rows[0])
+      : {
+          user_id: safeUserId,
+          position: 0,
+          weekly_points: 0,
+          engagement_points: 0,
+          points: 0,
+        },
+  };
+}
+
+export async function getWeeklyLeaderboard({ userId = "", limit = 50 } = {}) {
+  const safeUserId = String(userId || "").trim();
+  const safeLimit = Math.max(1, Math.min(100, Number(limit || 50)));
+  const { cycle, weeklyConfig: resolvedConfig } = await getWeeklyCompetitionContext();
+  const cycleKey = String(cycle?.cycle_key || "");
+
+  const result = await pool.query(
+    `${buildRankingQuery("WHERE position <= $2 OR ($3 <> '' AND user_id::text = $3) ORDER BY position ASC")}`,
     [cycleKey, safeLimit, safeUserId]
   );
 
@@ -241,20 +305,7 @@ export async function getWeeklyLeaderboard({ userId = "", limit = 50 } = {}) {
   };
 
   for (const row of result.rows || []) {
-    const entry = {
-      user_id: String(row.user_id || ""),
-      nick: String(row.nick || row.full_name || "Usuario"),
-      avatar_emoji: String(row.avatar_emoji || "🎰"),
-      profile_avatar_id: String(row.profile_avatar_id || ""),
-      profile_image_mode: String(row.profile_image_mode || "avatar"),
-      profile_image_status: String(row.profile_image_status || "none"),
-      profile_image_url: getApprovedProfileImageUrl(row),
-      weekly_points: Number(row.weekly_points || 0),
-      engagement_points: Number(row.engagement_points || 0),
-      position: Number(row.position || 0),
-      points: Number(row.weekly_points || 0),
-      stats: { approvedAmount: 0 },
-    };
+    const entry = mapLeaderboardRow(row);
 
     if (entry.position <= safeLimit) {
       topEntries.push(entry);
