@@ -49,10 +49,6 @@ export default function RealtimeSync() {
             "raffle-participants",
             "validated-winners",
             "my-live-participation",
-            "my-winnings",
-            "winner-audits",
-            "inicio-winner-posts",
-            "user-prize-gallery",
           ]);
         }
 
@@ -64,19 +60,12 @@ export default function RealtimeSync() {
             "admin-gamecall-participants",
             "validated-gamecall-winners",
             "my-gamecall-participation",
-            "winner-audits",
-            "inicio-winner-posts",
-            "user-prize-gallery",
           ]);
         }
 
         if (["instantraffle", "instantraffleparticipant", "promobox"].includes(entity)) {
           addKeys(prefixes, [
             "dashboard-dynamics-summary",
-            "my-winnings",
-            "winner-audits",
-            "inicio-winner-posts",
-            "user-prize-gallery",
           ]);
         }
 
