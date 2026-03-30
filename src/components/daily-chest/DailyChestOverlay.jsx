@@ -47,6 +47,7 @@ export default function DailyChestOverlay({
   state,
   viewMode,
   hasRewardsAvailable = true,
+  rewardLabel = "",
   rewardMessage = "",
   onViewModeChange,
   onTap,
@@ -93,6 +94,7 @@ export default function DailyChestOverlay({
       : Math.max(0, Number(slotSummary.availableBase || 0));
   const resetLabel = state?.resetAt ? formatCountdownLabel(state.resetAt) : "-";
   const rewardMessageText = String(rewardMessage || "").trim();
+  const rewardLabelText = String(rewardLabel || "").trim();
   const canSpinBase =
     viewMode === "main" &&
     (displayState !== "opening" || hasVisibleBaseSlots) &&
@@ -209,6 +211,17 @@ export default function DailyChestOverlay({
       </div>
 
       <div className="pointer-events-auto space-y-3">
+        {showClaim ? (
+          <div className="mx-auto w-full max-w-sm rounded-[1.6rem] border border-cyan-300/30 bg-slate-950/88 px-4 py-4 text-center shadow-[0_18px_40px_rgba(8,145,178,0.2)]">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">Voce ganhou</p>
+            <p className="mt-2 text-xl font-black text-white">
+              {rewardLabelText || "Premio liberado"}
+            </p>
+            {rewardMessageText ? (
+              <p className="mt-2 text-xs leading-5 text-slate-300">{rewardMessageText}</p>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex justify-center">
           {showClaim ? (
             <Button

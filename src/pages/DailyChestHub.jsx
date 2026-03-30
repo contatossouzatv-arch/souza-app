@@ -345,6 +345,7 @@ export default function DailyChestHub() {
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           hasRewardsAvailable={availableRewardPool.length > 0}
+          rewardLabel={formatDailyChestPrize(reward)}
           onTap={handleSpin}
           onUnlock={handleUnlock}
           onClaim={handleClaim}
