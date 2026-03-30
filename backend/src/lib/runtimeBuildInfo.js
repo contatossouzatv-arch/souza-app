@@ -7,6 +7,7 @@ function firstNonEmpty(...values) {
 }
 
 export function getRuntimeBuildInfo() {
+  // Deployment marker used to verify that Cloud Run is serving the newest backend revision.
   const commitSha = firstNonEmpty(
     process.env.APP_COMMIT_SHA,
     process.env.COMMIT_SHA,
@@ -38,4 +39,3 @@ export function getRuntimeBuildInfo() {
     appVersion: String(process.env.npm_package_version || "unknown"),
   };
 }
-
