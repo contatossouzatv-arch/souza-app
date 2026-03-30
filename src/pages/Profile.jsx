@@ -700,11 +700,14 @@ function normalizeMetricSourceLabel(entry) {
   const source = `${sourceType} ${sourceRef}`;
 
   if (source.includes("daily_checkin")) return "Check-in diario";
+  if (source.includes("daily_chest_open")) return "Bau diario aberto";
   if (source.includes("daily_chest")) return "Bau diario";
-  if (source.includes("follow")) return "Seguir perfis";
-  if (source.includes("like")) return "Curtidas em perfis";
+  if (source.includes("follow_profile")) return "Seguir novo perfil";
+  if (source.includes("like_profile")) return "Curtir perfil";
+  if (source.includes("approved_deposit_amount_step")) return "Bonus por faixa de deposito";
+  if (source.includes("approved_deposit_count")) return "Deposito aprovado";
   if (source.includes("approved_deposit")) return "Depositos aprovados";
-  if (source.includes("validated_win")) return "Prêmios confirmados";
+  if (source.includes("validated_win")) return "Vitoria confirmada";
   if (source.includes("live_participation") || source.includes("live_draw")) return "Participacao em live";
   if (source.includes("instant_raffle")) return "Sorteio rapido";
   if (source.includes("game_call")) return "Call do jogo";

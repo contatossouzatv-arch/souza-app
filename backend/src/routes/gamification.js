@@ -1539,77 +1539,39 @@ function buildSnapshots({
       userState.depositCount += 1;
       userState.totalTickets += Math.max(0, Number(deposit.tickets_count || 0));
 
-      rulesBySource(rules, "engagement", "approved_deposit_count").forEach((rule) => {
-        applyRuleMetric(
-          userState,
-          rule,
-          1,
-          depositSourceRefId ? `engagement.approved_deposit_count:${rule.slug}:${depositSourceRefId}` : `engagement.approved_deposit_count:${rule.slug}`,
-          depositOccurredAt,
-          {
-            exact_event: Boolean(depositSourceRefId),
-            source: "approved_deposit",
-            source_ref_id: depositSourceRefId,
-            reward_title: String(rule.name || "Deposito aprovado").trim() || "Deposito aprovado",
-          }
-        );
+      applyRulesForSource(userState, rules, "engagement", "approved_deposit_count", 1, "engagement.approved_deposit_count", depositOccurredAt, {
+        sourceKey: depositSourceRefId,
+        cycleKey: String(cycle?.cycle_key || "").trim(),
       });
 
       rulesBySource(rules, "engagement", "approved_deposit_amount_step").forEach((rule) => {
         const steps = Math.floor(amount / Math.max(1, Number(rule.condition_step || 1)));
         if (steps <= 0) return;
-        applyRuleMetric(
-          userState,
-          rule,
-          steps,
-          depositSourceRefId
-            ? `engagement.approved_deposit_amount_step:${rule.slug}:${depositSourceRefId}`
-            : `engagement.approved_deposit_amount_step:${rule.slug}`,
-          depositOccurredAt,
-          {
-            exact_event: Boolean(depositSourceRefId),
-            source: "approved_deposit",
-            source_ref_id: depositSourceRefId,
-            reward_title: String(rule.name || "Bonus por valor do deposito").trim() || "Bonus por valor do deposito",
-          }
-        );
+        if (!consumeRuleAllowance(userState, rule, steps, depositOccurredAt, {
+          sourceKey: depositSourceRefId,
+          cycleKey: String(cycle?.cycle_key || "").trim(),
+        })) {
+          return;
+        }
+        applyRuleMetric(userState, rule, steps, "engagement.approved_deposit_amount_step", depositOccurredAt);
       });
 
       if (cycle && isInRange(depositOccurredAt, new Date(cycle.starts_at), new Date(cycle.ends_at))) {
-        rulesBySource(rules, "weekly", "approved_deposit_count").forEach((rule) => {
-          applyRuleMetric(
-            userState,
-            rule,
-            1,
-            depositSourceRefId ? `weekly.approved_deposit_count:${rule.slug}:${depositSourceRefId}` : `weekly.approved_deposit_count:${rule.slug}`,
-            depositOccurredAt,
-            {
-              exact_event: Boolean(depositSourceRefId),
-              source: "approved_deposit",
-              source_ref_id: depositSourceRefId,
-              reward_title: String(rule.name || "Pontos semanais do deposito").trim() || "Pontos semanais do deposito",
-            }
-          );
+        applyRulesForSource(userState, rules, "weekly", "approved_deposit_count", 1, "weekly.approved_deposit_count", depositOccurredAt, {
+          sourceKey: depositSourceRefId,
+          cycleKey: String(cycle?.cycle_key || "").trim(),
         });
 
         rulesBySource(rules, "weekly", "approved_deposit_amount_step").forEach((rule) => {
           const steps = Math.floor(amount / Math.max(1, Number(rule.condition_step || 1)));
           if (steps <= 0) return;
-          applyRuleMetric(
-            userState,
-            rule,
-            steps,
-            depositSourceRefId
-              ? `weekly.approved_deposit_amount_step:${rule.slug}:${depositSourceRefId}`
-              : `weekly.approved_deposit_amount_step:${rule.slug}`,
-            depositOccurredAt,
-            {
-              exact_event: Boolean(depositSourceRefId),
-              source: "approved_deposit",
-              source_ref_id: depositSourceRefId,
-              reward_title: String(rule.name || "Bonus semanal por valor do deposito").trim() || "Bonus semanal por valor do deposito",
-            }
-          );
+          if (!consumeRuleAllowance(userState, rule, steps, depositOccurredAt, {
+            sourceKey: depositSourceRefId,
+            cycleKey: String(cycle?.cycle_key || "").trim(),
+          })) {
+            return;
+          }
+          applyRuleMetric(userState, rule, steps, "weekly.approved_deposit_amount_step", depositOccurredAt);
         });
       }
     });
@@ -1736,12 +1698,13 @@ function buildSnapshots({
       const userState = byUser[entry.user_id];
       if (!userState) return;
       const sourceRefId = String(entry.opening_id || entry.id || "").trim();
+      const occurredAt = entry.created_date || entry.updated_date;
       addMetric(
         userState,
         "xp_total",
         Math.max(0, Number(entry.xp_amount || 0)),
         sourceRefId ? `xp.daily_chest_open:${sourceRefId}` : "xp.daily_chest_open",
-        entry.created_date || entry.updated_date,
+        occurredAt,
         {
           exact_event: Boolean(sourceRefId),
           source: "daily_chest",
@@ -1749,6 +1712,18 @@ function buildSnapshots({
           reward_title: "XP do Baú Diário",
         }
       );
+
+      applyRulesForSource(userState, rules, "engagement", "daily_chest_open", 1, "engagement.daily_chest_open", occurredAt, {
+        sourceKey: sourceRefId,
+        cycleKey: String(cycle?.cycle_key || "").trim(),
+      });
+
+      if (cycle && isInRange(occurredAt, new Date(cycle.starts_at), new Date(cycle.ends_at))) {
+        applyRulesForSource(userState, rules, "weekly", "daily_chest_open", 1, "weekly.daily_chest_open", occurredAt, {
+          sourceKey: sourceRefId,
+          cycleKey: String(cycle?.cycle_key || "").trim(),
+        });
+      }
     });
 
   prizeGalleryItems
@@ -3252,7 +3227,10 @@ router.get("/profile/public/:userId/summary", async (req, res) => {
     }
 
     const payload = await getPublicProfileSummaryReadModel(targetUserId, PUBLIC_PROFILE_SUMMARY_TTL_MS, async () => (
-      buildFallbackProfileMetricsFromState(targetUserId, await buildGamificationState())
+      getProfileSummary({
+        viewerId: "",
+        targetUserId,
+      })
     ));
     return res.json({
       metrics: payload.metrics || {},
