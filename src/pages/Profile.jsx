@@ -820,6 +820,7 @@ function formatHistoryTimestamp(value) {
 
 export default function Profile() {
   const queryClient = useQueryClient();
+  const publicProfileTimingRef = React.useRef({});
   const simulatedStripRef = React.useRef(null);
   const publicOtherStripRef = React.useRef(null);
   const publicBadgeStripRef = React.useRef(null);
@@ -2005,11 +2006,13 @@ export default function Profile() {
         ? simulatedProfiles.find((profile) => profile.handle === selectedPublicProfileHandle)
         : simulatedProfiles.find((profile) => profile.id === selectedPublicProfileId)) || null
     );
+  const hasInitialPublicProfileIdentity = Boolean(selectedPublicProfileId || selectedPublicUser?.id);
   const isPublicProfileResolving =
     isViewingPublicProfile &&
-    (publicProfileBasicsLoading ||
+    (!hasInitialPublicProfileIdentity &&
+      (publicProfileBasicsLoading ||
       publicProfileBasicsFetching ||
-      (!hasResolvedPublicProfileCandidate && !publicProfileBasicsError && !publicProfileBasicsFetched));
+      (!hasResolvedPublicProfileCandidate && !publicProfileBasicsError && !publicProfileBasicsFetched)));
   const publicProfileLookupStatus = Number(publicProfileBasicsError?.status || 0);
   const hasPublicProfileLookupError =
     isViewingPublicProfile &&
@@ -2375,6 +2378,9 @@ export default function Profile() {
 
   const selectedPublicUserById = publicProfileBasicsMap.get(String(selectedPublicProfileId || "")) || null;
   const selectedPublicUser = selectedPublicUserById || selectedPublicUserByHandle || null;
+  const publicProfileResolvedUserId = useMemo(() => {
+    return String(selectedPublicProfileId || selectedPublicUser?.id || "").trim();
+  }, [selectedPublicProfileId, selectedPublicUser?.id]);
 
   useEffect(() => {
     debugEffect("scroll-public-profile", {
@@ -2519,15 +2525,42 @@ export default function Profile() {
     avatarSrcById,
     publicProfileBasicsMap,
   ]);
+  const effectivePublicProfile = useMemo(() => {
+    if (selectedPublicProfile) return selectedPublicProfile;
+    if (!selectedPublicProfileId) return null;
+    return {
+      id: String(selectedPublicProfileId),
+      nick: "Carregando perfil",
+      handle: String(selectedPublicProfileHandle || "publico"),
+      avatarSrc: "",
+      avatar_emoji: "",
+      profile_avatar_id: "",
+      profile_image_mode: "avatar",
+      profile_image_status: "",
+      profile_image_url: "",
+      points: 0,
+      xpTotal: 0,
+      xp_total: 0,
+      tickets: 0,
+      participations: 0,
+      position: 0,
+      totalWins: 0,
+      totalApproved: 0,
+      liveParticipations: 0,
+      following: 0,
+      followers: 0,
+      likes: 0,
+    };
+  }, [selectedPublicProfile, selectedPublicProfileHandle, selectedPublicProfileId]);
 
-  const isSelectedRealProfile = Boolean(selectedPublicProfile?.id);
-  const isOwnSelectedPublicProfile = Boolean(selectedPublicProfile?.id && selectedPublicProfile.id === user?.id);
+  const isSelectedRealProfile = Boolean(publicProfileResolvedUserId);
+  const isOwnSelectedPublicProfile = Boolean(publicProfileResolvedUserId && publicProfileResolvedUserId === user?.id);
 
   profileDebugLog("resolved-profile-target", {
     selectedPublicProfileId,
     selectedPublicProfileHandle,
-    selectedPublicProfileResolvedId: selectedPublicProfile?.id || "",
-    selectedPublicProfileResolvedHandle: selectedPublicProfile?.handle || "",
+    selectedPublicProfileResolvedId: effectivePublicProfile?.id || "",
+    selectedPublicProfileResolvedHandle: effectivePublicProfile?.handle || "",
     isSelectedRealProfile,
     isOwnSelectedPublicProfile,
     loggedUserId: user?.id || "",
@@ -2563,24 +2596,25 @@ export default function Profile() {
     isError: isSelectedPublicSocialStateError,
     error: selectedPublicSocialStateError,
   } = useQuery({
-    queryKey: ["social-target-state", user?.id, selectedPublicProfile?.id],
+    queryKey: ["social-target-state", user?.id, publicProfileResolvedUserId],
     queryFn: ({ signal }) => {
+      publicProfileTimingRef.current.socialStateStartedAt = performance.now();
       logPublicProfileFlow("query:social-state:start", {
         viewerUserId: user?.id || "",
-        targetUserId: selectedPublicProfile?.id || "",
+        targetUserId: publicProfileResolvedUserId || "",
       });
       profileDebugLog("query:social-target-state", {
         viewerUserId: user?.id || "",
-        targetUserId: selectedPublicProfile?.id || "",
+        targetUserId: publicProfileResolvedUserId || "",
       });
-      return base44.social.state(selectedPublicProfile.id, { signal });
+      return base44.social.state(publicProfileResolvedUserId, { signal });
     },
     enabled:
       !isLoadingAuth &&
       hasResolvedAuthBootstrap &&
       Boolean(user?.id) &&
       canLoadDeferredPublicProfileQueries &&
-      !!selectedPublicProfile?.id &&
+      Boolean(publicProfileResolvedUserId) &&
       isSelectedRealProfile,
     staleTime: 30000,
     refetchOnWindowFocus: false,
@@ -2594,20 +2628,21 @@ export default function Profile() {
     error: selectedPublicProfileSummaryError,
     refetch: refetchSelectedPublicProfileSummary,
   } = useQuery({
-    queryKey: ["public-profile-summary", selectedPublicProfile?.id],
+    queryKey: ["public-profile-summary", publicProfileResolvedUserId],
     queryFn: ({ signal }) => {
+      publicProfileTimingRef.current.summaryStartedAt = performance.now();
       logPublicProfileFlow("query:summary:start", {
-        targetUserId: selectedPublicProfile?.id || "",
+        targetUserId: publicProfileResolvedUserId || "",
       });
       profileDebugLog("query:public-profile-summary", {
-        targetUserId: selectedPublicProfile?.id || "",
+        targetUserId: publicProfileResolvedUserId || "",
         loggedUserId: user?.id || "",
       });
-      return base44.gamification.publicProfileSummary(selectedPublicProfile.id, { signal });
+      return base44.gamification.publicProfileSummary(publicProfileResolvedUserId, { signal });
     },
     enabled:
       PROFILE_PUBLIC_ENRICHMENT_ENABLED &&
-      !!selectedPublicProfile?.id &&
+      Boolean(publicProfileResolvedUserId) &&
       isSelectedRealProfile,
     staleTime: 30000,
     refetchOnWindowFocus: false,
@@ -2620,18 +2655,19 @@ export default function Profile() {
     });
     void Promise.allSettled([
       refetchPublicProfileBasics(),
-      selectedPublicProfile?.id ? refetchSelectedPublicProfileSummary() : Promise.resolve(),
+      publicProfileResolvedUserId ? refetchSelectedPublicProfileSummary() : Promise.resolve(),
     ]);
   }, [
+    publicProfileResolvedUserId,
     refetchPublicProfileBasics,
     refetchSelectedPublicProfileSummary,
-    selectedPublicProfile?.id,
     selectedPublicProfileHandle,
     selectedPublicProfileId,
   ]);
 
   useEffect(() => {
     if (!isViewingPublicProfile) return;
+    publicProfileTimingRef.current.loadStartedAt = performance.now();
     logPublicProfileFlow("load:start", {
       pathname: location.pathname,
       search: location.search,
@@ -2657,6 +2693,9 @@ export default function Profile() {
       targetHandle: selectedPublicProfileHandle || "",
       items: Array.isArray(publicProfileBasicsPayload?.items) ? publicProfileBasicsPayload.items.length : 0,
       hasResolvedCandidate: hasResolvedPublicProfileCandidate,
+      elapsedMs: Math.round(
+        Math.max(0, performance.now() - Number(publicProfileTimingRef.current.loadStartedAt || performance.now()))
+      ),
     });
   }, [
     hasResolvedPublicProfileCandidate,
@@ -2674,20 +2713,26 @@ export default function Profile() {
       targetHandle: selectedPublicProfileHandle || "",
       status: Number(publicProfileBasicsError?.status || 0),
       message: publicProfileBasicsError?.message || "",
+      elapsedMs: Math.round(
+        Math.max(0, performance.now() - Number(publicProfileTimingRef.current.loadStartedAt || performance.now()))
+      ),
     });
   }, [isViewingPublicProfile, publicProfileBasicsError, selectedPublicProfileHandle, selectedPublicProfileId]);
 
   useEffect(() => {
-    if (!isViewingPublicProfile || !selectedPublicProfile?.id || selectedPublicProfileSummaryFetching) return;
+    if (!isViewingPublicProfile || !publicProfileResolvedUserId || selectedPublicProfileSummaryFetching) return;
     if (selectedPublicProfileSummary) {
       logPublicProfileFlow("query:summary:success", {
-        targetUserId: selectedPublicProfile.id,
+        targetUserId: publicProfileResolvedUserId,
         hasMetrics: Boolean(selectedPublicProfileSummary?.metrics),
+        elapsedMs: Math.round(
+          Math.max(0, performance.now() - Number(publicProfileTimingRef.current.summaryStartedAt || performance.now()))
+        ),
       });
     }
   }, [
     isViewingPublicProfile,
-    selectedPublicProfile?.id,
+    publicProfileResolvedUserId,
     selectedPublicProfileSummary,
     selectedPublicProfileSummaryFetching,
   ]);
@@ -2695,29 +2740,35 @@ export default function Profile() {
   useEffect(() => {
     if (!isViewingPublicProfile || !isSelectedPublicProfileSummaryError) return;
     logPublicProfileFlow("query:summary:error", {
-      targetUserId: selectedPublicProfile?.id || "",
+      targetUserId: publicProfileResolvedUserId || "",
       status: Number(selectedPublicProfileSummaryError?.status || 0),
       message: selectedPublicProfileSummaryError?.message || "",
+      elapsedMs: Math.round(
+        Math.max(0, performance.now() - Number(publicProfileTimingRef.current.summaryStartedAt || performance.now()))
+      ),
     });
   }, [
     isSelectedPublicProfileSummaryError,
     isViewingPublicProfile,
-    selectedPublicProfile?.id,
+    publicProfileResolvedUserId,
     selectedPublicProfileSummaryError,
   ]);
 
   useEffect(() => {
-    if (!isViewingPublicProfile || !selectedPublicProfile?.id || selectedPublicSocialStateFetching) return;
+    if (!isViewingPublicProfile || !publicProfileResolvedUserId || selectedPublicSocialStateFetching) return;
     if (selectedPublicSocialState) {
       logPublicProfileFlow("query:social-state:success", {
-        targetUserId: selectedPublicProfile.id,
+        targetUserId: publicProfileResolvedUserId,
         isFollowing: Boolean(selectedPublicSocialState?.isFollowing),
         isLiked: Boolean(selectedPublicSocialState?.isLiked),
+        elapsedMs: Math.round(
+          Math.max(0, performance.now() - Number(publicProfileTimingRef.current.socialStateStartedAt || performance.now()))
+        ),
       });
     }
   }, [
     isViewingPublicProfile,
-    selectedPublicProfile?.id,
+    publicProfileResolvedUserId,
     selectedPublicSocialState,
     selectedPublicSocialStateFetching,
   ]);
@@ -2725,23 +2776,50 @@ export default function Profile() {
   useEffect(() => {
     if (!isViewingPublicProfile || !isSelectedPublicSocialStateError) return;
     logPublicProfileFlow("query:social-state:error", {
-      targetUserId: selectedPublicProfile?.id || "",
+      targetUserId: publicProfileResolvedUserId || "",
       status: Number(selectedPublicSocialStateError?.status || 0),
       message: selectedPublicSocialStateError?.message || "",
+      elapsedMs: Math.round(
+        Math.max(0, performance.now() - Number(publicProfileTimingRef.current.socialStateStartedAt || performance.now()))
+      ),
     });
   }, [
     isSelectedPublicSocialStateError,
     isViewingPublicProfile,
-    selectedPublicProfile?.id,
+    publicProfileResolvedUserId,
     selectedPublicSocialStateError,
   ]);
 
   useEffect(() => {
+    if (!isViewingPublicProfile || !effectivePublicProfile?.id) return;
+    logPublicProfileFlow("resolve:identity", {
+      targetUserId: effectivePublicProfile.id,
+      source:
+        selectedPublicProfile?.id
+          ? "resolved-profile"
+          : selectedPublicProfileId
+            ? "route-user-id-shell"
+            : "handle-resolution",
+      elapsedMs: Math.round(
+        Math.max(0, performance.now() - Number(publicProfileTimingRef.current.loadStartedAt || performance.now()))
+      ),
+    });
+  }, [
+    effectivePublicProfile?.id,
+    isViewingPublicProfile,
+    selectedPublicProfile?.id,
+    selectedPublicProfileId,
+  ]);
+
+  useEffect(() => {
     if (!isViewingPublicProfile || isPublicProfileResolving) return;
-    if (selectedPublicProfile?.id) {
+    if (effectivePublicProfile?.id) {
       logPublicProfileFlow("load:finish", {
         outcome: "success",
-        targetUserId: selectedPublicProfile.id,
+        targetUserId: effectivePublicProfile.id,
+        elapsedMs: Math.round(
+          Math.max(0, performance.now() - Number(publicProfileTimingRef.current.loadStartedAt || performance.now()))
+        ),
       });
       return;
     }
@@ -2761,11 +2839,11 @@ export default function Profile() {
       });
     }
   }, [
+    effectivePublicProfile?.id,
     hasPublicProfileLookupError,
     hasPublicProfileLookupNotFound,
     isPublicProfileResolving,
     isViewingPublicProfile,
-    selectedPublicProfile?.id,
     selectedPublicProfileHandle,
     selectedPublicProfileId,
   ]);
@@ -5010,45 +5088,46 @@ export default function Profile() {
   );
 
   if (isViewingPublicProfile) {
-    const publicState = selectedPublicProfile
+    const publicProfile = effectivePublicProfile;
+    const publicState = publicProfile
       ? isSelectedRealProfile
         ? {
             isFollowing:
-              typeof simState?.[selectedPublicProfile.id]?.isFollowing === "boolean"
-                ? Boolean(simState[selectedPublicProfile.id].isFollowing)
+              typeof simState?.[publicProfile.id]?.isFollowing === "boolean"
+                ? Boolean(simState[publicProfile.id].isFollowing)
                 : Boolean(selectedPublicSocialState?.isFollowing),
             isLiked:
-              typeof simState?.[selectedPublicProfile.id]?.isLiked === "boolean"
-                ? Boolean(simState[selectedPublicProfile.id].isLiked)
+              typeof simState?.[publicProfile.id]?.isLiked === "boolean"
+                ? Boolean(simState[publicProfile.id].isLiked)
                 : Boolean(selectedPublicSocialState?.isLiked),
             following: Number(
-              simState?.[selectedPublicProfile.id]?.following ??
+              simState?.[publicProfile.id]?.following ??
               selectedPublicSocialState?.following ??
-              selectedPublicProfile.following ??
+              publicProfile.following ??
               0
             ),
             followers: Number(
-              simState?.[selectedPublicProfile.id]?.followers ??
+              simState?.[publicProfile.id]?.followers ??
               selectedPublicSocialState?.followers ??
-              selectedPublicProfile.followers ??
+              publicProfile.followers ??
               0
             ),
             likes: Number(
-              simState?.[selectedPublicProfile.id]?.likes ??
+              simState?.[publicProfile.id]?.likes ??
               selectedPublicSocialState?.likes ??
-              selectedPublicProfile.likes ??
+              publicProfile.likes ??
               0
             ),
           }
-        : simState[selectedPublicProfile.id] || {
+        : simState[publicProfile.id] || {
             isFollowing: false,
             isLiked: false,
-            following: selectedPublicProfile.following,
-            followers: selectedPublicProfile.followers,
-            likes: selectedPublicProfile.likes,
+            following: publicProfile.following,
+            followers: publicProfile.followers,
+            likes: publicProfile.likes,
           }
       : null;
-    const publicMetrics = selectedPublicProfile
+    const publicMetrics = publicProfile
       ? {
           totalTickets: Number(
             selectedPublicProfileSummary?.metrics?.totalTickets ??
@@ -5064,14 +5143,14 @@ export default function Profile() {
           xpTotal: Number(
             selectedPublicProfileSummary?.metrics?.xpTotal ??
             selectedPublicProfileSummary?.metrics?.xp_total ??
-            selectedPublicProfile.xpTotal ??
-            selectedPublicProfile.xp_total ??
+            publicProfile.xpTotal ??
+            publicProfile.xp_total ??
             0
           ),
           position: activeCycle
             ? Number(
                 selectedPublicProfileSummary?.currentCompetitionEntry?.position ??
-                  competitionEntryByUserId[selectedPublicProfile.id]?.position ??
+                  competitionEntryByUserId[publicProfile.id]?.position ??
                   0
               )
             : 0,
@@ -5080,7 +5159,7 @@ export default function Profile() {
             selectedPublicProfileSummary?.metrics?.prizeCounts ??
             0
           ),
-          totalApproved: Number(selectedPublicProfileSummary?.metrics?.totalApproved ?? selectedPublicProfile.totalApproved ?? 0),
+          totalApproved: Number(selectedPublicProfileSummary?.metrics?.totalApproved ?? publicProfile.totalApproved ?? 0),
           totalParticipations: Number(
             selectedPublicProfileSummary?.metrics?.totalParticipations ??
             0
@@ -5089,13 +5168,13 @@ export default function Profile() {
             selectedPublicProfileSummary?.metrics?.liveParticipations ??
             0
           ),
-          totalFollowers: Number(publicState?.followers ?? selectedPublicProfile.followers ?? 0),
+          totalFollowers: Number(publicState?.followers ?? publicProfile.followers ?? 0),
           progress: Math.min(
             100,
             Math.round(
               ((Number(
                 selectedPublicProfileSummary?.metrics?.totalParticipations ??
-                selectedPublicProfile.participations ??
+                publicProfile.participations ??
                 0
               )) / Math.max(1, Number(pointsRules.progress_target_participations || 25))) * 100
             )
@@ -5118,7 +5197,7 @@ export default function Profile() {
     const publicLevelProgress = getLevelProgress(publicMetrics?.xpTotal || 0);
     const publicCompetitionEntry =
       selectedPublicProfileSummary?.currentCompetitionEntry ||
-      (selectedPublicProfile?.id && competitionEntryByUserId[selectedPublicProfile.id]) ||
+      (publicProfile?.id && competitionEntryByUserId[publicProfile.id]) ||
       {
         points: publicMetrics?.points || 0,
         position: publicMetrics?.position || 0,
@@ -5141,7 +5220,7 @@ export default function Profile() {
           Voltar ao meu perfil
         </Button>
 
-        {selectedPublicProfile ? (
+        {publicProfile ? (
           <>
           <Card className="relative overflow-hidden border-slate-800 bg-gradient-to-br from-cyan-950/70 via-slate-900 to-slate-900 p-4">
             <div
@@ -5158,7 +5237,7 @@ export default function Profile() {
                 {selectedPublicProfile.avatarSrc ? (
                   <img
                     src={selectedPublicProfile.avatarSrc}
-                    alt={selectedPublicProfile.nick}
+                    alt={publicProfile.nick}
                     className="h-full w-full object-cover"
                     onError={(event) => {
                       event.currentTarget.style.display = "none";
@@ -5170,15 +5249,15 @@ export default function Profile() {
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-2xl text-white">
-                    {getProfileAvatarFallback(selectedPublicProfile, "AV")}
+                    {getProfileAvatarFallback(publicProfile, "AV")}
                   </div>
                 )}
                 <div className="hidden h-full w-full items-center justify-center text-2xl text-white">
-                  {getProfileAvatarFallback(selectedPublicProfile, "AV")}
+                  {getProfileAvatarFallback(publicProfile, "AV")}
                 </div>
               </button>
-              <p className="mt-2 text-xl font-bold text-white">{selectedPublicProfile.nick}</p>
-              <p className="text-sm text-cyan-300">@{selectedPublicProfile.handle}</p>
+              <p className="mt-2 text-xl font-bold text-white">{publicProfile.nick}</p>
+              <p className="text-sm text-cyan-300">@{publicProfile.handle}</p>
               {publicAchievements.length ? (
                 <div className="relative mt-2 flex w-full justify-center">
                   <div className="flex gap-2">
@@ -5208,8 +5287,8 @@ export default function Profile() {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={isSelectedRealProfile ? toggleAuthoritativePublicFollow : () => toggleSimFollow(selectedPublicProfile.id)}
-                  disabled={isSelectedRealProfile && Boolean(followPendingById[selectedPublicProfile.id])}
+                  onClick={isSelectedRealProfile ? toggleAuthoritativePublicFollow : () => toggleSimFollow(publicProfile.id)}
+                  disabled={isSelectedRealProfile && Boolean(followPendingById[publicProfile.id])}
                   className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
                     publicState?.isFollowing
                       ? "bg-cyan-500/25 text-cyan-100 ring-1 ring-cyan-400/40"
@@ -5220,8 +5299,8 @@ export default function Profile() {
                 </button>
                 <button
                   type="button"
-                  onClick={isSelectedRealProfile ? toggleAuthoritativePublicLike : () => toggleSimLike(selectedPublicProfile.id)}
-                  disabled={isSelectedRealProfile && Boolean(likePendingById[selectedPublicProfile.id])}
+                  onClick={isSelectedRealProfile ? toggleAuthoritativePublicLike : () => toggleSimLike(publicProfile.id)}
+                  disabled={isSelectedRealProfile && Boolean(likePendingById[publicProfile.id])}
                   className={`rounded-xl px-3 py-2 text-xs font-bold text-white transition ${
                     publicState?.isLiked ? "bg-pink-500 hover:bg-pink-400" : "bg-pink-600/60 hover:bg-pink-500/80"
                   }`}
