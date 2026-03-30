@@ -1106,12 +1106,15 @@ router.post("/open", requireAuth, async (req, res) => {
   const bonusGrants = await listDailyChestBonusGrantsByUserDay(req.auth.sub, windowInfo.chestDayKey);
   const bonusSlots = bonusGrants.reduce((sum, entry) => sum + Math.max(0, Number(entry.slots_awarded || 0)), 0);
   const unlocked = isWithinSchedule(settings, windowInfo.now);
-  const accessGate = await resolveAccessGate({
+  const resolvedAccessGate = await resolveAccessGate({
     userId: req.auth.sub,
     settings,
     windowInfo,
     scheduleUnlocked: unlocked,
   });
+  const accessGate = FORCE_DAILY_CHEST_FREE_ACCESS
+    ? { ...resolvedAccessGate, required: false, unlocked: true }
+    : resolvedAccessGate;
   const slotSummary = summarizeSlots({
     openings,
     baseSlots: Math.max(0, Number(settings.baseDailyChests || 0)),
