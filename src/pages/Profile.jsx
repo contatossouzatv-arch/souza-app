@@ -159,6 +159,25 @@ const DEFAULT_DAILY_CHECKIN_CONFIG = {
 
 function profileDebugLog() {}
 
+function normalizeSocialProfilesPayload(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.items)) return payload.items;
+  return [];
+}
+
+function patchSocialProfilesPayload(payload, applyPatch) {
+  if (Array.isArray(payload)) {
+    return payload.map(applyPatch);
+  }
+  if (payload && Array.isArray(payload.items)) {
+    return {
+      ...payload,
+      items: payload.items.map(applyPatch),
+    };
+  }
+  return payload;
+}
+
 function formatElapsedSince(value) {
   if (!value) return "agora";
   const elapsedMs = Math.max(0, Date.now() - new Date(value).getTime());
@@ -1468,7 +1487,7 @@ export default function Profile() {
     retry: false,
   });
 
-  const { data: myFollowingProfiles = [], isLoading: loadingFollowingProfiles } = useQuery({
+  const { data: myFollowingProfilesResponse = [], isLoading: loadingFollowingProfiles } = useQuery({
     queryKey: ["social-following-list", user?.id],
     queryFn: () => base44.social.following(),
     enabled: !!user && isSocialListOpen,
@@ -1480,7 +1499,7 @@ export default function Profile() {
     retry: false,
   });
 
-  const { data: myFollowerProfiles = [], isLoading: loadingFollowerProfiles } = useQuery({
+  const { data: myFollowerProfilesResponse = [], isLoading: loadingFollowerProfiles } = useQuery({
     queryKey: ["social-follower-list", user?.id],
     queryFn: () => base44.social.followers(),
     enabled: !!user && isSocialListOpen,
@@ -1491,6 +1510,14 @@ export default function Profile() {
     refetchOnReconnect: false,
     retry: false,
   });
+  const myFollowingProfiles = useMemo(
+    () => normalizeSocialProfilesPayload(myFollowingProfilesResponse),
+    [myFollowingProfilesResponse]
+  );
+  const myFollowerProfiles = useMemo(
+    () => normalizeSocialProfilesPayload(myFollowerProfilesResponse),
+    [myFollowerProfilesResponse]
+  );
 
   const { data: dailyCheckInState } = useQuery({
     queryKey: ["daily-checkin-state", user?.id],
@@ -2955,10 +2982,10 @@ export default function Profile() {
       };
 
       queryClient.setQueryData(["social-following-list", user.id], (current) =>
-        Array.isArray(current) ? current.map(applyPatch) : current
+        patchSocialProfilesPayload(current, applyPatch)
       );
       queryClient.setQueryData(["social-follower-list", user.id], (current) =>
-        Array.isArray(current) ? current.map(applyPatch) : current
+        patchSocialProfilesPayload(current, applyPatch)
       );
     },
     [queryClient, user?.id]

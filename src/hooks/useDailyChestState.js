@@ -3,6 +3,11 @@ import { base44 } from "@/api/base44Client";
 
 export function useDailyChestState() {
   const queryClient = useQueryClient();
+  const syncDailyChestState = async (data) => {
+    queryClient.setQueryData(["daily-chest-state"], data);
+    await queryClient.invalidateQueries({ queryKey: ["daily-chest-state"] });
+    await queryClient.refetchQueries({ queryKey: ["daily-chest-state"], type: "active" });
+  };
 
   const stateQuery = useQuery({
     queryKey: ["daily-chest-state"],
@@ -13,8 +18,8 @@ export function useDailyChestState() {
 
   const openMutation = useMutation({
     mutationFn: (slotType) => base44.dailyChest.open(slotType),
-    onSuccess: (data) => {
-      queryClient.setQueryData(["daily-chest-state"], data);
+    onSuccess: async (data) => {
+      await syncDailyChestState(data);
       queryClient.invalidateQueries({ queryKey: ["profile-daily-chest-xp"] });
       queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
       queryClient.invalidateQueries({ queryKey: ["profile-competition-board-authoritative"] });
@@ -24,8 +29,8 @@ export function useDailyChestState() {
 
   const unlockMutation = useMutation({
     mutationFn: (code) => base44.dailyChest.unlock(code),
-    onSuccess: (data) => {
-      queryClient.setQueryData(["daily-chest-state"], data);
+    onSuccess: async (data) => {
+      await syncDailyChestState(data);
       queryClient.invalidateQueries({ queryKey: ["profile-daily-chest-xp"] });
       queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
       queryClient.invalidateQueries({ queryKey: ["profile-competition-board-authoritative"] });
@@ -35,8 +40,8 @@ export function useDailyChestState() {
 
   const claimMutation = useMutation({
     mutationFn: () => base44.dailyChest.claim(),
-    onSuccess: (data) => {
-      queryClient.setQueryData(["daily-chest-state"], data);
+    onSuccess: async (data) => {
+      await syncDailyChestState(data);
       queryClient.invalidateQueries({ queryKey: ["points-me"] });
       queryClient.invalidateQueries({ queryKey: ["user-prize-gallery"] });
       queryClient.invalidateQueries({ queryKey: ["profile-competition-bonus-events"] });
