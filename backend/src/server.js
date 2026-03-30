@@ -129,7 +129,7 @@ async function loadRuntimeModules() {
 }
 
 async function bootstrap() {
-  const port = Number(process.env.PORT || 8080);
+  const port = process.env.PORT || 8080;
   const host = "0.0.0.0";
   const startedAt = new Date().toISOString();
 
@@ -192,11 +192,20 @@ async function bootstrap() {
     degradedMode: Boolean(startupError),
   });
 
-  server.listen(port, host, () => {
-    logStartup("server:listen:ready", {
+  server.on("error", (error) => {
+    logStartupError("server:error", error, {
       port,
       host,
       degradedMode: Boolean(startupError),
+    });
+  });
+
+  server.listen(port, host, () => {
+    console.log("[startup] server ready", {
+      port,
+      host,
+      degradedMode: Boolean(startupError),
+      buildInfo,
     });
   });
 
@@ -213,5 +222,4 @@ async function bootstrap() {
 
 bootstrap().catch((error) => {
   logStartupError("bootstrap:failed", error);
-  process.exit(1);
 });
