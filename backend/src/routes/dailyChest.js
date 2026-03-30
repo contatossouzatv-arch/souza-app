@@ -369,6 +369,16 @@ function summarizeSlots({ openings = [], baseSlots = 0, bonusSlots = 0, baseUnlo
 }
 
 async function resolveAccessGate({ userId, settings, windowInfo, scheduleUnlocked }) {
+  if (FORCE_DAILY_CHEST_FREE_ACCESS) {
+    return {
+      required: false,
+      unlocked: true,
+      codeAvailable: false,
+      currentDayKey: windowInfo.chestDayKey,
+      groupLink: settings.accessGroupLink || "",
+    };
+  }
+
   const required =
     Boolean(settings.accessCodeRequired) &&
     scheduleUnlocked &&
@@ -1150,7 +1160,7 @@ router.post("/open", requireAuth, async (req, res) => {
     );
   }
 
-  if (slotType === "base" && !accessGate.unlocked) {
+  if (slotType === "base" && !accessGate.unlocked && !FORCE_DAILY_CHEST_FREE_ACCESS) {
     return res.status(409).json({ error: "Liberacao diaria pendente. Informe o codigo para liberar o bau do dia." });
   }
 
