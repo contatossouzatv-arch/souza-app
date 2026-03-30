@@ -21,6 +21,7 @@ import {
   updateEntity,
 } from "../db/index.js";
 import { deleteCacheByPrefix, deleteCacheKey, getOrComputeCacheJson } from "../lib/cache.js";
+import { upsertPrizeGalleryItem } from "../services/prizeGalleryService.js";
 
 const router = Router();
 const DAILY_CHEST_SETTINGS_TTL_MS = 15000;
@@ -493,26 +494,6 @@ async function tryReserveRewardForDay(client, reward, chestDayKey) {
     return false;
   }
 
-  const lockedReward = await findEntityRecordByNameAndIdForUpdate(client, "DailyChestRewardConfig", reward.id);
-  if (lockedReward) {
-    const lockedRewardData =
-      lockedReward?.data && typeof lockedReward.data === "object"
-        ? { ...lockedReward.data }
-        : {};
-    const nextClaimed = Math.max(0, Number(lockedRewardData.claimed_count || 0)) + 1;
-    const merged = {
-      ...lockedRewardData,
-      claimed_count: nextClaimed,
-      updated_date: new Date().toISOString(),
-    };
-    await client.query(
-      `UPDATE entity_records
-       SET data = $1::jsonb, updated_at = NOW()
-       WHERE entity_name = 'DailyChestRewardConfig' AND id = $2`,
-      [JSON.stringify(merged), String(reward.id)]
-    );
-  }
-
   return true;
 }
 
@@ -688,6 +669,7 @@ async function invalidateDailyChestReadCache({ userId = "", chestDayKey = "" } =
     chestDayKey ? deleteCacheKey(`daily-chest:state:${String(userId || "")}:${String(chestDayKey || "")}`) : Promise.resolve(),
     chestDayKey ? deleteCacheKey(`daily-chest:reward-pool:${String(chestDayKey || "")}`) : Promise.resolve(),
     userId ? deleteCacheByPrefix(`daily-chest:state:${String(userId || "")}:`) : Promise.resolve(),
+    userId ? deleteCacheByPrefix(`gamification:profile-prize-gallery:${String(userId || "")}:`) : Promise.resolve(),
   ]);
 }
 
@@ -1231,6 +1213,8 @@ router.post("/open", requireAuth, async (req, res) => {
   );
 
   runDailyChestBackgroundTask("open-followup", async () => {
+    await incrementRewardClaimCount(selectedReward?.id || "");
+
     const xpGrant = await awardChestXp({
       userId: req.auth.sub,
       openingId: opening.id,
@@ -1266,29 +1250,71 @@ router.post("/claim", requireAuth, async (req, res) => {
     return res.json(state);
   }
 
-  const grantResult = await applyChestGrant({
-    userId: req.auth.sub,
-    chestDayKey: windowInfo.chestDayKey,
-    rewardSnapshot: opening.reward_snapshot,
-    openingId: opening.id,
-  });
-  const enrichedGrantResult = {
-    ...grantResult,
-    auditId: "",
+  if (opening.status === "claimed_pending") {
+    const state = await resolveChestStateForUser(req.auth.sub);
+    return res.json({
+      ...state,
+      state: "claimed",
+      opening: {
+        id: opening.id,
+        slotIndex: opening.slot_index,
+        slotSource: opening.slot_source || "base",
+        status: opening.status,
+        openedAt: opening.opened_at,
+        claimedAt: opening.claimed_at,
+        rewardSnapshot: opening.reward_snapshot || state.rewardPreview,
+        grantResult: opening.grant_result || {},
+        xpAwarded: Number(opening.xp_awarded || 0),
+      },
+    });
+  }
+
+  const pendingGrantResult = {
+    requestId: `daily-chest:${opening.id}:claim:${windowInfo.chestDayKey}`,
+    applyStatus: "processing",
     validationCode: String(opening.id || ""),
   };
-  const nextStatus = grantResult.applyStatus === "applied" ? "claimed" : "claimed_pending";
-  const updatedOpening = await markDailyChestOpeningClaimed({
+
+  const pendingOpening = await markDailyChestOpeningClaimed({
     openingId: opening.id,
-    grantResult: enrichedGrantResult,
-    status: nextStatus,
+    grantResult: pendingGrantResult,
+    status: "claimed_pending",
+  });
+  await createPrizeGalleryItem({
+    userId: req.auth.sub,
+    chestDayKey: windowInfo.chestDayKey,
+    opening: pendingOpening,
+    grantResult: pendingGrantResult,
+  });
+  await invalidateDailyChestReadCache({
+    userId: req.auth.sub,
+    chestDayKey: windowInfo.chestDayKey,
   });
   const state = await resolveChestStateForUser(req.auth.sub);
 
   runDailyChestBackgroundTask("claim-followup", async () => {
+    const grantResult = await applyChestGrant({
+      userId: req.auth.sub,
+      chestDayKey: windowInfo.chestDayKey,
+      rewardSnapshot: opening.reward_snapshot,
+      openingId: opening.id,
+    });
+
+    const enrichedGrantResult = {
+      ...grantResult,
+      auditId: "",
+      validationCode: String(opening.id || ""),
+    };
+
+    let finalizedOpening = await markDailyChestOpeningClaimed({
+      openingId: opening.id,
+      grantResult: enrichedGrantResult,
+      status: grantResult.applyStatus === "applied" ? "claimed" : "claimed_pending",
+    });
+
     const auditRecord = await createDailyChestAuditRecord({
       userId: req.auth.sub,
-      opening: updatedOpening,
+      opening: finalizedOpening,
       grantResult,
       chestDayKey: windowInfo.chestDayKey,
     });
@@ -1301,22 +1327,12 @@ router.post("/claim", requireAuth, async (req, res) => {
       : enrichedGrantResult;
 
     if (auditRecord?.id) {
-      await markDailyChestOpeningClaimed({
-        openingId: updatedOpening.id,
+      finalizedOpening = await markDailyChestOpeningClaimed({
+        openingId: finalizedOpening.id,
         grantResult: finalizedGrantResult,
-        status: updatedOpening.status,
+        status: finalizedOpening.status,
       });
     }
-
-    await createPrizeGalleryItem({
-      userId: req.auth.sub,
-      chestDayKey: windowInfo.chestDayKey,
-      opening: {
-        ...updatedOpening,
-        grant_result: finalizedGrantResult,
-      },
-      grantResult: finalizedGrantResult,
-    });
 
     await invalidateDailyChestReadCache({
       userId: req.auth.sub,
@@ -1326,16 +1342,17 @@ router.post("/claim", requireAuth, async (req, res) => {
 
   return res.json({
     ...state,
+    state: "claimed",
     opening: {
-      id: updatedOpening.id,
-      slotIndex: updatedOpening.slot_index,
-      slotSource: updatedOpening.slot_source || "base",
-      status: updatedOpening.status,
-      openedAt: updatedOpening.opened_at,
-      claimedAt: updatedOpening.claimed_at,
-      rewardSnapshot: updatedOpening.reward_snapshot || state.rewardPreview,
-      grantResult: updatedOpening.grant_result || {},
-      xpAwarded: Number(updatedOpening.xp_awarded || 0),
+      id: pendingOpening.id,
+      slotIndex: pendingOpening.slot_index,
+      slotSource: pendingOpening.slot_source || "base",
+      status: pendingOpening.status,
+      openedAt: pendingOpening.opened_at,
+      claimedAt: pendingOpening.claimed_at,
+      rewardSnapshot: pendingOpening.reward_snapshot || state.rewardPreview,
+      grantResult: pendingOpening.grant_result || {},
+      xpAwarded: Number(pendingOpening.xp_awarded || 0),
     },
   });
 });
