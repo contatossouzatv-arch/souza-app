@@ -40,6 +40,7 @@ function assertRequiredEnv(condition, message) {
       message,
       nodeEnv,
     });
+    return;
   }
 }
 
