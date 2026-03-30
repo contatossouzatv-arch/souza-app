@@ -3,13 +3,73 @@ import { createAdapter } from "@socket.io/redis-adapter";
 import Redis from "ioredis";
 import bcrypt from "bcryptjs";
 import { Server } from "socket.io";
-import { env, isAllowedOrigin } from "./config/env.js";
-import { createApp } from "./app.js";
-import { ensureDb, ensureDevAdmin, seedDefaults } from "./db/index.js";
 import { getRuntimeBuildInfo } from "./lib/runtimeBuildInfo.js";
 
-async function bootstrapRuntime(io) {
-  console.log("[startup] runtime-bootstrap:start", {
+const buildInfo = getRuntimeBuildInfo();
+
+function logStartup(message, details = {}) {
+  console.log(`[startup] ${message}`, {
+    ...details,
+    buildInfo,
+  });
+}
+
+function logStartupError(message, error, details = {}) {
+  console.error(`[startup] ${message}`, {
+    ...details,
+    buildInfo,
+    message: error?.message || "Unknown startup error",
+    stack: error?.stack || null,
+  });
+}
+
+process.on("uncaughtException", (error) => {
+  logStartupError("uncaught-exception", error);
+});
+
+process.on("unhandledRejection", (reason) => {
+  logStartupError("unhandled-rejection", reason instanceof Error ? reason : new Error(String(reason || "Unknown promise rejection")));
+});
+
+function createFallbackApp(error, startedAt) {
+  const startupError = {
+    message: error?.message || "Startup failed before Express app initialization",
+    stack: error?.stack || null,
+  };
+
+  return (req, res) => {
+    const path = String(req.url || "").split("?")[0];
+    const payload = {
+      ok: false,
+      degraded: true,
+      service: "app-souza-cass-backend",
+      timestamp: new Date().toISOString(),
+      startedAt,
+      build: buildInfo,
+      startupError,
+    };
+
+    if (path === "/health" || path === "/version") {
+      res.writeHead(503, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+      res.end(JSON.stringify(payload));
+      return;
+    }
+
+    res.writeHead(503, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+    });
+    res.end(JSON.stringify(payload));
+  };
+}
+
+async function bootstrapRuntime(io, runtime) {
+  const { env, ensureDb, ensureDevAdmin, seedDefaults } = runtime;
+
+  logStartup("runtime-bootstrap:start", {
     nodeEnv: env.nodeEnv,
     hasRedis: Boolean(env.redisUrl),
     hasDatabaseUrl: Boolean(env.databaseUrl),
@@ -39,77 +99,119 @@ async function bootstrapRuntime(io) {
       io.adapter(createAdapter(pubClient, subClient));
       socketAdapterMode = "redis";
     } catch (error) {
-      console.error("[startup] redis adapter init failed", {
-        message: error?.message || "Unknown Redis startup error",
-        stack: error?.stack || null,
+      logStartupError("redis-adapter:init-failed", error, {
         nodeEnv: env.nodeEnv,
       });
-      if (env.nodeEnv === "production") {
-        throw new Error("Redis adapter initialization failed in production");
-      }
-      console.warn("[startup] falling back to memory Socket.IO adapter outside production");
+      console.warn("[startup] redis-adapter:fallback-memory", { buildInfo });
     }
   }
-  console.log(`Socket.IO adapter: ${socketAdapterMode}`);
-  console.log("[startup] runtime-bootstrap:ready");
+
+  logStartup("runtime-bootstrap:ready", {
+    socketAdapterMode,
+  });
+}
+
+async function loadRuntimeModules() {
+  const [{ env, isAllowedOrigin }, { createApp }, db] = await Promise.all([
+    import("./config/env.js"),
+    import("./app.js"),
+    import("./db/index.js"),
+  ]);
+
+  return {
+    env,
+    isAllowedOrigin,
+    createApp,
+    ensureDb: db.ensureDb,
+    ensureDevAdmin: db.ensureDevAdmin,
+    seedDefaults: db.seedDefaults,
+  };
 }
 
 async function bootstrap() {
   const port = Number(process.env.PORT || 8080);
   const host = "0.0.0.0";
-  const buildInfo = getRuntimeBuildInfo();
+  const startedAt = new Date().toISOString();
 
-  console.log("[startup] bootstrap:start", {
-    nodeEnv: env.nodeEnv,
+  logStartup("bootstrap:start", {
     port,
     host,
-    hasRedis: Boolean(env.redisUrl),
-    hasDatabaseUrl: Boolean(env.databaseUrl),
-    buildInfo,
+    nodeEnv: process.env.NODE_ENV || "development",
+    hasRedis: Boolean(process.env.REDIS_URL),
+    hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
   });
 
-  const appPlaceholder = http.createServer();
-  const io = new Server(appPlaceholder, {
+  let runtime = null;
+  let app = null;
+  let startupError = null;
+
+  try {
+    logStartup("bootstrap:load-runtime-modules:start");
+    runtime = await loadRuntimeModules();
+    logStartup("bootstrap:load-runtime-modules:ready", {
+      nodeEnv: runtime.env.nodeEnv,
+    });
+  } catch (error) {
+    startupError = error;
+    logStartupError("bootstrap:load-runtime-modules:failed", error);
+  }
+
+  const placeholderServer = http.createServer();
+  const io = new Server(placeholderServer, {
     cors: {
       origin(origin, callback) {
-        if (isAllowedOrigin(origin)) return callback(null, true);
+        if (!runtime?.isAllowedOrigin) return callback(null, true);
+        if (runtime.isAllowedOrigin(origin)) return callback(null, true);
         return callback(new Error("Not allowed by CORS"));
       },
       credentials: true,
     },
   });
 
-  const app = createApp(io);
-  const server = http.createServer(app);
+  if (!startupError && runtime) {
+    try {
+      app = runtime.createApp(io);
+    } catch (error) {
+      startupError = error;
+      logStartupError("bootstrap:create-app:failed", error);
+      app = null;
+    }
+  }
+
+  const requestHandler = app || createFallbackApp(startupError, startedAt);
+  const server = http.createServer(requestHandler);
   io.attach(server);
 
   io.on("connection", (socket) => {
-    socket.emit("server:ready", { ok: true, now: new Date().toISOString() });
+    socket.emit("server:ready", { ok: true, now: new Date().toISOString(), build: buildInfo });
   });
 
-  console.log("[startup] server:listen", {
+  logStartup("server:listen:start", {
     port,
     host,
+    degradedMode: Boolean(startupError),
   });
+
   server.listen(port, host, () => {
-    console.log("[startup] server:ready", {
+    logStartup("server:listen:ready", {
       port,
       host,
+      degradedMode: Boolean(startupError),
     });
   });
 
-  bootstrapRuntime(io).catch((error) => {
-    console.error("[startup] runtime-bootstrap:failed", {
-      message: error?.message || "Unknown startup error",
-      stack: error?.stack || null,
+  if (runtime && !startupError) {
+    bootstrapRuntime(io, runtime).catch((error) => {
+      logStartupError("runtime-bootstrap:failed", error);
     });
-  });
+  } else if (startupError) {
+    logStartup("runtime-bootstrap:skipped", {
+      reason: "startup_error",
+    });
+  }
 }
 
 bootstrap().catch((error) => {
-  console.error("[startup] bootstrap:failed", {
-    message: error?.message || "Unknown startup error",
-    stack: error?.stack || null,
-  });
+  logStartupError("bootstrap:failed", error);
   process.exit(1);
 });
