@@ -159,6 +159,10 @@ const DEFAULT_DAILY_CHECKIN_CONFIG = {
 
 function profileDebugLog() {}
 
+function logPublicProfileFlow(stage, payload = {}) {
+  console.info("[public-profile]", stage, payload);
+}
+
 function normalizeSocialProfilesPayload(payload) {
   if (Array.isArray(payload)) return payload;
   if (payload && Array.isArray(payload.items)) return payload.items;
@@ -1948,14 +1952,21 @@ export default function Profile() {
     isFetching: publicProfileBasicsFetching,
     isFetched: publicProfileBasicsFetched,
     error: publicProfileBasicsError,
+    refetch: refetchPublicProfileBasics,
   } = useQuery({
     queryKey: ["public-profile-basics", publicProfileBasicIds.join(","), String(selectedPublicProfileHandle || "").trim().toLowerCase()],
-    queryFn: ({ signal }) =>
-      base44.profile.publicBasics(
+    queryFn: ({ signal }) => {
+      logPublicProfileFlow("query:basics:start", {
+        targetUserId: selectedPublicProfileId || "",
+        targetHandle: selectedPublicProfileHandle || "",
+        ids: publicProfileBasicIds,
+      });
+      return base44.profile.publicBasics(
         publicProfileBasicIds,
         selectedPublicProfileHandle ? [selectedPublicProfileHandle] : [],
         { signal }
-      ),
+      );
+    },
     enabled:
       isViewingPublicProfile &&
       (publicProfileBasicIds.length > 0 || Boolean(selectedPublicProfileHandle)) &&
@@ -1996,11 +2007,9 @@ export default function Profile() {
     );
   const isPublicProfileResolving =
     isViewingPublicProfile &&
-    (isLoadingAuth ||
-      publicProfileBasicsLoading ||
+    (publicProfileBasicsLoading ||
       publicProfileBasicsFetching ||
-      (!hasResolvedPublicProfileCandidate && !publicProfileBasicsError && !publicProfileBasicsFetched) ||
-      (!selectedPublicProfileId && Boolean(selectedPublicProfileHandle) && !simulatedProfiles.length));
+      (!hasResolvedPublicProfileCandidate && !publicProfileBasicsError && !publicProfileBasicsFetched));
   const publicProfileLookupStatus = Number(publicProfileBasicsError?.status || 0);
   const hasPublicProfileLookupError =
     isViewingPublicProfile &&
@@ -2015,6 +2024,22 @@ export default function Profile() {
       publicProfileLookupStatus === 404 ||
       (!(publicProfileBasicsPayload?.items || []).length && !publicProfileBasicsError)
     );
+  const handleRetryPublicProfileLoad = React.useCallback(() => {
+    logPublicProfileFlow("load:retry", {
+      targetUserId: selectedPublicProfileId || "",
+      targetHandle: selectedPublicProfileHandle || "",
+    });
+    void Promise.allSettled([
+      refetchPublicProfileBasics(),
+      selectedPublicProfile?.id ? refetchSelectedPublicProfileSummary() : Promise.resolve(),
+    ]);
+  }, [
+    refetchPublicProfileBasics,
+    refetchSelectedPublicProfileSummary,
+    selectedPublicProfile?.id,
+    selectedPublicProfileHandle,
+    selectedPublicProfileId,
+  ]);
   const engagedProfilesWithSummary = useMemo(() => {
     return engagedProfiles
       .map((profile) => {
@@ -2548,9 +2573,18 @@ export default function Profile() {
     [profileNotifications]
   );
 
-  const { data: selectedPublicSocialState } = useQuery({
+  const {
+    data: selectedPublicSocialState,
+    isFetching: selectedPublicSocialStateFetching,
+    isError: isSelectedPublicSocialStateError,
+    error: selectedPublicSocialStateError,
+  } = useQuery({
     queryKey: ["social-target-state", user?.id, selectedPublicProfile?.id],
     queryFn: ({ signal }) => {
+      logPublicProfileFlow("query:social-state:start", {
+        viewerUserId: user?.id || "",
+        targetUserId: selectedPublicProfile?.id || "",
+      });
       profileDebugLog("query:social-target-state", {
         viewerUserId: user?.id || "",
         targetUserId: selectedPublicProfile?.id || "",
@@ -2569,9 +2603,18 @@ export default function Profile() {
     retry: false,
   });
 
-  const { data: selectedPublicProfileSummary } = useQuery({
+  const {
+    data: selectedPublicProfileSummary,
+    isFetching: selectedPublicProfileSummaryFetching,
+    isError: isSelectedPublicProfileSummaryError,
+    error: selectedPublicProfileSummaryError,
+    refetch: refetchSelectedPublicProfileSummary,
+  } = useQuery({
     queryKey: ["public-profile-summary", selectedPublicProfile?.id],
     queryFn: ({ signal }) => {
+      logPublicProfileFlow("query:summary:start", {
+        targetUserId: selectedPublicProfile?.id || "",
+      });
       profileDebugLog("query:public-profile-summary", {
         targetUserId: selectedPublicProfile?.id || "",
         loggedUserId: user?.id || "",
@@ -2586,6 +2629,146 @@ export default function Profile() {
     refetchOnWindowFocus: false,
     retry: false,
   });
+
+  useEffect(() => {
+    if (!isViewingPublicProfile) return;
+    logPublicProfileFlow("load:start", {
+      pathname: location.pathname,
+      search: location.search,
+      targetUserId: selectedPublicProfileId || "",
+      targetHandle: selectedPublicProfileHandle || "",
+      hasResolvedAuthBootstrap,
+      isLoadingAuth,
+    });
+  }, [
+    hasResolvedAuthBootstrap,
+    isLoadingAuth,
+    isViewingPublicProfile,
+    location.pathname,
+    location.search,
+    selectedPublicProfileHandle,
+    selectedPublicProfileId,
+  ]);
+
+  useEffect(() => {
+    if (!isViewingPublicProfile || !publicProfileBasicsFetched) return;
+    logPublicProfileFlow("query:basics:success", {
+      targetUserId: selectedPublicProfileId || "",
+      targetHandle: selectedPublicProfileHandle || "",
+      items: Array.isArray(publicProfileBasicsPayload?.items) ? publicProfileBasicsPayload.items.length : 0,
+      hasResolvedCandidate: hasResolvedPublicProfileCandidate,
+    });
+  }, [
+    hasResolvedPublicProfileCandidate,
+    isViewingPublicProfile,
+    publicProfileBasicsFetched,
+    publicProfileBasicsPayload?.items,
+    selectedPublicProfileHandle,
+    selectedPublicProfileId,
+  ]);
+
+  useEffect(() => {
+    if (!isViewingPublicProfile || !publicProfileBasicsError) return;
+    logPublicProfileFlow("query:basics:error", {
+      targetUserId: selectedPublicProfileId || "",
+      targetHandle: selectedPublicProfileHandle || "",
+      status: Number(publicProfileBasicsError?.status || 0),
+      message: publicProfileBasicsError?.message || "",
+    });
+  }, [isViewingPublicProfile, publicProfileBasicsError, selectedPublicProfileHandle, selectedPublicProfileId]);
+
+  useEffect(() => {
+    if (!isViewingPublicProfile || !selectedPublicProfile?.id || selectedPublicProfileSummaryFetching) return;
+    if (selectedPublicProfileSummary) {
+      logPublicProfileFlow("query:summary:success", {
+        targetUserId: selectedPublicProfile.id,
+        hasMetrics: Boolean(selectedPublicProfileSummary?.metrics),
+      });
+    }
+  }, [
+    isViewingPublicProfile,
+    selectedPublicProfile?.id,
+    selectedPublicProfileSummary,
+    selectedPublicProfileSummaryFetching,
+  ]);
+
+  useEffect(() => {
+    if (!isViewingPublicProfile || !isSelectedPublicProfileSummaryError) return;
+    logPublicProfileFlow("query:summary:error", {
+      targetUserId: selectedPublicProfile?.id || "",
+      status: Number(selectedPublicProfileSummaryError?.status || 0),
+      message: selectedPublicProfileSummaryError?.message || "",
+    });
+  }, [
+    isSelectedPublicProfileSummaryError,
+    isViewingPublicProfile,
+    selectedPublicProfile?.id,
+    selectedPublicProfileSummaryError,
+  ]);
+
+  useEffect(() => {
+    if (!isViewingPublicProfile || !selectedPublicProfile?.id || selectedPublicSocialStateFetching) return;
+    if (selectedPublicSocialState) {
+      logPublicProfileFlow("query:social-state:success", {
+        targetUserId: selectedPublicProfile.id,
+        isFollowing: Boolean(selectedPublicSocialState?.isFollowing),
+        isLiked: Boolean(selectedPublicSocialState?.isLiked),
+      });
+    }
+  }, [
+    isViewingPublicProfile,
+    selectedPublicProfile?.id,
+    selectedPublicSocialState,
+    selectedPublicSocialStateFetching,
+  ]);
+
+  useEffect(() => {
+    if (!isViewingPublicProfile || !isSelectedPublicSocialStateError) return;
+    logPublicProfileFlow("query:social-state:error", {
+      targetUserId: selectedPublicProfile?.id || "",
+      status: Number(selectedPublicSocialStateError?.status || 0),
+      message: selectedPublicSocialStateError?.message || "",
+    });
+  }, [
+    isSelectedPublicSocialStateError,
+    isViewingPublicProfile,
+    selectedPublicProfile?.id,
+    selectedPublicSocialStateError,
+  ]);
+
+  useEffect(() => {
+    if (!isViewingPublicProfile || isPublicProfileResolving) return;
+    if (selectedPublicProfile?.id) {
+      logPublicProfileFlow("load:finish", {
+        outcome: "success",
+        targetUserId: selectedPublicProfile.id,
+      });
+      return;
+    }
+    if (hasPublicProfileLookupError) {
+      logPublicProfileFlow("load:finish", {
+        outcome: "error",
+        targetUserId: selectedPublicProfileId || "",
+        targetHandle: selectedPublicProfileHandle || "",
+      });
+      return;
+    }
+    if (hasPublicProfileLookupNotFound) {
+      logPublicProfileFlow("load:finish", {
+        outcome: "not_found",
+        targetUserId: selectedPublicProfileId || "",
+        targetHandle: selectedPublicProfileHandle || "",
+      });
+    }
+  }, [
+    hasPublicProfileLookupError,
+    hasPublicProfileLookupNotFound,
+    isPublicProfileResolving,
+    isViewingPublicProfile,
+    selectedPublicProfile?.id,
+    selectedPublicProfileHandle,
+    selectedPublicProfileId,
+  ]);
 
   const randomizedOtherProfileIds = useMemo(() => {
     const selectedId = selectedPublicProfile?.id;
@@ -5434,15 +5617,35 @@ export default function Profile() {
           </Card>
         ) : hasPublicProfileLookupError ? (
           <Card className="border-slate-800 bg-slate-900/70 p-6 text-center text-slate-200">
-            Não foi possível carregar esse perfil agora. O app vai tentar novamente assim que a conexão estabilizar.
+            <div className="space-y-4">
+              <p>Não foi possível carregar esse perfil agora. O app vai tentar novamente assim que a conexão estabilizar.</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-slate-700 bg-slate-950/70 text-slate-100 hover:bg-slate-900"
+                onClick={handleRetryPublicProfileLoad}
+              >
+                Tentar novamente
+              </Button>
+            </div>
           </Card>
         ) : hasPublicProfileLookupNotFound ? (
           <Card className="border-slate-800 bg-slate-900/70 p-6 text-center text-slate-200">
             Perfil não encontrado.
           </Card>
         ) : (
-          <Card className="border-slate-800 bg-slate-900/70 p-6">
-            <TechLoader />
+          <Card className="border-slate-800 bg-slate-900/70 p-6 text-center text-slate-200">
+            <div className="space-y-4">
+              <p>Esse perfil não terminou de carregar corretamente.</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-slate-700 bg-slate-950/70 text-slate-100 hover:bg-slate-900"
+                onClick={handleRetryPublicProfileLoad}
+              >
+                Recarregar perfil
+              </Button>
+            </div>
           </Card>
         )}
       {profileSwitchLoaderOverlay}
