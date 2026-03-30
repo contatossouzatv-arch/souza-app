@@ -999,6 +999,55 @@ export const base44 = {
 
   entities: entitiesProxy,
 
+  profile: {
+    syncPhone(phone, requestId) {
+      return request("/api/profile/sync-phone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, requestId: requestId || createRequestId("profile-sync-phone") }),
+      });
+    },
+    notifications({ limit = 50 } = {}) {
+      const params = new URLSearchParams();
+      params.set("limit", String(limit));
+      return request(`/api/profile/notifications?${params.toString()}`);
+    },
+    markNotificationsRead(ids = []) {
+      return request("/api/profile/notifications/read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+    },
+    publicBasics(ids = [], handles = [], options = {}) {
+      const uniqueIds = Array.from(
+        new Set((Array.isArray(ids) ? ids : []).map((item) => String(item || "").trim()).filter(Boolean))
+      );
+      const uniqueHandles = Array.from(
+        new Set(
+          (Array.isArray(handles) ? handles : [])
+            .map((item) => String(item || "").trim().replace(/^@+/, "").toLowerCase())
+            .filter(Boolean)
+        )
+      );
+      const params = new URLSearchParams();
+      if (uniqueIds.length > 0) params.set("ids", uniqueIds.join(","));
+      if (uniqueHandles.length > 0) params.set("handles", uniqueHandles.join(","));
+      return request(`/api/profile/public-basics?${params.toString()}`, options);
+    },
+    publicDirectory({ limit = 24, offset = 0 } = {}, options = {}) {
+      const params = new URLSearchParams();
+      params.set("limit", String(limit));
+      params.set("offset", String(offset));
+      return request(`/api/profile/public-directory?${params.toString()}`, options);
+    },
+    platformHistory({ limit = 100 } = {}) {
+      const params = new URLSearchParams();
+      params.set("limit", String(limit));
+      return request(`/api/profile/platform-history?${params.toString()}`);
+    },
+  },
+
   points: {
     async me(limit = 50) {
       return request(`/api/points/me?limit=${encodeURIComponent(String(limit))}`);
