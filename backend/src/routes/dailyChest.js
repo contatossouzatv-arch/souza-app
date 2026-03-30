@@ -460,35 +460,41 @@ async function tryReserveRewardForDay(client, reward, chestDayKey) {
     return true;
   }
 
-  await client.query(
-    `INSERT INTO daily_chest_reward_daily_usage (reward_config_id, chest_day_key, claimed_count, updated_at)
-     VALUES ($1, $2, 0, NOW())
-     ON CONFLICT (reward_config_id, chest_day_key) DO NOTHING`,
-    [String(reward.id), String(chestDayKey || "")]
-  );
-
   const dailyCap = Math.max(0, Number(reward.dailyCap || 0));
-  const reservation =
-    dailyCap > 0
-      ? await client.query(
-          `UPDATE daily_chest_reward_daily_usage
-           SET claimed_count = claimed_count + 1,
-               updated_at = NOW()
-           WHERE reward_config_id = $1
-             AND chest_day_key = $2
-             AND claimed_count < $3
-           RETURNING claimed_count`,
-          [String(reward.id), String(chestDayKey || ""), dailyCap]
-        )
-      : await client.query(
-          `UPDATE daily_chest_reward_daily_usage
-           SET claimed_count = claimed_count + 1,
-               updated_at = NOW()
-           WHERE reward_config_id = $1
-             AND chest_day_key = $2
-           RETURNING claimed_count`,
-          [String(reward.id), String(chestDayKey || "")]
-        );
+  if (dailyCap <= 0) {
+    return true;
+  }
+
+  await client.query("SAVEPOINT daily_chest_reward_reservation");
+
+  let reservation = null;
+  try {
+    await client.query(
+      `INSERT INTO daily_chest_reward_daily_usage (reward_config_id, chest_day_key, claimed_count, updated_at)
+       VALUES ($1, $2, 0, NOW())
+       ON CONFLICT (reward_config_id, chest_day_key) DO NOTHING`,
+      [String(reward.id), String(chestDayKey || "")]
+    );
+
+    reservation = await client.query(
+      `UPDATE daily_chest_reward_daily_usage
+       SET claimed_count = claimed_count + 1,
+           updated_at = NOW()
+       WHERE reward_config_id = $1
+         AND chest_day_key = $2
+         AND claimed_count < $3
+       RETURNING claimed_count`,
+      [String(reward.id), String(chestDayKey || ""), dailyCap]
+    );
+
+    await client.query("RELEASE SAVEPOINT daily_chest_reward_reservation");
+  } catch (error) {
+    await client.query("ROLLBACK TO SAVEPOINT daily_chest_reward_reservation");
+    if (error?.code === "55P03" || error?.code === "57014") {
+      return false;
+    }
+    throw error;
+  }
 
   if (reservation.rowCount === 0) {
     return false;
@@ -517,6 +523,8 @@ async function reserveRewardFromPool(rewardPool, chestDayKey) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await client.query("SET LOCAL lock_timeout = '250ms'");
+    await client.query("SET LOCAL statement_timeout = '2000ms'");
     const selectedReward = await reserveWeightedRewardForDay(client, rewardPool, chestDayKey);
     if (!selectedReward) {
       await client.query("ROLLBACK");
