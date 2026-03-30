@@ -5238,9 +5238,9 @@ export default function Profile() {
                 className="h-24 w-24 overflow-hidden rounded-full border-2 border-cyan-400/50 transition hover:scale-[1.02] hover:ring-2 hover:ring-cyan-400/30"
                 aria-label="Ampliar foto do perfil"
               >
-                {selectedPublicProfile.avatarSrc ? (
+                {publicProfile.avatarSrc ? (
                   <img
-                    src={selectedPublicProfile.avatarSrc}
+                    src={publicProfile.avatarSrc}
                     alt={publicProfile.nick}
                     className="h-full w-full object-cover"
                     onError={(event) => {
@@ -5317,15 +5317,15 @@ export default function Profile() {
             <div className="mt-3 grid grid-cols-3 gap-2 text-center text-white">
               <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-2">
                 <p className="text-[11px] text-slate-400">Seguindo</p>
-                <p className="text-base font-bold">{publicState?.following ?? selectedPublicProfile.following}</p>
+                <p className="text-base font-bold">{publicState?.following ?? publicProfile.following}</p>
               </div>
               <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-2">
                 <p className="text-[11px] text-slate-400">Seguidores</p>
-                <p className="text-base font-bold">{publicState?.followers ?? selectedPublicProfile.followers}</p>
+                <p className="text-base font-bold">{publicState?.followers ?? publicProfile.followers}</p>
               </div>
               <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-2">
                 <p className="text-[11px] text-slate-400">Curtidas</p>
-                <p className="text-base font-bold">{publicState?.likes ?? selectedPublicProfile.likes}</p>
+                <p className="text-base font-bold">{publicState?.likes ?? publicProfile.likes}</p>
               </div>
             </div>
           </Card>
@@ -5636,13 +5636,13 @@ export default function Profile() {
             <DialogContent className="rounded-3xl border border-slate-700/90 bg-slate-950/95 text-white shadow-2xl">
               <DialogHeader>
                 <DialogTitle className="text-center text-base font-bold text-white">
-                  Foto de {selectedPublicProfile.nick}
+                  Foto de {publicProfile.nick}
                 </DialogTitle>
               </DialogHeader>
               <div className="rounded-3xl border border-cyan-500/25 bg-gradient-to-b from-slate-900 to-slate-950 p-2 shadow-[0_0_0_1px_rgba(34,211,238,0.08),0_14px_40px_rgba(2,6,23,0.55)]">
                 <div className="overflow-hidden rounded-[1.15rem] border border-slate-700/80 bg-slate-900">
-                  {selectedPublicProfile.avatarSrc ? (
-                    <img src={selectedPublicProfile.avatarSrc} alt={selectedPublicProfile.nick} className="max-h-[70vh] w-full object-contain" />
+                  {publicProfile.avatarSrc ? (
+                    <img src={publicProfile.avatarSrc} alt={publicProfile.nick} className="max-h-[70vh] w-full object-contain" />
                   ) : (
                     <div className="flex h-56 items-center justify-center text-slate-300">Sem imagem</div>
                   )}
