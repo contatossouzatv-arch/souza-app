@@ -2576,7 +2576,6 @@ export default function Profile() {
     },
     enabled:
       PROFILE_PUBLIC_ENRICHMENT_ENABLED &&
-      canLoadDeferredPublicProfileQueries &&
       !!selectedPublicProfile?.id &&
       isSelectedRealProfile,
     staleTime: 30000,
@@ -2968,6 +2967,12 @@ export default function Profile() {
     queryClient.invalidateQueries({ queryKey: ["profile-discover-profiles", user?.id] });
     if (selectedPublicProfile?.id) {
       queryClient.invalidateQueries({ queryKey: ["social-target-state", user?.id, selectedPublicProfile.id] });
+      queryClient.invalidateQueries({ queryKey: ["public-profile-summary", selectedPublicProfile.id] });
+      queryClient.invalidateQueries({
+        predicate: ({ queryKey }) =>
+          Array.isArray(queryKey) &&
+          String(queryKey[0] || "") === "public-profile-basics",
+      });
     }
   }, [queryClient, selectedPublicProfile?.id, user?.id]);
 
@@ -3293,6 +3298,15 @@ export default function Profile() {
   const toggleAuthoritativePublicFollow = async () => {
     if (!selectedPublicProfile?.id || !isSelectedRealProfile) return;
     const targetUserId = String(selectedPublicProfile.id || "");
+    await Promise.allSettled([
+      queryClient.cancelQueries({ queryKey: ["social-target-state", user?.id, targetUserId] }),
+      queryClient.cancelQueries({ queryKey: ["public-profile-summary", targetUserId] }),
+      queryClient.cancelQueries({
+        predicate: ({ queryKey }) =>
+          Array.isArray(queryKey) &&
+          String(queryKey[0] || "") === "public-profile-basics",
+      }),
+    ]);
     const current = {
       isFollowing:
         typeof simState?.[targetUserId]?.isFollowing === "boolean"
@@ -3335,7 +3349,14 @@ export default function Profile() {
 
     try {
       setFollowPendingById((prev) => ({ ...prev, [targetUserId]: true }));
-      await followMutation.mutateAsync({ targetUserId, shouldFollow });
+      const response = await followMutation.mutateAsync({ targetUserId, shouldFollow });
+      if (user?.id) {
+        await Promise.allSettled([
+          queryClient.refetchQueries({ queryKey: ["social-target-state", user.id, targetUserId], type: "active" }),
+          queryClient.refetchQueries({ queryKey: ["public-profile-summary", targetUserId], type: "active" }),
+        ]);
+      }
+      return response;
     } catch {
       setSimState((prev) => ({
         ...prev,
@@ -3495,6 +3516,15 @@ export default function Profile() {
   const toggleAuthoritativePublicLike = async () => {
     if (!selectedPublicProfile?.id || !isSelectedRealProfile) return;
     const targetUserId = String(selectedPublicProfile.id || "");
+    await Promise.allSettled([
+      queryClient.cancelQueries({ queryKey: ["social-target-state", user?.id, targetUserId] }),
+      queryClient.cancelQueries({ queryKey: ["public-profile-summary", targetUserId] }),
+      queryClient.cancelQueries({
+        predicate: ({ queryKey }) =>
+          Array.isArray(queryKey) &&
+          String(queryKey[0] || "") === "public-profile-basics",
+      }),
+    ]);
     const current = {
       isFollowing:
         typeof simState?.[targetUserId]?.isFollowing === "boolean"
@@ -3537,7 +3567,14 @@ export default function Profile() {
 
     try {
       setLikePendingById((prev) => ({ ...prev, [targetUserId]: true }));
-      await likeMutation.mutateAsync({ targetUserId, shouldLike });
+      const response = await likeMutation.mutateAsync({ targetUserId, shouldLike });
+      if (user?.id) {
+        await Promise.allSettled([
+          queryClient.refetchQueries({ queryKey: ["social-target-state", user.id, targetUserId], type: "active" }),
+          queryClient.refetchQueries({ queryKey: ["public-profile-summary", targetUserId], type: "active" }),
+        ]);
+      }
+      return response;
     } catch {
       setSimState((prev) => ({
         ...prev,
@@ -4826,26 +4863,54 @@ export default function Profile() {
       : null;
     const publicMetrics = selectedPublicProfile
       ? {
-          totalTickets: Number(selectedPublicProfileSummary?.metrics?.totalTickets ?? selectedPublicProfile.tickets ?? 0),
+          totalTickets: Number(
+            selectedPublicProfileSummary?.metrics?.totalTickets ??
+            selectedPublicProfileSummary?.metrics?.tickets_active ??
+            selectedPublicProfile.tickets ??
+            0
+          ),
           points: Number(
             selectedPublicProfileSummary?.currentCompetitionEntry?.weekly_points ??
             selectedPublicProfileSummary?.metrics?.weeklyPoints ??
             selectedPublicProfile.points ??
             0
           ),
-          xpTotal: Number(selectedPublicProfileSummary?.metrics?.xpTotal ?? selectedPublicProfile.xpTotal ?? selectedPublicProfile.xp_total ?? 0),
+          xpTotal: Number(
+            selectedPublicProfileSummary?.metrics?.xpTotal ??
+            selectedPublicProfileSummary?.metrics?.xp_total ??
+            selectedPublicProfile.xpTotal ??
+            selectedPublicProfile.xp_total ??
+            0
+          ),
           position: activeCycle
             ? Number(selectedPublicProfileSummary?.currentCompetitionEntry?.position ?? selectedPublicProfile.position ?? 0)
             : 0,
-          totalWins: Number(selectedPublicProfileSummary?.metrics?.totalWins ?? selectedPublicProfile.totalWins ?? 0),
+          totalWins: Number(
+            selectedPublicProfileSummary?.metrics?.totalWins ??
+            selectedPublicProfileSummary?.metrics?.prizeCounts ??
+            selectedPublicProfile.totalWins ??
+            0
+          ),
           totalApproved: Number(selectedPublicProfileSummary?.metrics?.totalApproved ?? selectedPublicProfile.totalApproved ?? 0),
-          totalParticipations: selectedPublicProfile.participations,
-          liveParticipations: selectedPublicProfile.liveParticipations || 0,
+          totalParticipations: Number(
+            selectedPublicProfileSummary?.metrics?.totalParticipations ??
+            selectedPublicProfile.participations ??
+            0
+          ),
+          liveParticipations: Number(
+            selectedPublicProfileSummary?.metrics?.liveParticipations ??
+            selectedPublicProfile.liveParticipations ??
+            0
+          ),
           totalFollowers: Number(publicState?.followers ?? selectedPublicProfile.followers ?? 0),
           progress: Math.min(
             100,
             Math.round(
-              (selectedPublicProfile.participations / Math.max(1, Number(pointsRules.progress_target_participations || 25))) * 100
+              ((Number(
+                selectedPublicProfileSummary?.metrics?.totalParticipations ??
+                selectedPublicProfile.participations ??
+                0
+              )) / Math.max(1, Number(pointsRules.progress_target_participations || 25))) * 100
             )
           ),
         }
