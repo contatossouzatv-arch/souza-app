@@ -153,6 +153,7 @@ export default function DailyChestHub() {
 
   const handleSpin = React.useCallback(async (slotType = "base") => {
     if (!state || isOpening) return;
+    const hasVisibleBaseSlots = Math.max(0, Number(state?.slots?.remainingBase ?? state?.slots?.availableBase ?? 0)) > 0;
     const remainingForType =
       slotType === "bonus"
         ? Math.max(0, Number(state?.slots?.availableBonus || 0))
@@ -164,12 +165,16 @@ export default function DailyChestHub() {
                 : state?.slots?.availableBase ?? state?.slots?.remainingBase ?? 0
             )
           );
-    if (remainingForType <= 0) return;
+    if (slotType === "base") {
+      if (remainingForType <= 0 && !hasVisibleBaseSlots) return;
+    } else if (remainingForType <= 0) {
+      return;
+    }
 
     const normalizedState =
       FORCE_DAILY_CHEST_UNLOCK_WHEN_SLOTS_EXIST &&
       String(state?.state || "") === "locked" &&
-      Math.max(0, Number(state?.slots?.remainingBase ?? state?.slots?.availableBase ?? 0)) > 0
+      hasVisibleBaseSlots
         ? "available"
         : String(state?.state || "available");
     if (slotType === "base" && normalizedState === "cooldown") return;

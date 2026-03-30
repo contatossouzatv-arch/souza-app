@@ -246,11 +246,7 @@ export default function DailyChestOverlay({
               <SpinButton
                 title={accessGate.required && !accessGate.unlocked ? "Liberar Bau" : "Bau Diario"}
                 count={slotSummary.remainingBase}
-                disabled={
-                  accessGate.required && !accessGate.unlocked
-                    ? false
-                    : !canSpinBase
-                }
+                disabled={accessGate.required && !accessGate.unlocked ? false : !(hasVisibleBaseSlots || canSpinBase)}
                 accentClass="bg-cyan-400 text-slate-950 shadow-[0_18px_40px_rgba(34,211,238,0.24)] hover:bg-cyan-300"
                 sublabel={
                   accessGate.required && !accessGate.unlocked
