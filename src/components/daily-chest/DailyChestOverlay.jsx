@@ -3,6 +3,8 @@ import { ArrowLeft, Clock3, Gift, Link as LinkIcon, Lock, Sparkles, Stars, Troph
 import { Button } from "@/components/ui/button";
 import { formatCountdownLabel } from "@/lib/dailyChest";
 
+const FORCE_DAILY_CHEST_FREE_ACCESS = true;
+
 function InfoButton({ icon: Icon, label, active, onClick }) {
   return (
     <button
@@ -81,7 +83,9 @@ export default function DailyChestOverlay({
   );
 
   const slotSummary = state?.slots || {};
-  const accessGate = state?.accessGate || {};
+  const accessGate = FORCE_DAILY_CHEST_FREE_ACCESS
+    ? { ...(state?.accessGate || {}), required: false, unlocked: true }
+    : state?.accessGate || {};
   const resetLabel = state?.resetAt ? formatCountdownLabel(state.resetAt) : "-";
   const rewardMessageText = String(rewardMessage || "").trim();
   const canSpinBase =
