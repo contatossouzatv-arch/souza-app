@@ -166,6 +166,14 @@ export default function DailyChestHub() {
           );
     if (remainingForType <= 0) return;
 
+    const normalizedState =
+      FORCE_DAILY_CHEST_UNLOCK_WHEN_SLOTS_EXIST &&
+      String(state?.state || "") === "locked" &&
+      Math.max(0, Number(state?.slots?.remainingBase ?? state?.slots?.availableBase ?? 0)) > 0
+        ? "available"
+        : String(state?.state || "available");
+    if (slotType === "base" && normalizedState === "cooldown") return;
+
     const tapGoal = Math.max(1, Number(state.tapGoal || 4));
     const nextTapCount = Math.min(tapGoal, Number(tapCount || 0) + 1);
     setTapCount(nextTapCount);

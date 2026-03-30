@@ -86,6 +86,7 @@ export default function DailyChestOverlay({
   const accessGate = FORCE_DAILY_CHEST_FREE_ACCESS
     ? { ...(state?.accessGate || {}), required: false, unlocked: true }
     : state?.accessGate || {};
+  const hasVisibleBaseSlots = Math.max(0, Number(slotSummary.remainingBase ?? slotSummary.availableBase ?? 0)) > 0;
   const effectiveAvailableBase =
     FORCE_DAILY_CHEST_FREE_ACCESS && !accessGate.required
       ? Math.max(0, Number(slotSummary.availableBase ?? slotSummary.remainingBase ?? 0))
@@ -94,7 +95,7 @@ export default function DailyChestOverlay({
   const rewardMessageText = String(rewardMessage || "").trim();
   const canSpinBase =
     viewMode === "main" &&
-    displayState !== "opening" &&
+    (displayState !== "opening" || hasVisibleBaseSlots) &&
     effectiveAvailableBase > 0 &&
     !isOpening;
   const canSpinBonus =
