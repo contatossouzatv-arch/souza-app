@@ -3220,18 +3220,32 @@ router.get("/profile/competition-board", requireAuth, async (req, res) => {
 });
 
 router.get("/profile/public/:userId/summary", async (req, res) => {
+  const startedAt = Date.now();
   try {
     const targetUserId = String(req.params.userId || "").trim();
     if (!targetUserId) {
       return res.status(400).json({ error: "Usuario invalido." });
     }
 
-    const payload = await getPublicProfileSummaryReadModel(targetUserId, PUBLIC_PROFILE_SUMMARY_TTL_MS, async () => (
-      getProfileSummary({
-        viewerId: "",
+    const payload = await getPublicProfileSummaryReadModel(targetUserId, PUBLIC_PROFILE_SUMMARY_TTL_MS, async () =>
+      withSoftTimeout(
+        buildLightweightProfileMetrics(targetUserId, {
+          includeCompetitionBoard: true,
+        }),
+        PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
+        "Public profile summary emergency timeout"
+      )
+    );
+
+    const durationMs = Date.now() - startedAt;
+    if (durationMs >= 800) {
+      console.warn("[profile-route] public-summary slow", {
         targetUserId,
-      })
-    ));
+        durationMs,
+        degraded: Boolean(payload?._degraded),
+      });
+    }
+
     return res.json({
       metrics: payload.metrics || {},
       currentCompetitionEntry: payload.currentCompetitionEntry || null,
@@ -3242,8 +3256,13 @@ router.get("/profile/public/:userId/summary", async (req, res) => {
       viewerUserId: req.auth?.sub || "",
       message: error?.message || String(error),
       stack: error?.stack || "",
+      durationMs: Date.now() - startedAt,
     });
-    return res.status(500).json({ error: "Nao foi possivel carregar o resumo publico agora." });
+    return res.json({
+      metrics: buildFastDegradedProfileSummary(req.params?.userId || "").metrics || {},
+      currentCompetitionEntry: buildFastDegradedProfileSummary(req.params?.userId || "").currentCompetitionEntry || null,
+      _degraded: true,
+    });
   }
 });
 

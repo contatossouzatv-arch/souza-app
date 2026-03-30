@@ -1444,7 +1444,10 @@ export default function Profile() {
   useEffect(() => {
     setLoadDiscoverProfiles(false);
     const shouldLoadForPrivateProfile = canLoadDeferredProfileQueries && isEngagementTabActive;
-    const shouldLoadForPublicProfile = isViewingPublicProfile && canLoadDeferredPublicProfileQueries;
+    const shouldLoadForPublicProfile =
+      isViewingPublicProfile &&
+      canLoadDeferredPublicProfileQueries &&
+      isPublicEngagementTabActive;
     if (!shouldLoadForPrivateProfile && !shouldLoadForPublicProfile) return undefined;
 
     const timerId = window.setTimeout(() => {
@@ -1456,6 +1459,7 @@ export default function Profile() {
     canLoadDeferredProfileQueries,
     canLoadDeferredPublicProfileQueries,
     isEngagementTabActive,
+    isPublicEngagementTabActive,
     isViewingPublicProfile,
     location.pathname,
     location.search,
@@ -4866,13 +4870,12 @@ export default function Profile() {
           totalTickets: Number(
             selectedPublicProfileSummary?.metrics?.totalTickets ??
             selectedPublicProfileSummary?.metrics?.tickets_active ??
-            selectedPublicProfile.tickets ??
             0
           ),
           points: Number(
             selectedPublicProfileSummary?.currentCompetitionEntry?.weekly_points ??
             selectedPublicProfileSummary?.metrics?.weeklyPoints ??
-            selectedPublicProfile.points ??
+            selectedPublicProfileSummary?.metrics?.weekly_points ??
             0
           ),
           xpTotal: Number(
@@ -4883,23 +4886,24 @@ export default function Profile() {
             0
           ),
           position: activeCycle
-            ? Number(selectedPublicProfileSummary?.currentCompetitionEntry?.position ?? selectedPublicProfile.position ?? 0)
+            ? Number(
+                selectedPublicProfileSummary?.currentCompetitionEntry?.position ??
+                  competitionEntryByUserId[selectedPublicProfile.id]?.position ??
+                  0
+              )
             : 0,
           totalWins: Number(
             selectedPublicProfileSummary?.metrics?.totalWins ??
             selectedPublicProfileSummary?.metrics?.prizeCounts ??
-            selectedPublicProfile.totalWins ??
             0
           ),
           totalApproved: Number(selectedPublicProfileSummary?.metrics?.totalApproved ?? selectedPublicProfile.totalApproved ?? 0),
           totalParticipations: Number(
             selectedPublicProfileSummary?.metrics?.totalParticipations ??
-            selectedPublicProfile.participations ??
             0
           ),
           liveParticipations: Number(
             selectedPublicProfileSummary?.metrics?.liveParticipations ??
-            selectedPublicProfile.liveParticipations ??
             0
           ),
           totalFollowers: Number(publicState?.followers ?? selectedPublicProfile.followers ?? 0),

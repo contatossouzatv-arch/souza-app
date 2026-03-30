@@ -230,6 +230,45 @@ async function runFollowSideEffects(req, { active, applied, actor, relation, req
   scheduleGamificationRefresh({ persistDerived: true });
 }
 
+async function runLikeSideEffects(req, { active, applied, actor, relation, requestId, userId, targetUserId }) {
+  await Promise.allSettled([
+    createSecurityEvent({
+      user_id: userId,
+      type: active
+        ? applied
+          ? "SOCIAL_LIKE_ACCEPTED"
+          : "SOCIAL_LIKE_DUPLICATE"
+        : applied
+        ? "SOCIAL_UNLIKE_ACCEPTED"
+        : "SOCIAL_UNLIKE_DUPLICATE",
+      ...buildRequestMeta(req),
+      metadata: { target_user_id: targetUserId, request_id: requestId },
+    }),
+    active && applied && actor
+      ? createProfileNotification({
+          targetUserId,
+          actor,
+          type: "like",
+          title: "Novo like no perfil",
+          message: `${actor.full_name || actor.nick || "Alguém"} curtiu seu perfil.`,
+          metadata: {
+            relation_id: relation?.id || "",
+            request_id: requestId,
+          },
+        })
+      : Promise.resolve(),
+    invalidateSocialCaches(userId, targetUserId),
+    syncGamificationProfileViews(req, userId, active ? "like_profile" : "unlike_profile"),
+    syncGamificationProfileViews(req, targetUserId, active ? "liked_by_user" : "unliked_by_user"),
+  ]);
+
+  emitEntityChanged(req, "profile_likes", relation?.id || targetUserId, applied ? "updated" : "duplicate");
+  emitEntityChanged(req, "ProfileNotification", targetUserId, active && applied ? "created" : "updated");
+  emitEntityChanged(req, "gamification", userId, "updated");
+  emitEntityChanged(req, "gamification", targetUserId, "updated");
+  scheduleGamificationRefresh({ persistDerived: true });
+}
+
 function normalizeListLimit(value, fallback = 12, max = 60) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -881,39 +920,24 @@ async function upsertLikeState(req, res, active) {
     const state = await buildSocialState(client, userId, targetUserId);
     await client.query("COMMIT");
 
-    await createSecurityEvent({
-      user_id: userId,
-      type: active ? (applied ? "SOCIAL_LIKE_ACCEPTED" : "SOCIAL_LIKE_DUPLICATE") : applied ? "SOCIAL_UNLIKE_ACCEPTED" : "SOCIAL_UNLIKE_DUPLICATE",
-      ...buildRequestMeta(req),
-      metadata: { target_user_id: targetUserId, request_id: requestId },
-    });
-
-    if (active && applied && actor) {
-      await createProfileNotification({
+    res.json({ ok: true, state, alreadyProcessed: !applied });
+    void runLikeSideEffects(req, {
+      active,
+      applied,
+      actor,
+      relation,
+      requestId,
+      userId,
+      targetUserId,
+    }).catch((error) => {
+      console.error("[social] like side effects failed", {
+        userId,
         targetUserId,
-        actor,
-        type: "like",
-        title: "Novo like no perfil",
-        message: `${actor.full_name || actor.nick || "Alguém"} curtiu seu perfil.`,
-        metadata: {
-          relation_id: relation?.id || "",
-          request_id: requestId,
-        },
+        active,
+        message: error?.message || "unknown error",
       });
-    }
-
-    emitEntityChanged(req, "profile_likes", relation?.id || targetUserId, applied ? "updated" : "duplicate");
-    emitEntityChanged(req, "ProfileNotification", targetUserId, active && applied ? "created" : "updated");
-    emitEntityChanged(req, "gamification", userId, "updated");
-    emitEntityChanged(req, "gamification", targetUserId, "updated");
-    await Promise.all([
-      invalidateSocialCaches(userId, targetUserId),
-      syncGamificationProfileViews(req, userId, active ? "like_profile" : "unlike_profile"),
-      syncGamificationProfileViews(req, targetUserId, active ? "liked_by_user" : "unliked_by_user"),
-    ]);
-    scheduleGamificationRefresh({ persistDerived: true });
-
-    return res.json({ ok: true, state, alreadyProcessed: !applied });
+    });
+    return;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
