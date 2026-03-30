@@ -518,7 +518,63 @@ export const gameCallAdmin = {
       raffleId,
       limit,
     }),
-  create: (input) => createRaffle({ domain: "admin_game_call_create", entityName: "GameCallRaffle", ...input, payload: { title: String(input.title || "").trim(), active: true, prize_amount: Math.max(0, Number(input.prizeAmount || 0)), max_attempts: Math.max(1, Number(input.maxAttempts || 3)), max_winners: Math.max(1, Number(input.maxWinners || 1)), admin_name: normalizeAdminName(input.adminName), admin_phone: normalizeAdminPhone(input.adminPhone), ended: false, pending_draw_candidates: [], pending_draw_count: 0 } }),
+  create: (input) => {
+    return (async () => {
+      const existing = await findEvent("admin_game_call_create", input.requestId);
+      if (existing?.entity_id) return { raffle: await getEntityById("GameCallRaffle", existing.entity_id), processing_event: existing, idempotent: true };
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const activeRaffles = await listEntityRecordsForUpdate(client, "GameCallRaffle", { active: true, ended: false });
+        const now = new Date().toISOString();
+        for (const activeRaffle of activeRaffles) {
+          await updateEntityRecordData(client, "GameCallRaffle", activeRaffle.id, {
+            ...activeRaffle,
+            active: false,
+            ended: true,
+            ended_date: activeRaffle.ended_date || now,
+            updated_date: now,
+          });
+        }
+        const raffle = await createEntityRecordData(client, "GameCallRaffle", {
+          title: String(input.title || "").trim(),
+          active: true,
+          prize_amount: Math.max(0, Number(input.prizeAmount || 0)),
+          max_attempts: Math.max(1, Number(input.maxAttempts || 3)),
+          max_winners: Math.max(1, Number(input.maxWinners || 1)),
+          admin_name: normalizeAdminName(input.adminName),
+          admin_phone: normalizeAdminPhone(input.adminPhone),
+          ended: false,
+          pending_draw_candidates: [],
+          pending_draw_count: 0,
+          created_date: now,
+          updated_date: now,
+        });
+        const processingEvent = await createEvent(client, {
+          domain: "admin_game_call_create",
+          action: "create_raffle",
+          requestId: input.requestId,
+          entityName: "GameCallRaffle",
+          entityId: raffle.id,
+          metadata: {
+            title: raffle.title,
+            max_attempts: raffle.max_attempts,
+            max_winners: raffle.max_winners,
+            deactivated_raffle_ids: activeRaffles.map((item) => item.id),
+          },
+          adminUserId: input.adminUserId,
+          adminEmail: input.adminEmail,
+        });
+        await client.query("COMMIT");
+        return { raffle, processing_event: processingEvent, idempotent: false };
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    })();
+  },
   update: ({ raffleId, maxAttempts, maxWinners, adminName, adminPhone, ...input }) => {
     return (async () => {
       const existing = await findEvent("admin_game_call_update", input.requestId);

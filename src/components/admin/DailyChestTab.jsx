@@ -407,7 +407,20 @@ export default function DailyChestTab() {
 
   const saveSettingsMutation = useMutation({
     mutationFn: () => base44.adminDailyChest.saveSettings(settingsDraft),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      const persistedSettings = result?.settings && typeof result.settings === "object" ? result.settings : null;
+      if (persistedSettings) {
+        setSettingsDraft((prev) => ({ ...prev, ...persistedSettings }));
+        queryClient.setQueryData(["admin-daily-chest-config-v2"], (previous) => ({
+          ...(previous && typeof previous === "object" ? previous : {}),
+          settings: {
+            ...((previous && typeof previous === "object" && previous.settings && typeof previous.settings === "object")
+              ? previous.settings
+              : {}),
+            ...persistedSettings,
+          },
+        }));
+      }
       queryClient.invalidateQueries({ queryKey: ["admin-daily-chest-config-v2"] });
       toast({ title: "Configuração salva", description: "Regras e disponibilidade do Baú Diário foram atualizadas." });
     },
@@ -484,8 +497,23 @@ export default function DailyChestTab() {
         ),
         daily_chest_access_group_link: String(settingsDraft.daily_chest_access_group_link ?? ""),
       }),
-    onSuccess: () => {
-      lastPersistedAccessLinkRef.current = String(settingsDraft.daily_chest_access_group_link ?? "");
+    onSuccess: (result) => {
+      const persistedSettings = result?.settings && typeof result.settings === "object" ? result.settings : null;
+      if (persistedSettings) {
+        setSettingsDraft((prev) => ({ ...prev, ...persistedSettings }));
+        lastPersistedAccessLinkRef.current = String(persistedSettings.daily_chest_access_group_link ?? "");
+        queryClient.setQueryData(["admin-daily-chest-config-v2"], (previous) => ({
+          ...(previous && typeof previous === "object" ? previous : {}),
+          settings: {
+            ...((previous && typeof previous === "object" && previous.settings && typeof previous.settings === "object")
+              ? previous.settings
+              : {}),
+            ...persistedSettings,
+          },
+        }));
+      } else {
+        lastPersistedAccessLinkRef.current = String(settingsDraft.daily_chest_access_group_link ?? "");
+      }
       queryClient.invalidateQueries({ queryKey: ["admin-daily-chest-config-v2"] });
       toast({
         title: "Acesso do baú salvo",

@@ -178,6 +178,43 @@ async function invalidateSocialCaches(viewerUserId, targetUserId) {
   await Promise.all(keys.map((key) => deleteCacheKey(key)));
 }
 
+async function runFollowSideEffects(req, { active, applied, actor, relation, requestId, userId, targetUserId }) {
+  await Promise.allSettled([
+    createSecurityEvent({
+      user_id: userId,
+      type: active
+        ? applied
+          ? "SOCIAL_FOLLOW_ACCEPTED"
+          : "SOCIAL_FOLLOW_DUPLICATE"
+        : applied
+        ? "SOCIAL_UNFOLLOW_ACCEPTED"
+        : "SOCIAL_UNFOLLOW_DUPLICATE",
+      ...buildRequestMeta(req),
+      metadata: { target_user_id: targetUserId, request_id: requestId },
+    }),
+    active && applied && actor
+      ? createProfileNotification({
+          targetUserId,
+          actor,
+          type: "follow",
+          title: "Novo seguidor",
+          message: `${actor.full_name || actor.nick || "Alguém"} seguiu você.`,
+          metadata: {
+            relation_id: relation?.id || "",
+            request_id: requestId,
+          },
+        })
+      : Promise.resolve(),
+    invalidateSocialCaches(userId, targetUserId),
+  ]);
+
+  emitEntityChanged(req, "user_follows", relation?.id || targetUserId, applied ? "updated" : "duplicate");
+  emitEntityChanged(req, "ProfileNotification", targetUserId, active && applied ? "created" : "updated");
+  emitEntityChanged(req, "gamification", userId, "updated");
+  emitEntityChanged(req, "gamification", targetUserId, "updated");
+  scheduleGamificationRefresh({ persistDerived: true });
+}
+
 function normalizeListLimit(value, fallback = 12, max = 60) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -689,6 +726,24 @@ async function upsertFollowState(req, res, active) {
 
     const state = await buildSocialState(client, userId, targetUserId);
     await client.query("COMMIT");
+    res.json({ ok: true, state, alreadyProcessed: !applied });
+    void runFollowSideEffects(req, {
+      active,
+      applied,
+      actor,
+      relation,
+      requestId,
+      userId,
+      targetUserId,
+    }).catch((error) => {
+      console.error("[social] follow side effects failed", {
+        userId,
+        targetUserId,
+        active,
+        message: error?.message || "unknown error",
+      });
+    });
+    return;
 
     await createSecurityEvent({
       user_id: userId,

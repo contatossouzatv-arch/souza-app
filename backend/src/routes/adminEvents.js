@@ -8,6 +8,7 @@ import {
   emitDepositLeaderboardUpdated,
   emitLegacyEntityChanged,
 } from "../lib/realtimeEvents.js";
+import { deleteCacheByPrefix, deleteCacheKey } from "../lib/cache.js";
 import { gameCallAdmin, liveDrawAdmin } from "../services/adminLiveGameService.js";
 import { invalidateDashboardDynamicsSummary } from "../services/dashboardDynamicsReadService.js";
 import { depositDrawAdmin, instantRaffleAdmin, syncParticipationPhones } from "../services/adminInstantDepositService.js";
@@ -38,6 +39,13 @@ function emitEntityChanged(req, entity, action, payload) {
     payload,
     entityId: payload?.id || payload?.raffle?.id || "",
   });
+}
+
+async function invalidateDepositReadCaches() {
+  await Promise.all([
+    deleteCacheKey("deposits:dashboard-summary"),
+    deleteCacheByPrefix("deposits:leaderboard:"),
+  ]);
 }
 
 router.post("/admin/live-draws", requireAuth, requireAdmin, async (req, res) => {
@@ -320,6 +328,7 @@ router.post("/admin/deposit-cycles", requireAuth, requireAdmin, async (req, res)
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
   });
+  await invalidateDepositReadCaches();
   emitEntityChanged(req, "DepositantDrawCycle", "created", result?.cycle || null);
   emitDepositLeaderboardUpdated(req.app?.locals?.io, { cycleId: result?.cycle?.id || "", reason: "cycle_created" });
   res.status(result?.idempotent ? 200 : 201).json(result);
@@ -334,6 +343,7 @@ router.patch("/admin/deposit-cycles/:id", requireAuth, requireAdmin, async (req,
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
   });
+  await invalidateDepositReadCaches();
   emitEntityChanged(req, "DepositantDrawCycle", "updated", result?.cycle || null);
   emitDepositLeaderboardUpdated(req.app?.locals?.io, { cycleId: req.params.id, reason: "cycle_updated" });
   res.json(result);
@@ -346,6 +356,7 @@ router.post("/admin/deposit-cycles/:id/end", requireAuth, requireAdmin, async (r
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
   });
+  await invalidateDepositReadCaches();
   emitEntityChanged(req, "DepositantDrawCycle", "updated", result?.cycle || null);
   emitDepositLeaderboardUpdated(req.app?.locals?.io, { cycleId: req.params.id, reason: "cycle_ended" });
   res.status(result?.idempotent ? 200 : 201).json(result);
@@ -358,6 +369,7 @@ router.post("/admin/deposit-cycles/:id/reactivate", requireAuth, requireAdmin, a
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
   });
+  await invalidateDepositReadCaches();
   emitEntityChanged(req, "DepositantDrawCycle", "updated", result?.cycle || null);
   emitDepositLeaderboardUpdated(req.app?.locals?.io, { cycleId: req.params.id, reason: "cycle_reactivated" });
   res.status(result?.idempotent ? 200 : 201).json(result);
@@ -370,6 +382,7 @@ router.delete("/admin/deposit-cycles/:id", requireAuth, requireAdmin, async (req
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
   });
+  await invalidateDepositReadCaches();
   emitEntityChanged(req, "DepositantDrawCycle", "deleted", { id: req.params.id });
   emitDepositLeaderboardUpdated(req.app?.locals?.io, { cycleId: req.params.id, reason: "cycle_deleted" });
   res.json(result);
@@ -377,12 +390,14 @@ router.delete("/admin/deposit-cycles/:id", requireAuth, requireAdmin, async (req
 
 router.post("/admin/deposit-draws/:id/draw", requireAuth, requireAdmin, async (req, res) => {
   const result = await depositDrawAdmin.draw({ cycleId: req.params.id, prizeAmount: req.body?.prizeAmount, winnerCount: req.body?.winnerCount, requestId: req.body?.requestId, adminUserId: req.auth.sub, adminEmail: req.auth.email });
+  await invalidateDepositReadCaches();
   emitDepositLeaderboardUpdated(req.app?.locals?.io, { cycleId: req.params.id, reason: "draw_completed" });
   res.status(result?.idempotent ? 200 : 201).json(result);
 });
 
 router.post("/admin/deposit-draws/winners/:id/validate", requireAuth, requireAdmin, async (req, res) => {
   const result = await depositDrawAdmin.validate({ winnerId: req.params.id, requestId: req.body?.requestId, adminUserId: req.auth.sub, adminEmail: req.auth.email });
+  await invalidateDepositReadCaches();
   emitEntityChanged(req, "DepositantDrawWinner", "updated", result?.winner || null);
   emitDepositLeaderboardUpdated(req.app?.locals?.io, { cycleId: result?.winner?.cycle_id || "", reason: "winner_validated" });
   res.status(result?.idempotent ? 200 : 201).json(result);
@@ -390,6 +405,7 @@ router.post("/admin/deposit-draws/winners/:id/validate", requireAuth, requireAdm
 
 router.delete("/admin/deposit-draws/winners/:id", requireAuth, requireAdmin, async (req, res) => {
   const result = await depositDrawAdmin.deleteWinner({ winnerId: req.params.id, adminUserId: req.auth.sub, adminEmail: req.auth.email });
+  await invalidateDepositReadCaches();
   emitEntityChanged(req, "DepositantDrawWinner", "deleted", { id: req.params.id });
   emitDepositLeaderboardUpdated(req.app?.locals?.io, { reason: "winner_deleted" });
   res.json(result);
@@ -403,6 +419,7 @@ router.post("/admin/deposit-draws/:id/complete", requireAuth, requireAdmin, asyn
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
   });
+  await invalidateDepositReadCaches();
   emitEntityChanged(req, "DepositantDrawCycle", "updated", result?.cycle || null);
   emitDepositLeaderboardUpdated(req.app?.locals?.io, { cycleId: req.params.id, reason: "draw_completed_manual" });
   res.status(result?.idempotent ? 200 : 201).json(result);
@@ -410,6 +427,7 @@ router.post("/admin/deposit-draws/:id/complete", requireAuth, requireAdmin, asyn
 
 router.post("/admin/deposit-draws/:id/reset-tickets", requireAuth, requireAdmin, async (req, res) => {
   const result = await depositDrawAdmin.resetTickets({ cycleId: req.params.id, requestId: req.body?.requestId, adminUserId: req.auth.sub, adminEmail: req.auth.email });
+  await invalidateDepositReadCaches();
   emitDepositLeaderboardUpdated(req.app?.locals?.io, { cycleId: req.params.id, reason: "tickets_reset" });
   res.status(result?.idempotent ? 200 : 201).json(result);
 });

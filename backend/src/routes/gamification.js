@@ -5122,8 +5122,16 @@ router.put("/admin/daily-chest/settings", requireAuth, requireAdmin, async (req,
     adminEmail: req.auth.email,
   });
   await invalidateAdminDailyChestCaches();
+  const afterMap = await listAppSettingsMap();
   emitEntityChanged(req, "DailyChestSettings", "daily_chest_settings", "updated");
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    settings: Object.fromEntries(
+      [...afterMap.entries()]
+        .filter(([key]) => key.startsWith("daily_chest_"))
+        .map(([key, value]) => [key, value.value])
+    ),
+  });
 });
 
 router.post("/admin/daily-chest/access-code/generate", requireAuth, requireAdmin, async (req, res) => {

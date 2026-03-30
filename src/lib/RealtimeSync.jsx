@@ -51,6 +51,9 @@ export default function RealtimeSync() {
         if (["appsettings", "bannercarousel", "socialmedia"].includes(entity)) {
           addKeys(prefixes, ["public-ui-config", "app-settings"]);
         }
+        if (["dailychestsettings", "dailychestrewardconfig"].includes(entity)) {
+          addKeys(prefixes, ["daily-chest-state", "admin-daily-chest-config-v2"]);
+        }
 
         if (prefixes.size > 0) {
           invalidatePrefixes([...prefixes]);
