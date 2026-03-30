@@ -6,6 +6,7 @@ import { Server } from "socket.io";
 import { env, isAllowedOrigin } from "./config/env.js";
 import { createApp } from "./app.js";
 import { ensureDb, ensureDevAdmin, seedDefaults } from "./db/index.js";
+import { getRuntimeBuildInfo } from "./lib/runtimeBuildInfo.js";
 
 async function bootstrapRuntime(io) {
   console.log("[startup] runtime-bootstrap:start", {
@@ -56,6 +57,7 @@ async function bootstrapRuntime(io) {
 async function bootstrap() {
   const port = Number(process.env.PORT || 8080);
   const host = "0.0.0.0";
+  const buildInfo = getRuntimeBuildInfo();
 
   console.log("[startup] bootstrap:start", {
     nodeEnv: env.nodeEnv,
@@ -63,6 +65,7 @@ async function bootstrap() {
     host,
     hasRedis: Boolean(env.redisUrl),
     hasDatabaseUrl: Boolean(env.databaseUrl),
+    buildInfo,
   });
 
   const appPlaceholder = http.createServer();

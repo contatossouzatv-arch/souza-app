@@ -19,6 +19,7 @@ import uploadsRoutes from "./routes/uploads.js";
 import { appendNavigationLog } from "./db/index.js";
 import { genericUploadsDir, uploadsDir } from "./lib/paths.js";
 import { getHttpMetricsSnapshot, recordHttpMetric } from "./lib/httpMetrics.js";
+import { getRuntimeBuildInfo } from "./lib/runtimeBuildInfo.js";
 
 const SLOW_HTTP_THRESHOLD_MS = 700;
 const EXPLICIT_CORS_ORIGINS = [
@@ -120,6 +121,7 @@ export function createApp(io) {
   const app = express();
   app.locals.io = io;
   app.locals.startedAt = new Date().toISOString();
+  app.locals.buildInfo = getRuntimeBuildInfo();
 
   app.set("trust proxy", 1);
   app.use(
@@ -248,6 +250,17 @@ export function createApp(io) {
       startedAt: app.locals.startedAt,
       uptimeSec: Math.round(process.uptime()),
       redis: Boolean(env.redisUrl),
+      build: app.locals.buildInfo,
+    });
+  });
+
+  app.get("/version", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      ok: true,
+      timestamp: new Date().toISOString(),
+      startedAt: app.locals.startedAt,
+      build: app.locals.buildInfo,
     });
   });
 
