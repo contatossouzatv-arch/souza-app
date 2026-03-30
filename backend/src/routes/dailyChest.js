@@ -26,6 +26,7 @@ const router = Router();
 const DAILY_CHEST_SETTINGS_TTL_MS = 15000;
 const DAILY_CHEST_REWARD_POOL_TTL_MS = 15000;
 const DAILY_CHEST_STATE_TTL_MS = 10000;
+// Production hotfix: keep the base daily chest free while the access-key flow is disabled.
 const FORCE_DAILY_CHEST_FREE_ACCESS = true;
 const FORCE_DAILY_CHEST_IGNORE_SCHEDULE = true;
 
