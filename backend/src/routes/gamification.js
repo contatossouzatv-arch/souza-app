@@ -3382,8 +3382,22 @@ router.get("/profile/history", requireAuth, async (req, res) => {
     listEntity("UserPrizeGalleryItem", "-claimed_at", 40).then((items) => items.filter((item) => item.user_id === userId)),
   ]);
 
+  const visibleLedgerRows = ledger.rows.filter((row) => {
+    const sourceType = String(row.source_type || "").trim().toLowerCase();
+    const sourceRef = String(row.source_ref || "").trim().toLowerCase();
+    const metadataType = String(row.metadata?.type || "").trim().toLowerCase();
+    if (
+      sourceType === "derived_event" &&
+      metadataType === "consolidated_snapshot" &&
+      sourceRef.startsWith("authoritative.")
+    ) {
+      return false;
+    }
+    return true;
+  });
+
   res.json({
-    ledger: ledger.rows.map((row) => ({
+    ledger: visibleLedgerRows.map((row) => ({
       id: row.id,
       metric_key: row.metric_key,
       cycle_key: row.cycle_key,

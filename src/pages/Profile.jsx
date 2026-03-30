@@ -751,15 +751,48 @@ function buildPointsHistorySummary(ledger = [], allowedMetricKeys = []) {
   });
 }
 
-function buildCheckInCalendarDays(recentDays = []) {
-  return recentDays.map((item) => {
-    const date = new Date(`${item.dayKey}T12:00:00`);
-    const weekday = Number.isNaN(date.getTime())
-      ? item.dayKey
-      : new Intl.DateTimeFormat("pt-BR", { weekday: "short" }).format(date).replace(".", "");
-    const dayNumber = Number.isNaN(date.getTime()) ? "--" : new Intl.DateTimeFormat("pt-BR", { day: "2-digit" }).format(date);
+function buildCheckInCalendarDays(recentDays = [], anchorDayNumber = 1) {
+  const safeAnchorDayNumber = Math.min(7, Math.max(1, Number(anchorDayNumber || 1)));
+  const recentDayMap = new Map(
+    (Array.isArray(recentDays) ? recentDays : []).map((item) => [String(item?.dayKey || ""), item])
+  );
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = index + 1;
+    const date = new Date();
+    date.setHours(12, 0, 0, 0);
+    date.setDate(date.getDate() + (day - safeAnchorDayNumber));
+
+    const dayKey = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(date)
+      .reduce((acc, part) => {
+        if (part.type !== "literal") acc[part.type] = part.value;
+        return acc;
+      }, {});
+
+    const resolvedDayKey = `${dayKey.year || ""}-${dayKey.month || ""}-${dayKey.day || ""}`;
+    const backendDay = recentDayMap.get(resolvedDayKey) || null;
+    const weekday = new Intl.DateTimeFormat("pt-BR", {
+      weekday: "short",
+      timeZone: "America/Sao_Paulo",
+    })
+      .format(date)
+      .replace(".", "");
+    const dayNumber = new Intl.DateTimeFormat("pt-BR", {
+      day: "2-digit",
+      timeZone: "America/Sao_Paulo",
+    }).format(date);
+
     return {
-      ...item,
+      dayKey: resolvedDayKey,
+      checkedIn: Boolean(backendDay?.checkedIn),
+      checkedAt: backendDay?.checkedAt || null,
+      isToday: day === safeAnchorDayNumber,
       weekday,
       dayNumber,
     };
@@ -1620,6 +1653,11 @@ export default function Profile() {
       },
     [deferredProfileGamification]
   );
+  const summaryCompetitionPosition = Number(
+    deferredProfileGamification?.currentCompetitionEntry?.position ??
+      deferredProfileGamification?.metrics?.position ??
+      0
+  );
 
   useEffect(() => {
     if (!user?.id || !hasProfileGamification) return;
@@ -2113,8 +2151,12 @@ export default function Profile() {
     [profileHistory?.ledger]
   );
   const recentCheckInDays = useMemo(
-    () => buildCheckInCalendarDays(dailyCheckInState?.recentDays || []),
-    [dailyCheckInState?.recentDays]
+    () =>
+      buildCheckInCalendarDays(
+        dailyCheckInState?.recentDays || [],
+        dailyCheckInState?.checkedIn ? dailyCheckInState?.streakDay || 1 : dailyCheckInState?.nextDay || 1
+      ),
+    [dailyCheckInState?.checkedIn, dailyCheckInState?.nextDay, dailyCheckInState?.recentDays, dailyCheckInState?.streakDay]
   );
   const activePointsHistory = pointsHistoryTab === "weekly" ? weeklyPointsHistory : profileLevelHistory;
   const pointsHistoryTotal = activePointsHistory.reduce((acc, entry) => acc + Number(entry.total || 0), 0);
@@ -5715,7 +5757,7 @@ export default function Profile() {
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
               <p className="text-xs text-slate-400">Top Semanal</p>
-              <p className="text-xl font-black text-emerald-300">#{metrics.position || "-"}</p>
+                <p className="text-xl font-black text-emerald-300">#{summaryCompetitionPosition || "-"}</p>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
               <p className="text-xs text-slate-400">Prêmios Ganhos</p>

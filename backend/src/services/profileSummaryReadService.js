@@ -1,5 +1,5 @@
 import { getAppSettingsMap, pool } from "../db/index.js";
-import { getWeeklyCompetitionContext } from "./weeklyLeaderboardReadService.js";
+import { getWeeklyCompetitionContext, getWeeklyCompetitionEntry } from "./weeklyLeaderboardReadService.js";
 
 const BADGE_RULES_KEY = "achievement_badge_rules_v1";
 const POINTS_RULES_KEY = "achievement_points_rules_v1";
@@ -147,7 +147,10 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
     throw new Error("Invalid target user id");
   }
 
-  const weeklyContext = await getWeeklyCompetitionContext();
+  const [weeklyContext, weeklyEntryContext] = await Promise.all([
+    getWeeklyCompetitionContext(),
+    getWeeklyCompetitionEntry({ userId: safeTargetUserId }),
+  ]);
 
     const [{ badgeRules, pointsRules, dailyCheckInConfig }, userResult, balancesResult, participationResult, socialResult, pointsBalanceResult] =
       await Promise.all([
@@ -221,13 +224,26 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
     );
     const participation = participationResult.rows[0] || {};
     const social = socialResult.rows[0] || {};
-    const currentCompetitionEntry = {
-      user_id: safeTargetUserId,
-      position: 0,
-      weekly_points: Number(balanceMap.get(`weekly_points::${String(weeklyContext?.cycle?.cycle_key || "")}`) || 0),
-      engagement_points: Number(balanceMap.get("engagement_points::") || 0),
-      points: Number(balanceMap.get(`weekly_points::${String(weeklyContext?.cycle?.cycle_key || "")}`) || 0),
-    };
+      const currentCompetitionEntry = {
+        user_id: safeTargetUserId,
+        position: Number(weeklyEntryContext?.currentCompetitionEntry?.position || 0),
+        weekly_points: Number(
+          weeklyEntryContext?.currentCompetitionEntry?.weekly_points ||
+            balanceMap.get(`weekly_points::${String(weeklyContext?.cycle?.cycle_key || "")}`) ||
+            0
+        ),
+        engagement_points: Number(
+          weeklyEntryContext?.currentCompetitionEntry?.engagement_points ||
+            balanceMap.get("engagement_points::") ||
+            0
+        ),
+        points: Number(
+          weeklyEntryContext?.currentCompetitionEntry?.points ||
+            weeklyEntryContext?.currentCompetitionEntry?.weekly_points ||
+            balanceMap.get(`weekly_points::${String(weeklyContext?.cycle?.cycle_key || "")}`) ||
+            0
+        ),
+      };
 
     const metrics = {
       position: Number(currentCompetitionEntry.position || 0),
