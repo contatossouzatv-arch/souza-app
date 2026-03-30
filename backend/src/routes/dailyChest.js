@@ -691,6 +691,16 @@ async function invalidateDailyChestReadCache({ userId = "", chestDayKey = "" } =
   ]);
 }
 
+function runDailyChestBackgroundTask(label, task) {
+  Promise.resolve()
+    .then(task)
+    .catch((error) => {
+      console.error(`[daily-chest] background task failed: ${label}`, {
+        message: error?.message || String(error),
+      });
+    });
+}
+
 async function resolveCachedChestStateForUser(userId) {
   const settings = await loadDailyChestSettings();
   const windowInfo = getLocalWindow(settings);
@@ -1193,22 +1203,10 @@ router.post("/open", requireAuth, async (req, res) => {
     xpGrantRefId: "",
   });
 
-  const xpGrant = await awardChestXp({
-    userId: req.auth.sub,
-    openingId: opening.id,
-    chestDayKey: windowInfo.chestDayKey,
-    xpAmount: settings.xpPerOpen,
-  });
-
   const hydratedOpening = {
     ...opening,
-    xp_grant_ref_id: xpGrant?.id || "",
+    xp_grant_ref_id: "",
   };
-
-  await invalidateDailyChestReadCache({
-    userId: req.auth.sub,
-    chestDayKey: windowInfo.chestDayKey,
-  });
 
   res.status(201).json(
     buildResponseState({
@@ -1231,6 +1229,24 @@ router.post("/open", requireAuth, async (req, res) => {
       },
     })
   );
+
+  runDailyChestBackgroundTask("open-followup", async () => {
+    const xpGrant = await awardChestXp({
+      userId: req.auth.sub,
+      openingId: opening.id,
+      chestDayKey: windowInfo.chestDayKey,
+      xpAmount: settings.xpPerOpen,
+    });
+
+    if (xpGrant?.id) {
+      hydratedOpening.xp_grant_ref_id = xpGrant.id;
+    }
+
+    await invalidateDailyChestReadCache({
+      userId: req.auth.sub,
+      chestDayKey: windowInfo.chestDayKey,
+    });
+  });
 });
 
 router.post("/claim", requireAuth, async (req, res) => {
@@ -1256,15 +1272,9 @@ router.post("/claim", requireAuth, async (req, res) => {
     rewardSnapshot: opening.reward_snapshot,
     openingId: opening.id,
   });
-  const auditRecord = await createDailyChestAuditRecord({
-    userId: req.auth.sub,
-    opening,
-    grantResult,
-    chestDayKey: windowInfo.chestDayKey,
-  });
   const enrichedGrantResult = {
     ...grantResult,
-    auditId: auditRecord?.id || "",
+    auditId: "",
     validationCode: String(opening.id || ""),
   };
   const nextStatus = grantResult.applyStatus === "applied" ? "claimed" : "claimed_pending";
@@ -1273,20 +1283,47 @@ router.post("/claim", requireAuth, async (req, res) => {
     grantResult: enrichedGrantResult,
     status: nextStatus,
   });
+  const state = await resolveChestStateForUser(req.auth.sub);
 
-  await createPrizeGalleryItem({
-    userId: req.auth.sub,
-    chestDayKey: windowInfo.chestDayKey,
-    opening: updatedOpening,
-    grantResult: enrichedGrantResult,
+  runDailyChestBackgroundTask("claim-followup", async () => {
+    const auditRecord = await createDailyChestAuditRecord({
+      userId: req.auth.sub,
+      opening: updatedOpening,
+      grantResult,
+      chestDayKey: windowInfo.chestDayKey,
+    });
+
+    const finalizedGrantResult = auditRecord?.id
+      ? {
+          ...enrichedGrantResult,
+          auditId: auditRecord.id,
+        }
+      : enrichedGrantResult;
+
+    if (auditRecord?.id) {
+      await markDailyChestOpeningClaimed({
+        openingId: updatedOpening.id,
+        grantResult: finalizedGrantResult,
+        status: updatedOpening.status,
+      });
+    }
+
+    await createPrizeGalleryItem({
+      userId: req.auth.sub,
+      chestDayKey: windowInfo.chestDayKey,
+      opening: {
+        ...updatedOpening,
+        grant_result: finalizedGrantResult,
+      },
+      grantResult: finalizedGrantResult,
+    });
+
+    await invalidateDailyChestReadCache({
+      userId: req.auth.sub,
+      chestDayKey: windowInfo.chestDayKey,
+    });
   });
 
-  await invalidateDailyChestReadCache({
-    userId: req.auth.sub,
-    chestDayKey: windowInfo.chestDayKey,
-  });
-
-  const state = await resolveCachedChestStateForUser(req.auth.sub);
   return res.json({
     ...state,
     opening: {

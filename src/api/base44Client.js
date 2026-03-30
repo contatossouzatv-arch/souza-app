@@ -130,6 +130,9 @@ function resolveTimeoutMs(path = "", timeoutMs) {
   }
   if (
     normalizedPath === "/api/daily-chest/state" ||
+    normalizedPath === "/api/daily-chest/open" ||
+    normalizedPath === "/api/daily-chest/claim" ||
+    normalizedPath === "/api/daily-chest/unlock" ||
     normalizedPath === "/api/home/summary" ||
     normalizedPath === "/api/home/feed-summary" ||
     normalizedPath.startsWith("/api/home/feed-summary?") ||
