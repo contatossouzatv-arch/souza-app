@@ -3274,15 +3274,21 @@ router.get("/profile/public/:userId/summary", async (req, res) => {
       return res.status(400).json({ error: "Usuario invalido." });
     }
 
-    const payload = await getPublicProfileSummaryReadModel(targetUserId, PUBLIC_PROFILE_SUMMARY_TTL_MS, async () =>
-      withSoftTimeout(
-        buildLightweightProfileMetrics(targetUserId, {
-          includeCompetitionBoard: true,
+    const payload = await getPublicProfileSummaryReadModel(targetUserId, PUBLIC_PROFILE_SUMMARY_TTL_MS, async () => {
+      const summary = await withSoftTimeout(
+        getProfileSummary({
+          viewerId: "",
+          targetUserId,
         }),
         PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
         "Public profile summary emergency timeout"
-      )
-    );
+      );
+
+      return {
+        metrics: summary?.metrics || {},
+        currentCompetitionEntry: summary?.currentCompetitionEntry || null,
+      };
+    });
 
     const durationMs = Date.now() - startedAt;
     if (durationMs >= 800) {

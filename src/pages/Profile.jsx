@@ -1451,9 +1451,13 @@ export default function Profile() {
     const shouldLoadForPrivateProfile = canLoadDeferredProfileQueries && isEngagementTabActive;
     const shouldLoadForPublicProfile =
       isViewingPublicProfile &&
-      canLoadDeferredPublicProfileQueries &&
       isPublicEngagementTabActive;
     if (!shouldLoadForPrivateProfile && !shouldLoadForPublicProfile) return undefined;
+
+    if (shouldLoadForPublicProfile) {
+      setLoadDiscoverProfiles(true);
+      return undefined;
+    }
 
     const timerId = window.setTimeout(() => {
       setLoadDiscoverProfiles(true);
@@ -2617,7 +2621,6 @@ export default function Profile() {
       !isLoadingAuth &&
       hasResolvedAuthBootstrap &&
       Boolean(user?.id) &&
-      canLoadDeferredPublicProfileQueries &&
       Boolean(publicProfileResolvedUserId) &&
       isSelectedRealProfile,
     staleTime: 30000,
@@ -5093,6 +5096,9 @@ export default function Profile() {
 
   if (isViewingPublicProfile) {
     const publicProfile = effectivePublicProfile;
+    const hasAuthoritativePublicSummary = Boolean(
+      selectedPublicProfileSummary?.metrics || selectedPublicProfileSummary?.currentCompetitionEntry
+    );
     const publicState = publicProfile
       ? isSelectedRealProfile
         ? {
@@ -5131,7 +5137,7 @@ export default function Profile() {
             likes: publicProfile.likes,
           }
       : null;
-    const publicMetrics = publicProfile
+    const publicMetrics = publicProfile && hasAuthoritativePublicSummary
       ? {
           totalTickets: Number(
             selectedPublicProfileSummary?.metrics?.totalTickets ??
@@ -5199,6 +5205,14 @@ export default function Profile() {
     const publicBadgeGallery = buildBadgeGalleryFromRules(badgeRules, publicAchievements);
     const publicSuperFanProgress = publicProgressBadges[0]?.progress ?? 0;
     const publicLevelProgress = getLevelProgress(publicMetrics?.xpTotal || 0);
+    const isPublicSummaryPending =
+      Boolean(publicProfileResolvedUserId) &&
+      !selectedPublicProfileSummary &&
+      selectedPublicProfileSummaryFetching;
+    const isPublicSummaryUnavailable =
+      Boolean(publicProfileResolvedUserId) &&
+      !selectedPublicProfileSummary &&
+      isSelectedPublicProfileSummaryError;
     const publicCompetitionEntry =
       selectedPublicProfileSummary?.currentCompetitionEntry ||
       (publicProfile?.id && competitionEntryByUserId[publicProfile.id]) ||
@@ -5360,29 +5374,59 @@ export default function Profile() {
           {isPublicOverviewTabActive ? (
           <Card className="border-slate-800 bg-slate-900/70 p-4">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Resumo Publico</h2>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-                <p className="text-xs text-slate-400">Bilhetes</p>
-                <p className="text-xl font-black text-cyan-300">{publicMetrics?.totalTickets ?? 0}</p>
+            {isPublicSummaryPending ? (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-400">Carregando dados oficiais deste perfil...</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {["Bilhetes", "Top Semanal", "Prêmios Ganhos"].map((label) => (
+                    <div key={label} className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
+                      <p className="text-xs text-slate-400">{label}</p>
+                      <p className="text-xl font-black text-slate-500">...</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-                <p className="text-xs text-slate-400">Top Semanal</p>
-                <p className="text-xl font-black text-emerald-300">#{publicMetrics?.position || "-"}</p>
+            ) : isPublicSummaryUnavailable ? (
+              <div className="space-y-3">
+                <p className="text-xs text-amber-300">Não foi possível carregar o resumo oficial deste perfil agora.</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {["Bilhetes", "Top Semanal", "Prêmios Ganhos"].map((label) => (
+                    <div key={label} className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
+                      <p className="text-xs text-slate-400">{label}</p>
+                      <p className="text-xl font-black text-slate-500">--</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-                <p className="text-xs text-slate-400">Prêmios Ganhos</p>
-                <p className="text-xl font-black text-yellow-300">{publicMetrics?.totalWins}</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
+                  <p className="text-xs text-slate-400">Bilhetes</p>
+                  <p className="text-xl font-black text-cyan-300">{publicMetrics?.totalTickets ?? 0}</p>
+                </div>
+                <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
+                  <p className="text-xs text-slate-400">Top Semanal</p>
+                  <p className="text-xl font-black text-emerald-300">#{publicMetrics?.position || "-"}</p>
+                </div>
+                <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
+                  <p className="text-xs text-slate-400">Prêmios Ganhos</p>
+                  <p className="text-xl font-black text-yellow-300">{publicMetrics?.totalWins}</p>
+                </div>
               </div>
-            </div>
+            )}
             <div className="mt-4">
               <div className="mb-1 flex items-center justify-between text-xs">
                 <span className="text-slate-400">Super Fã das Lives do SouzaTV</span>
-                <span className="text-cyan-300">{publicSuperFanProgress}%</span>
+                <span className="text-cyan-300">
+                  {isPublicSummaryPending ? "..." : isPublicSummaryUnavailable ? "--" : `${publicSuperFanProgress}%`}
+                </span>
               </div>
               <div className="h-2 w-full rounded-full bg-slate-800">
                 <div
                   className="h-2 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-500"
-                  style={{ width: `${publicSuperFanProgress}%` }}
+                  style={{
+                    width: isPublicSummaryPending || isPublicSummaryUnavailable ? "0%" : `${publicSuperFanProgress}%`,
+                  }}
                 />
               </div>
             </div>
@@ -5392,6 +5436,16 @@ export default function Profile() {
           {isPublicAchievementsTabActive ? (
           <Card className="border-slate-800 bg-slate-900/70 p-4">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Selos e Conquistas</h2>
+            {isPublicSummaryPending ? (
+              <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 text-sm text-slate-300">
+                Carregando selos e progresso oficiais deste perfil...
+              </div>
+            ) : isPublicSummaryUnavailable ? (
+              <div className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-4 text-sm text-amber-100">
+                Não foi possível carregar selos e progresso deste perfil agora.
+              </div>
+            ) : (
+              <>
             <div className="mb-2 flex items-center justify-between text-[11px]">
               <p className="font-semibold uppercase tracking-wide text-emerald-300">
                 {publicBadgeGallery.unlocked.length} de {publicBadgeGallery.ordered.length} desbloqueados
@@ -5458,19 +5512,22 @@ export default function Profile() {
                 </div>
               ))}
             </div>
+              </>
+            )}
           </Card>
           ) : null}
 
           {isPublicPrizesTabActive ? (
           <Suspense fallback={null}>
             <PrizeGalleryCard
-              userId={selectedPublicProfile?.id}
+              userId={publicProfileResolvedUserId || publicProfile?.id}
               title="Galeria de Prêmios"
               subtitle="Modo público: outras pessoas conseguem ver os prêmios já registrados neste perfil."
               emptyTitle="Este perfil ainda não exibiu prêmios na galeria"
               emptySubtitle="Quando esse usuário ganhar e resgatar recompensas, elas vão aparecer aqui em formato de coleção."
               countLabel="registrados"
               privateView={false}
+              eagerPreview
             />
           </Suspense>
           ) : null}
