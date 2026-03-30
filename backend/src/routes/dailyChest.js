@@ -1162,7 +1162,7 @@ router.post("/open", requireAuth, async (req, res) => {
   }
 
   if (slotType === "base" && !accessGate.unlocked && !FORCE_DAILY_CHEST_FREE_ACCESS) {
-    return res.status(409).json({ error: "Liberacao diaria pendente. Informe o codigo para liberar o bau do dia." });
+    return res.status(409).json({ error: "CHEST_GATE_BLOCKED_V2" });
   }
 
   if (slotType === "base" && slotSummary.availableBase <= 0) {
