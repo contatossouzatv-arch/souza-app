@@ -2249,22 +2249,32 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
       ),
       pool.query(
         `SELECT
-           COALESCE(
-             SUM(
-               CASE
-                 WHEN NULLIF(data->>'tickets_count', '') IS NOT NULL
-                   THEN GREATEST(0, (data->>'tickets_count')::int)
-                 WHEN jsonb_typeof(COALESCE(data->'ticket_numbers', '[]'::jsonb)) = 'array'
-                   THEN jsonb_array_length(COALESCE(data->'ticket_numbers', '[]'::jsonb))
-                 ELSE 0
-               END
-             ),
-             0
-           )::int AS total_tickets
-         FROM entity_records
-        WHERE entity_name = 'Deposit'
-          AND COALESCE(data->>'user_id', '') = $1
-          AND COALESCE(data->>'status', '') = 'approved'`,
+           (
+             COALESCE((
+               SELECT SUM(
+                 CASE
+                   WHEN NULLIF(data->>'tickets_count', '') IS NOT NULL
+                     THEN GREATEST(0, (data->>'tickets_count')::int)
+                   WHEN jsonb_typeof(COALESCE(data->'ticket_numbers', '[]'::jsonb)) = 'array'
+                     THEN jsonb_array_length(COALESCE(data->'ticket_numbers', '[]'::jsonb))
+                   ELSE 0
+                 END
+               )
+               FROM entity_records
+               WHERE entity_name = 'Deposit'
+                 AND COALESCE(data->>'user_id', '') = $1
+                 AND COALESCE(data->>'status', '') = 'approved'
+             ), 0)
+             +
+             COALESCE((
+               SELECT SUM(GREATEST(0, COALESCE(NULLIF(data->>'reward_amount', '')::int, 0)))
+               FROM entity_records
+               WHERE entity_name = 'UserPrizeGalleryItem'
+                 AND COALESCE(data->>'user_id', '') = $1
+                 AND LOWER(COALESCE(data->>'claim_status', 'validated')) IN ('validated', 'applied')
+                 AND LOWER(COALESCE(data->>'reward_type', '')) IN ('tickets_active', 'tickets_bonus', 'ticket_bonus', 'bilhetes')
+             ), 0)
+           )::int AS total_tickets`,
         [userId]
       ),
       pool.query(
@@ -2272,7 +2282,8 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
            FROM entity_records
           WHERE entity_name = 'UserPrizeGalleryItem'
             AND COALESCE(data->>'user_id', '') = $1
-            AND LOWER(COALESCE(data->>'claim_status', 'validated')) IN ('validated', 'applied')`,
+            AND LOWER(COALESCE(data->>'claim_status', 'validated')) IN ('validated', 'applied')
+            AND LOWER(COALESCE(data->>'reward_type', '')) IN ('points_balance', 'saldo', 'bonus', 'tickets_active', 'tickets_bonus', 'ticket_bonus', 'bilhetes')`,
         [userId]
       ),
     ];

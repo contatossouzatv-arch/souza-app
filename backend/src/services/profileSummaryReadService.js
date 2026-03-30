@@ -152,7 +152,7 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
     getWeeklyCompetitionEntry({ userId: safeTargetUserId }),
   ]);
 
-    const [{ badgeRules, pointsRules, dailyCheckInConfig }, userResult, balancesResult, participationResult, socialResult, pointsBalanceResult] =
+    const [{ badgeRules, pointsRules, dailyCheckInConfig }, userResult, balancesResult, participationResult, socialResult, pointsBalanceResult, ticketsResult, winsResult] =
       await Promise.all([
         loadProfileSummaryConfig(),
         pool.query(
@@ -212,6 +212,45 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
             WHERE user_id = $1`,
           [safeTargetUserId]
         ),
+        pool.query(
+          `SELECT
+             (
+               COALESCE((
+                 SELECT SUM(
+                   CASE
+                     WHEN NULLIF(data->>'tickets_count', '') IS NOT NULL
+                       THEN GREATEST(0, (data->>'tickets_count')::int)
+                     WHEN jsonb_typeof(COALESCE(data->'ticket_numbers', '[]'::jsonb)) = 'array'
+                       THEN jsonb_array_length(COALESCE(data->'ticket_numbers', '[]'::jsonb))
+                     ELSE 0
+                   END
+                 )
+                 FROM entity_records
+                 WHERE entity_name = 'Deposit'
+                   AND COALESCE(data->>'user_id', '') = $1
+                   AND COALESCE(data->>'status', '') = 'approved'
+               ), 0)
+               +
+               COALESCE((
+                 SELECT SUM(GREATEST(0, COALESCE(NULLIF(data->>'reward_amount', '')::int, 0)))
+                 FROM entity_records
+                 WHERE entity_name = 'UserPrizeGalleryItem'
+                   AND COALESCE(data->>'user_id', '') = $1
+                   AND LOWER(COALESCE(data->>'claim_status', 'validated')) IN ('validated', 'applied')
+                   AND LOWER(COALESCE(data->>'reward_type', '')) IN ('tickets_active', 'tickets_bonus', 'ticket_bonus', 'bilhetes')
+               ), 0)
+             )::int AS total_tickets`,
+          [safeTargetUserId]
+        ),
+        pool.query(
+          `SELECT COUNT(*)::int AS total_wins
+             FROM entity_records
+            WHERE entity_name = 'UserPrizeGalleryItem'
+              AND COALESCE(data->>'user_id', '') = $1
+              AND LOWER(COALESCE(data->>'claim_status', 'validated')) IN ('validated', 'applied')
+              AND LOWER(COALESCE(data->>'reward_type', '')) IN ('points_balance', 'saldo', 'bonus', 'tickets_active', 'tickets_bonus', 'ticket_bonus', 'bilhetes')`,
+          [safeTargetUserId]
+        ),
       ]);
 
     const user = userResult.rows[0];
@@ -222,6 +261,8 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
     const balanceMap = new Map(
       (balancesResult.rows || []).map((row) => [`${row.metric_key}::${row.cycle_key || ""}`, Number(row.amount || 0)])
     );
+    const authoritativeTickets = Number(ticketsResult.rows[0]?.total_tickets || 0);
+    const authoritativeWins = Number(winsResult.rows[0]?.total_wins || 0);
     const participation = participationResult.rows[0] || {};
     const social = socialResult.rows[0] || {};
       const currentCompetitionEntry = {
@@ -248,12 +289,12 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
     const metrics = {
       position: Number(currentCompetitionEntry.position || 0),
       totalApproved: 0,
-      totalTickets: Number(balanceMap.get("tickets_active::") || 0),
+      totalTickets: authoritativeTickets,
       totalParticipations:
         Number(participation.live_participations || 0) +
         Number(participation.game_participations || 0) +
         Number(participation.instant_participations || 0),
-      totalWins: Number(balanceMap.get("prize_counts::") || 0),
+      totalWins: authoritativeWins,
       liveParticipations: Number(participation.live_participations || 0),
       totalFollowers: Number((social.followers ?? balanceMap.get("social_followers::")) || 0),
       totalLikes: Number((social.likes ?? balanceMap.get("social_likes::")) || 0),
@@ -275,7 +316,7 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
       weeklyPoints: Number(currentCompetitionEntry.weekly_points || 0),
       weekly_points: Number(currentCompetitionEntry.weekly_points || 0),
       chestRewards: Number(balanceMap.get("chest_rewards::") || 0),
-      prizeCounts: Number(balanceMap.get("prize_counts::") || 0),
+      prizeCounts: authoritativeWins,
       pointsBalance: Number(pointsBalanceResult.rows[0]?.balance || 0),
       points_balance: Number(pointsBalanceResult.rows[0]?.balance || 0),
     };
