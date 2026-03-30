@@ -12,6 +12,7 @@ import chestTurnSound from "../../assets-para-app/Songs/Song girar bau para abri
 import { isInteractionSoundEnabled, isMenuSoundEnabled } from "@/lib/soundPrefs";
 
 const DailyChestScene = lazy(() => import("@/components/daily-chest/DailyChestScene"));
+const FORCE_DAILY_CHEST_UNLOCK_WHEN_SLOTS_EXIST = true;
 
 function SceneLoader() {
   return (
@@ -100,7 +101,11 @@ export default function DailyChestHub() {
 
   React.useEffect(() => {
     if (!state) return;
-    const backendState = String(state.state || "available");
+    const hasVisibleBaseSlots = Math.max(0, Number(state?.slots?.remainingBase ?? state?.slots?.availableBase ?? 0)) > 0;
+    const backendState =
+      FORCE_DAILY_CHEST_UNLOCK_WHEN_SLOTS_EXIST && String(state?.state || "") === "locked" && hasVisibleBaseSlots
+        ? "available"
+        : String(state.state || "available");
     setDisplayState((current) => {
       if (current === "opening" && !["opened", "claimed", "cooldown"].includes(backendState)) {
         return current;
