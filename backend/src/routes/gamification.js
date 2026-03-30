@@ -2237,17 +2237,45 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
   }
 
   const queryTasks = [
-    pool.query(
-      `SELECT metric_key, cycle_key, amount
-         FROM user_metric_balances
-        WHERE user_id = $1
+      pool.query(
+        `SELECT metric_key, cycle_key, amount
+           FROM user_metric_balances
+          WHERE user_id = $1
           AND (
             metric_key = ANY($2::text[])
             OR (metric_key = 'weekly_points' AND cycle_key = $3)
           )`,
-      [userId, balanceMetricKeys, String(cycle?.cycle_key || "")]
-    ),
-  ];
+        [userId, balanceMetricKeys, String(cycle?.cycle_key || "")]
+      ),
+      pool.query(
+        `SELECT
+           COALESCE(
+             SUM(
+               CASE
+                 WHEN NULLIF(data->>'tickets_count', '') IS NOT NULL
+                   THEN GREATEST(0, (data->>'tickets_count')::int)
+                 WHEN jsonb_typeof(COALESCE(data->'ticket_numbers', '[]'::jsonb)) = 'array'
+                   THEN jsonb_array_length(COALESCE(data->'ticket_numbers', '[]'::jsonb))
+                 ELSE 0
+               END
+             ),
+             0
+           )::int AS total_tickets
+         FROM entity_records
+        WHERE entity_name = 'Deposit'
+          AND COALESCE(data->>'user_id', '') = $1
+          AND COALESCE(data->>'status', '') = 'approved'`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS total_wins
+           FROM entity_records
+          WHERE entity_name = 'UserPrizeGalleryItem'
+            AND COALESCE(data->>'user_id', '') = $1
+            AND LOWER(COALESCE(data->>'claim_status', 'validated')) IN ('validated', 'applied')`,
+        [userId]
+      ),
+    ];
 
   if (includeCompetitionBoard) {
     queryTasks.push(
@@ -2309,8 +2337,16 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
     );
   }
 
-  const [balanceRows, participationRowsResult = { rows: [{ live_participations: 0, game_participations: 0, instant_participations: 0 }] }, leaderboardRowsResult = { rows: [] }] = await Promise.all(queryTasks);
+  const [
+    balanceRows,
+    authoritativeTicketsResult = { rows: [{ total_tickets: 0 }] },
+    authoritativeWinsResult = { rows: [{ total_wins: 0 }] },
+    participationRowsResult = { rows: [{ live_participations: 0, game_participations: 0, instant_participations: 0 }] },
+    leaderboardRowsResult = { rows: [] },
+  ] = await Promise.all(queryTasks);
 
+  const authoritativeTickets = Number(authoritativeTicketsResult?.rows?.[0]?.total_tickets || 0);
+  const authoritativeWins = Number(authoritativeWinsResult?.rows?.[0]?.total_wins || 0);
   const balanceMap = new Map(
     balanceRows.rows.map((row) => [`${row.metric_key}::${row.cycle_key || ""}`, Number(row.amount || 0)])
   );
@@ -2341,12 +2377,12 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
   const metrics = {
     position: Number(currentCompetitionEntry.position || 0),
     totalApproved: 0,
-    totalTickets: Number(balanceMap.get("tickets_active::") || 0),
+    totalTickets: authoritativeTickets,
     totalParticipations:
       Number(participationRow.live_participations || 0) +
       Number(participationRow.game_participations || 0) +
       Number(participationRow.instant_participations || 0),
-    totalWins: Number(balanceMap.get("prize_counts::") || 0),
+    totalWins: authoritativeWins,
     liveParticipations: Number(participationRow.live_participations || 0),
     totalFollowers: Number(balanceMap.get("social_followers::") || 0),
     totalLikes: Number(balanceMap.get("social_likes::") || 0),
@@ -2368,7 +2404,7 @@ async function buildLightweightProfileMetricsFresh(userId, options = {}) {
     weeklyPoints: Number(balanceMap.get(`weekly_points::${weeklyCycleKey}`) || 0),
     weekly_points: Number(balanceMap.get(`weekly_points::${weeklyCycleKey}`) || 0),
     chestRewards: Number(balanceMap.get("chest_rewards::") || 0),
-    prizeCounts: Number(balanceMap.get("prize_counts::") || 0),
+    prizeCounts: authoritativeWins,
   };
 
   const achievements = computeAchievements(metrics, badgeRules);
