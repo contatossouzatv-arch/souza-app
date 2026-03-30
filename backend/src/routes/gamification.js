@@ -1391,6 +1391,7 @@ function createUserSnapshot(user) {
     breakdown: {},
     metricBreakdown: {},
     metricBreakdownMeta: {},
+    ruleUsage: {},
   };
 }
 
@@ -1432,12 +1433,52 @@ function applyRuleMetric(state, rule, units = 1, sourceEvent = "", occurredAt = 
   addMetric(state, metricKey, totalAmount, sourceEvent || `${rule.category}.${rule.source_event}`, occurredAt, metadata);
 }
 
+function buildRuleUsageScopeKey(rule, occurredAt = null, options = {}) {
+  const limitScope = String(rule?.limit_scope || "none").trim().toLowerCase();
+  const cycleKey = String(options?.cycleKey || "").trim();
+  const sourceKey = String(options?.sourceKey || "").trim();
+  const iso = occurredAt ? toIso(occurredAt) : "";
+  const dayKey = iso ? String(iso).slice(0, 10) : "";
+
+  if (limitScope === "event") return sourceKey || dayKey || "event";
+  if (limitScope === "daily") return dayKey || "day:unknown";
+  if (limitScope === "weekly" || limitScope === "cycle") return cycleKey || "cycle:current";
+  return "";
+}
+
+function consumeRuleAllowance(state, rule, units = 1, occurredAt = null, options = {}) {
+  if (!rule?.active) return false;
+
+  const limitScope = String(rule?.limit_scope || "none").trim().toLowerCase();
+  const limitCount = Math.max(0, Number(rule?.limit_count || 0));
+  if (limitScope === "none" || limitCount <= 0) {
+    return true;
+  }
+
+  const usageBucket = buildRuleUsageScopeKey(rule, occurredAt, options);
+  const ruleId = String(rule?.id || rule?.slug || rule?.dedupe_key || `${rule?.category || "rule"}:${rule?.source_event || "manual"}`).trim();
+  if (!ruleId || !usageBucket) return true;
+
+  if (!state.ruleUsage[ruleId]) {
+    state.ruleUsage[ruleId] = {};
+  }
+
+  const current = Number(state.ruleUsage[ruleId][usageBucket] || 0);
+  if (current >= limitCount) {
+    return false;
+  }
+
+  state.ruleUsage[ruleId][usageBucket] = current + Math.max(1, Number(units || 1));
+  return true;
+}
+
 function rulesBySource(rules, category, sourceEvent) {
   return rules.filter((entry) => entry.active && entry.category === category && entry.source_event === sourceEvent);
 }
 
-function applyRulesForSource(state, rules, category, sourceEvent, units = 1, breakdownKey = "", occurredAt = null) {
+function applyRulesForSource(state, rules, category, sourceEvent, units = 1, breakdownKey = "", occurredAt = null, options = {}) {
   rulesBySource(rules, category, sourceEvent).forEach((rule) => {
+    if (!consumeRuleAllowance(state, rule, units, occurredAt, options)) return;
     applyRuleMetric(state, rule, units, breakdownKey || `${category}.${sourceEvent}`, occurredAt);
   });
 }
@@ -1650,10 +1691,16 @@ function buildSnapshots({
       if (isActive && targetState) targetState.totalFollowers += 1;
 
       if (actorState && firstFollowedAt) {
-        applyRulesForSource(actorState, rules, "engagement", "follow_profile", 1, "engagement.follow_profile", firstFollowedAt);
+        applyRulesForSource(actorState, rules, "engagement", "follow_profile", 1, "engagement.follow_profile", firstFollowedAt, {
+          sourceKey: String(entry.target_user_id || "").trim(),
+          cycleKey: String(cycle?.cycle_key || "").trim(),
+        });
 
         if (cycle && isInRange(firstFollowedAt, new Date(cycle.starts_at), new Date(cycle.ends_at))) {
-          applyRulesForSource(actorState, rules, "weekly", "follow_profile", 1, "weekly.follow_profile", firstFollowedAt);
+          applyRulesForSource(actorState, rules, "weekly", "follow_profile", 1, "weekly.follow_profile", firstFollowedAt, {
+            sourceKey: String(entry.target_user_id || "").trim(),
+            cycleKey: String(cycle?.cycle_key || "").trim(),
+          });
         }
       }
     });
@@ -1669,10 +1716,16 @@ function buildSnapshots({
       if (isActive && targetState) targetState.totalLikes += 1;
 
       if (actorState && firstLikedAt) {
-        applyRulesForSource(actorState, rules, "engagement", "like_profile", 1, "engagement.like_profile", firstLikedAt);
+        applyRulesForSource(actorState, rules, "engagement", "like_profile", 1, "engagement.like_profile", firstLikedAt, {
+          sourceKey: String(entry.target_user_id || "").trim(),
+          cycleKey: String(cycle?.cycle_key || "").trim(),
+        });
 
         if (cycle && isInRange(firstLikedAt, new Date(cycle.starts_at), new Date(cycle.ends_at))) {
-          applyRulesForSource(actorState, rules, "weekly", "like_profile", 1, "weekly.like_profile", firstLikedAt);
+          applyRulesForSource(actorState, rules, "weekly", "like_profile", 1, "weekly.like_profile", firstLikedAt, {
+            sourceKey: String(entry.target_user_id || "").trim(),
+            cycleKey: String(cycle?.cycle_key || "").trim(),
+          });
         }
       }
     });

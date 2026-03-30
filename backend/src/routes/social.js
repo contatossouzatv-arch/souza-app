@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { createEntity, createSecurityEvent, findUserById, listEntity, pool } from "../db/index.js";
 import { deleteCacheKey, getOrComputeCacheJson } from "../lib/cache.js";
+import { emitProfileCompetitionBoardUpdated } from "../lib/realtimeEvents.js";
 import { requireAuth } from "../middleware/auth.js";
+import { invalidateProfileReadModels } from "../services/appReadModelService.js";
 import { scheduleGamificationRefresh } from "./gamification.js";
 
 const router = Router();
@@ -110,6 +112,17 @@ function emitEntityChanged(req, entityName, entityId, action = "updated") {
   });
 }
 
+async function syncGamificationProfileViews(req, userId, reason = "") {
+  const safeUserId = String(userId || "").trim();
+  if (!safeUserId) return;
+  await invalidateProfileReadModels(safeUserId);
+  emitProfileCompetitionBoardUpdated(req.app?.locals?.io, {
+    action: "updated",
+    userId: safeUserId,
+    reason: reason || "social",
+  });
+}
+
 function buildHandle(nick = "", userId = "") {
   const base = String(nick || "")
     .toLowerCase()
@@ -206,6 +219,8 @@ async function runFollowSideEffects(req, { active, applied, actor, relation, req
         })
       : Promise.resolve(),
     invalidateSocialCaches(userId, targetUserId),
+    syncGamificationProfileViews(req, userId, active ? "follow_profile" : "unfollow_profile"),
+    syncGamificationProfileViews(req, targetUserId, active ? "followed_by_user" : "unfollowed_by_user"),
   ]);
 
   emitEntityChanged(req, "user_follows", relation?.id || targetUserId, applied ? "updated" : "duplicate");
@@ -557,6 +572,7 @@ router.post("/check-in/daily", requireAuth, async (req, res) => {
 
     emitEntityChanged(req, "daily_checkins", inserted?.id || dayKey, inserted ? "created" : "duplicate");
     emitEntityChanged(req, "gamification", userId, "updated");
+    await syncGamificationProfileViews(req, userId, "daily_checkin");
     scheduleGamificationRefresh({ persistDerived: true });
 
     return res.json({
@@ -890,7 +906,11 @@ async function upsertLikeState(req, res, active) {
     emitEntityChanged(req, "ProfileNotification", targetUserId, active && applied ? "created" : "updated");
     emitEntityChanged(req, "gamification", userId, "updated");
     emitEntityChanged(req, "gamification", targetUserId, "updated");
-    await invalidateSocialCaches(userId, targetUserId);
+    await Promise.all([
+      invalidateSocialCaches(userId, targetUserId),
+      syncGamificationProfileViews(req, userId, active ? "like_profile" : "unlike_profile"),
+      syncGamificationProfileViews(req, targetUserId, active ? "liked_by_user" : "unliked_by_user"),
+    ]);
     scheduleGamificationRefresh({ persistDerived: true });
 
     return res.json({ ok: true, state, alreadyProcessed: !applied });
