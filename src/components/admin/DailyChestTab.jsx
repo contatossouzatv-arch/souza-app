@@ -69,6 +69,8 @@ const DEFAULT_REWARD = {
   admin_contact_phone: "",
 };
 
+const FORCE_DAILY_CHEST_FREE_ACCESS = true;
+
 function createEmptyReward() {
   return { ...DEFAULT_REWARD };
 }
@@ -720,18 +722,23 @@ export default function DailyChestTab() {
                 <div>
                   <p className="font-semibold text-white">Exigir chave diária</p>
                   <p className="mt-1 text-xs text-slate-400">
-                    Desative para deixar o baú livre e só atualizar no horário configurado.
+                    {FORCE_DAILY_CHEST_FREE_ACCESS
+                      ? "Controle temporariamente desativado. O baú está livre por correção emergencial."
+                      : "Desative para deixar o baú livre e só atualizar no horário configurado."}
                   </p>
                 </div>
                 <Switch
-                  checked={parseBooleanString(settingsDraft.daily_chest_access_code_required, true)}
+                  checked={FORCE_DAILY_CHEST_FREE_ACCESS ? false : parseBooleanString(settingsDraft.daily_chest_access_code_required, true)}
+                  disabled={FORCE_DAILY_CHEST_FREE_ACCESS}
                   onCheckedChange={(checked) =>
                     updateSetting("daily_chest_access_code_required", String(Boolean(checked)))
                   }
                 />
               </div>
               <p className="mt-3 text-xs font-semibold text-cyan-200">
-                {parseBooleanString(settingsDraft.daily_chest_access_code_required, true)
+                {FORCE_DAILY_CHEST_FREE_ACCESS
+                  ? "Hoje o baú base está livre, sem exigir chave."
+                  : parseBooleanString(settingsDraft.daily_chest_access_code_required, true)
                   ? "Hoje o baú base exige a chave diária."
                   : "Hoje o baú base está livre, sem exigir chave."}
               </p>
@@ -762,21 +769,28 @@ export default function DailyChestTab() {
               <Button
                 type="button"
                 onClick={() => saveAccessConfigMutation.mutate()}
-                disabled={saveAccessConfigMutation.isPending}
+                disabled={FORCE_DAILY_CHEST_FREE_ACCESS || saveAccessConfigMutation.isPending}
                 className="w-full bg-cyan-500 font-bold text-slate-950 hover:bg-cyan-400"
               >
-                {saveAccessConfigMutation.isPending ? "Salvando acesso..." : "Salvar configurações de chave"}
+                {FORCE_DAILY_CHEST_FREE_ACCESS
+                  ? "Chave temporariamente desativada"
+                  : saveAccessConfigMutation.isPending
+                  ? "Salvando acesso..."
+                  : "Salvar configurações de chave"}
               </Button>
               <Button
                 type="button"
                 onClick={() => generateAccessCodeMutation.mutate("")}
                 disabled={
+                  FORCE_DAILY_CHEST_FREE_ACCESS ||
                   generateAccessCodeMutation.isPending ||
                   !parseBooleanString(settingsDraft.daily_chest_access_code_required, true)
                 }
                 className="w-full bg-emerald-400 font-bold text-slate-950 hover:bg-emerald-300"
               >
-                {generateAccessCodeMutation.isPending
+                {FORCE_DAILY_CHEST_FREE_ACCESS
+                  ? "Geração bloqueada"
+                  : generateAccessCodeMutation.isPending
                   ? "Gerando..."
                   : !parseBooleanString(settingsDraft.daily_chest_access_code_required, true)
                   ? "Chave desativada"

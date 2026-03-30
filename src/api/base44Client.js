@@ -146,6 +146,12 @@ function resolveTimeoutMs(path = "", timeoutMs) {
     return 25000;
   }
   if (
+    normalizedPath.startsWith("/api/social/follow/") ||
+    normalizedPath.startsWith("/api/social/like/")
+  ) {
+    return 30000;
+  }
+  if (
     normalizedPath === "/api/admin/gamification/overview" ||
     normalizedPath.startsWith("/api/admin/users") ||
     normalizedPath.includes("/api/admin/instant-raffles/participants/") ||
