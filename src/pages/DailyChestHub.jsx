@@ -151,7 +151,14 @@ export default function DailyChestHub() {
     const remainingForType =
       slotType === "bonus"
         ? Math.max(0, Number(state?.slots?.availableBonus || 0))
-        : Math.max(0, Number(state?.slots?.availableBase || 0));
+        : Math.max(
+            0,
+            Number(
+              state?.accessGate?.required
+                ? state?.slots?.availableBase
+                : state?.slots?.availableBase ?? state?.slots?.remainingBase ?? 0
+            )
+          );
     if (remainingForType <= 0) return;
 
     const tapGoal = Math.max(1, Number(state.tapGoal || 4));

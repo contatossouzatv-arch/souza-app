@@ -86,12 +86,16 @@ export default function DailyChestOverlay({
   const accessGate = FORCE_DAILY_CHEST_FREE_ACCESS
     ? { ...(state?.accessGate || {}), required: false, unlocked: true }
     : state?.accessGate || {};
+  const effectiveAvailableBase =
+    FORCE_DAILY_CHEST_FREE_ACCESS && !accessGate.required
+      ? Math.max(0, Number(slotSummary.availableBase ?? slotSummary.remainingBase ?? 0))
+      : Math.max(0, Number(slotSummary.availableBase || 0));
   const resetLabel = state?.resetAt ? formatCountdownLabel(state.resetAt) : "-";
   const rewardMessageText = String(rewardMessage || "").trim();
   const canSpinBase =
     viewMode === "main" &&
     displayState !== "opening" &&
-    Math.max(0, Number(slotSummary.availableBase || 0)) > 0 &&
+    effectiveAvailableBase > 0 &&
     !isOpening;
   const canSpinBonus =
     viewMode === "main" &&
