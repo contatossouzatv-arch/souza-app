@@ -27,6 +27,7 @@ const DAILY_CHEST_SETTINGS_TTL_MS = 15000;
 const DAILY_CHEST_REWARD_POOL_TTL_MS = 15000;
 const DAILY_CHEST_STATE_TTL_MS = 10000;
 const FORCE_DAILY_CHEST_FREE_ACCESS = true;
+const FORCE_DAILY_CHEST_IGNORE_SCHEDULE = true;
 
 const DEFAULT_DAILY_CHEST_SETTINGS = {
   enabled: false,
@@ -398,6 +399,7 @@ async function resolveAccessGate({ userId, settings, windowInfo, scheduleUnlocke
 
 function isWithinSchedule(settings, now) {
   if (!settings.enabled) return false;
+  if (FORCE_DAILY_CHEST_IGNORE_SCHEDULE) return true;
   const startAt = parseOptionalDate(settings.scheduleStartAt);
   const endAt = parseOptionalDate(settings.scheduleEndAt);
   if (startAt && now < startAt) return false;
