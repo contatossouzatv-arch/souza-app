@@ -129,7 +129,7 @@ async function loadRuntimeModules() {
 }
 
 async function bootstrap() {
-  const port = process.env.PORT || 8080;
+  const port = Number(process.env.PORT) || 8080;
   const host = "0.0.0.0";
   const startedAt = new Date().toISOString();
 
@@ -140,6 +140,12 @@ async function bootstrap() {
     hasRedis: Boolean(process.env.REDIS_URL),
     hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
   });
+
+  if (!process.env.DATABASE_URL) {
+    console.warn("[startup] DATABASE_URL missing, skipping DB init", {
+      buildInfo,
+    });
+  }
 
   let runtime = null;
   let app = null;
@@ -201,12 +207,7 @@ async function bootstrap() {
   });
 
   server.listen(port, host, () => {
-    console.log("[startup] server ready", {
-      port,
-      host,
-      degradedMode: Boolean(startupError),
-      buildInfo,
-    });
+    console.log("[startup] server:ready", { port, host });
   });
 
   if (runtime && !startupError) {
