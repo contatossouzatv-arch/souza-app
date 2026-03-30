@@ -191,16 +191,19 @@ export default function DailyChestHub() {
     if (nextTapCount < tapGoal) {
       return;
     }
-    setSpinToken((value) => value + 1);
-    setDisplayState("opening");
-    playAudio(spinAudioRef, isInteractionSoundEnabled(), 0.9);
+      setSpinToken((value) => value + 1);
+      setDisplayState("opening");
+      playAudio(spinAudioRef, isInteractionSoundEnabled(), 0.9);
 
-    try {
-      await new Promise((resolve) => window.setTimeout(resolve, 900));
-      const nextState = await openChest(slotType);
-      setRevealedReward(nextState?.opening?.rewardSnapshot || nextState?.rewardPreview || null);
-      setDisplayState(String(nextState?.state || "opened"));
-    } catch (openError) {
+      try {
+        const openRequest = openChest(slotType);
+        const [nextState] = await Promise.all([
+          openRequest,
+          new Promise((resolve) => window.setTimeout(resolve, 900)),
+        ]);
+        setRevealedReward(nextState?.opening?.rewardSnapshot || nextState?.rewardPreview || null);
+        setDisplayState(String(nextState?.state || "opened"));
+      } catch (openError) {
       setDisplayState("available");
       setTapCount(0);
       setRevealedReward(null);
