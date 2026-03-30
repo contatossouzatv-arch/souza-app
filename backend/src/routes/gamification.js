@@ -574,6 +574,22 @@ async function upsertAppSetting(key, value, description = "") {
   return createEntity("AppSettings", payload);
 }
 
+async function replaceAppSetting(key, value, description = "") {
+  const safeKey = String(key || "");
+  const payload = {
+    key: safeKey,
+    value: typeof value === "string" ? value : JSON.stringify(value),
+    description,
+  };
+  await pool.query(
+    `DELETE FROM entity_records
+      WHERE entity_name = 'AppSettings'
+        AND data->>'key' = $1`,
+    [safeKey]
+  );
+  return createEntity("AppSettings", payload);
+}
+
 function normalizeWeeklyConfig(raw = {}) {
   const positions = Array.isArray(raw.positions)
     ? raw.positions
@@ -5110,7 +5126,7 @@ router.put("/admin/daily-chest/settings", requireAuth, requireAdmin, async (req,
     keys: nextEntries.map(([key]) => key),
   });
   for (const [key, value] of nextEntries) {
-    await upsertAppSetting(key, String(value ?? ""), `Configuração do Baú Diário: ${key}`);
+    await replaceAppSetting(key, String(value ?? ""), `Configuração do Baú Diário: ${key}`);
   }
   await appendAdminAudit({
     domain: "daily_chest",

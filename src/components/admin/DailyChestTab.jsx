@@ -146,6 +146,15 @@ function parseBooleanString(value, fallback = false) {
   return String(value) === "true";
 }
 
+function buildGeneralSettingsPayload(settings = {}) {
+  const payload = { ...(settings || {}) };
+  delete payload.daily_chest_access_code_required;
+  delete payload.daily_chest_access_group_link;
+  delete payload.daily_chest_access_code;
+  delete payload.daily_chest_access_code_day_key;
+  return payload;
+}
+
 function getRewardTypeMeta(value) {
   return REWARD_TYPE_OPTIONS.find((entry) => entry.value === value) || REWARD_TYPE_OPTIONS[0];
 }
@@ -406,7 +415,7 @@ export default function DailyChestTab() {
   }, [data?.rewards, isCreatingReward, rewardDraft.id, selectedRewardId]);
 
   const saveSettingsMutation = useMutation({
-    mutationFn: () => base44.adminDailyChest.saveSettings(settingsDraft),
+    mutationFn: () => base44.adminDailyChest.saveSettings(buildGeneralSettingsPayload(settingsDraft)),
     onSuccess: (result) => {
       const persistedSettings = result?.settings && typeof result.settings === "object" ? result.settings : null;
       if (persistedSettings) {
@@ -547,7 +556,7 @@ export default function DailyChestTab() {
       }
 
       await base44.adminDailyChest.saveSettings({
-        ...settingsDraft,
+        ...buildGeneralSettingsPayload(settingsDraft),
         daily_chest_balance_wins_per_user_day: String(Math.max(0, Number(planner.cashWinsPerUserDay || 0))),
       });
 
