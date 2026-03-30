@@ -2024,22 +2024,6 @@ export default function Profile() {
       publicProfileLookupStatus === 404 ||
       (!(publicProfileBasicsPayload?.items || []).length && !publicProfileBasicsError)
     );
-  const handleRetryPublicProfileLoad = React.useCallback(() => {
-    logPublicProfileFlow("load:retry", {
-      targetUserId: selectedPublicProfileId || "",
-      targetHandle: selectedPublicProfileHandle || "",
-    });
-    void Promise.allSettled([
-      refetchPublicProfileBasics(),
-      selectedPublicProfile?.id ? refetchSelectedPublicProfileSummary() : Promise.resolve(),
-    ]);
-  }, [
-    refetchPublicProfileBasics,
-    refetchSelectedPublicProfileSummary,
-    selectedPublicProfile?.id,
-    selectedPublicProfileHandle,
-    selectedPublicProfileId,
-  ]);
   const engagedProfilesWithSummary = useMemo(() => {
     return engagedProfiles
       .map((profile) => {
@@ -2629,6 +2613,22 @@ export default function Profile() {
     refetchOnWindowFocus: false,
     retry: false,
   });
+  const handleRetryPublicProfileLoad = React.useCallback(() => {
+    logPublicProfileFlow("load:retry", {
+      targetUserId: selectedPublicProfileId || "",
+      targetHandle: selectedPublicProfileHandle || "",
+    });
+    void Promise.allSettled([
+      refetchPublicProfileBasics(),
+      selectedPublicProfile?.id ? refetchSelectedPublicProfileSummary() : Promise.resolve(),
+    ]);
+  }, [
+    refetchPublicProfileBasics,
+    refetchSelectedPublicProfileSummary,
+    selectedPublicProfile?.id,
+    selectedPublicProfileHandle,
+    selectedPublicProfileId,
+  ]);
 
   useEffect(() => {
     if (!isViewingPublicProfile) return;
