@@ -2006,7 +2006,11 @@ export default function Profile() {
         ? simulatedProfiles.find((profile) => profile.handle === selectedPublicProfileHandle)
         : simulatedProfiles.find((profile) => profile.id === selectedPublicProfileId)) || null
     );
-  const hasInitialPublicProfileIdentity = Boolean(selectedPublicProfileId || selectedPublicUser?.id);
+  const hasInitialPublicProfileIdentity = Boolean(
+    selectedPublicProfileId ||
+    selectedPublicUserByHandle?.id ||
+    publicProfileBasicsMap.get(String(selectedPublicProfileId || ""))?.id
+  );
   const isPublicProfileResolving =
     isViewingPublicProfile &&
     (!hasInitialPublicProfileIdentity &&
