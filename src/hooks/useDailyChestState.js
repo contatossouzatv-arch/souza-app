@@ -3,6 +3,10 @@ import { base44 } from "@/api/base44Client";
 
 export function useDailyChestState() {
   const queryClient = useQueryClient();
+  const invalidatePrizeGalleryQueries = () =>
+    queryClient.invalidateQueries({
+      predicate: ({ queryKey }) => Array.isArray(queryKey) && String(queryKey[0] || "").startsWith("user-prize-gallery"),
+    });
   const syncDailyChestState = async (data) => {
     queryClient.setQueryData(["daily-chest-state"], data);
     await queryClient.invalidateQueries({ queryKey: ["daily-chest-state"] });
@@ -43,7 +47,7 @@ export function useDailyChestState() {
     onSuccess: async (data) => {
       await syncDailyChestState(data);
       queryClient.invalidateQueries({ queryKey: ["points-me"] });
-      queryClient.invalidateQueries({ queryKey: ["user-prize-gallery"] });
+      await invalidatePrizeGalleryQueries();
       queryClient.invalidateQueries({ queryKey: ["profile-competition-bonus-events"] });
       queryClient.invalidateQueries({ queryKey: ["profile-daily-chest-xp"] });
       queryClient.invalidateQueries({ queryKey: ["profile-gamification-authoritative"] });
