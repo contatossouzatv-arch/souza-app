@@ -20,13 +20,14 @@ import {
   upsertDailyChestAccessUnlock,
   updateEntity,
 } from "../db/index.js";
-import { deleteCacheByPrefix, deleteCacheKey, getOrComputeCacheJson } from "../lib/cache.js";
+import { cacheMiss, deleteCacheByPrefix, deleteCacheKey, getCacheJson, getOrComputeCacheJson } from "../lib/cache.js";
 import { upsertPrizeGalleryItem } from "../services/prizeGalleryService.js";
 
 const router = Router();
 const DAILY_CHEST_SETTINGS_TTL_MS = 15000;
 const DAILY_CHEST_REWARD_POOL_TTL_MS = 15000;
 const DAILY_CHEST_STATE_TTL_MS = 10000;
+const DAILY_CHEST_STATE_SOFT_TIMEOUT_MS = 2200;
 // Production hotfix: keep the base daily chest free while the access-key flow is disabled.
 const FORCE_DAILY_CHEST_FREE_ACCESS = true; // force backend redeploy marker
 const FORCE_DAILY_CHEST_IGNORE_SCHEDULE = true; // deploy nudge
@@ -639,24 +640,32 @@ function buildResponseState({
 async function resolveChestStateForUser(userId) {
   const settings = await loadDailyChestSettings();
   const windowInfo = getLocalWindow(settings);
-  const rewardPool = await loadCachedRewardPoolForDay(windowInfo.chestDayKey, settings, windowInfo.now);
-  const openings = await listDailyChestOpeningsByUserDay(userId, windowInfo.chestDayKey);
+  const scheduleUnlocked = isWithinSchedule(settings, windowInfo.now);
+  const [rewardPool, openings, bonusGrants, accessGate, recentInventory] = await Promise.all([
+    loadCachedRewardPoolForDay(windowInfo.chestDayKey, settings, windowInfo.now),
+    listDailyChestOpeningsByUserDay(userId, windowInfo.chestDayKey),
+    listDailyChestBonusGrantsByUserDay(userId, windowInfo.chestDayKey),
+    resolveAccessGate({ userId, settings, windowInfo, scheduleUnlocked }),
+    listRecentInventoryPreview(userId).catch((error) => {
+      console.warn("[daily-chest] inventory preview degraded", {
+        userId: String(userId || ""),
+        message: error?.message || String(error),
+      });
+      return [];
+    }),
+  ]);
   const filteredRewardPool = filterRewardPoolForUserDay(rewardPool, openings, settings);
   const rewardPreview = filteredRewardPool[0] || null;
   const activeOpening =
     openings.find((entry) => entry.status === "opened" || entry.status === "claimed_pending") ||
     null;
-  const bonusGrants = await listDailyChestBonusGrantsByUserDay(userId, windowInfo.chestDayKey);
   const bonusSlots = bonusGrants.reduce((sum, entry) => sum + Math.max(0, Number(entry.slots_awarded || 0)), 0);
-  const scheduleUnlocked = isWithinSchedule(settings, windowInfo.now);
-  const accessGate = await resolveAccessGate({ userId, settings, windowInfo, scheduleUnlocked });
   const slotSummary = summarizeSlots({
     openings,
     baseSlots: Math.max(0, Number(settings.baseDailyChests || 0)),
     bonusSlots,
     baseUnlocked: accessGate.unlocked,
   });
-  const recentInventory = await listRecentInventoryPreview(userId);
 
   return buildResponseState({
     settings,
@@ -691,14 +700,78 @@ function runDailyChestBackgroundTask(label, task) {
     });
 }
 
+function buildFastChestStateFallback({ settings, windowInfo, cachedState = null }) {
+  if (cachedState && typeof cachedState === "object" && !Array.isArray(cachedState)) {
+    return {
+      ...cachedState,
+      _degraded: true,
+    };
+  }
+
+  const scheduleUnlocked = isWithinSchedule(settings, windowInfo.now);
+  const accessGate = FORCE_DAILY_CHEST_FREE_ACCESS
+    ? {
+        required: false,
+        unlocked: true,
+        codeAvailable: false,
+        currentDayKey: windowInfo.chestDayKey,
+        groupLink: settings.accessGroupLink || "",
+      }
+    : {
+        required: Boolean(settings.accessCodeRequired),
+        unlocked: !Boolean(settings.accessCodeRequired),
+        codeAvailable: Boolean(settings.accessCode) && String(settings.accessCodeDayKey || "") === String(windowInfo.chestDayKey || ""),
+        currentDayKey: windowInfo.chestDayKey,
+        groupLink: settings.accessGroupLink || "",
+      };
+  const slots = summarizeSlots({
+    openings: [],
+    baseSlots: Math.max(0, Number(settings.baseDailyChests || 0)),
+    bonusSlots: 0,
+    baseUnlocked: accessGate.unlocked,
+  });
+
+  return {
+    ...buildResponseState({
+      settings,
+      opening: null,
+      rewardPreview: null,
+      rewardPool: [],
+      windowInfo,
+      isUnlocked: scheduleUnlocked,
+      accessGate,
+      recentInventory: [],
+      slots: { ...slots, grants: [] },
+    }),
+    _degraded: true,
+  };
+}
+
 async function resolveCachedChestStateForUser(userId) {
   const settings = await loadDailyChestSettings();
   const windowInfo = getLocalWindow(settings);
-  return getOrComputeCacheJson(
-    `daily-chest:state:${String(userId || "")}:${String(windowInfo.chestDayKey || "")}`,
-    DAILY_CHEST_STATE_TTL_MS,
-    () => resolveChestStateForUser(userId)
-  );
+  const cacheKey = `daily-chest:state:${String(userId || "")}:${String(windowInfo.chestDayKey || "")}`;
+
+  try {
+    return await Promise.race([
+      getOrComputeCacheJson(cacheKey, DAILY_CHEST_STATE_TTL_MS, () => resolveChestStateForUser(userId)),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Daily chest state soft timeout")), DAILY_CHEST_STATE_SOFT_TIMEOUT_MS)
+      ),
+    ]);
+  } catch (error) {
+    console.warn("[daily-chest] state degraded fallback", {
+      userId: String(userId || ""),
+      chestDayKey: String(windowInfo.chestDayKey || ""),
+      message: error?.message || String(error),
+    });
+    const cachedState = await getCacheJson(cacheKey).catch(() => null);
+    return buildFastChestStateFallback({
+      settings,
+      windowInfo,
+      cachedState: cacheMiss(cachedState) ? null : cachedState,
+    });
+  }
 }
 
 async function awardChestXp({ userId, openingId, chestDayKey, xpAmount }) {

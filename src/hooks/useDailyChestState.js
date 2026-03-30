@@ -17,7 +17,8 @@ export function useDailyChestState() {
     queryKey: ["daily-chest-state"],
     queryFn: () => base44.dailyChest.getState(),
     staleTime: 15_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const openMutation = useMutation({
