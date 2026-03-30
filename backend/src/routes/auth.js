@@ -18,6 +18,7 @@ import {
   findActiveRefreshTokenByHash,
   findValidPasswordResetTokenByHash,
   findOrCreateUserByEmail,
+  findRefreshTokenByHash,
   findUserById,
   findUserPrivateById,
   findUserRowByEmail,
@@ -405,6 +406,10 @@ function buildCookieOptions(maxAgeMs) {
     path: env.authCookiePath || "/",
     maxAge: maxAgeMs,
   };
+  const normalizedDomain = normalizeCookieDomain(env.authCookieDomain);
+  if (normalizedDomain) {
+    options.domain = normalizedDomain;
+  }
 
   return options;
 }
@@ -425,6 +430,16 @@ function setSessionCookies(res, session) {
   const refreshMaxAgeMs = Math.max(1, Number(env.refreshTokenTtlDays || 30)) * 24 * 60 * 60 * 1000;
   const accessOptions = buildCookieOptions(accessMaxAgeMs);
   const refreshOptions = buildCookieOptions(refreshMaxAgeMs);
+  console.info("[auth-cookie] setting session cookies", {
+    accessCookieName: env.authAccessCookieName,
+    refreshCookieName: env.authRefreshCookieName,
+    sameSite: refreshOptions.sameSite,
+    secure: Boolean(refreshOptions.secure),
+    httpOnly: Boolean(refreshOptions.httpOnly),
+    domain: refreshOptions.domain || null,
+    path: refreshOptions.path || "/",
+    refreshMaxAgeMs,
+  });
   try {
     res.cookie(env.authAccessCookieName, session.token, accessOptions);
     res.cookie(env.authRefreshCookieName, session.refreshToken, refreshOptions);
@@ -973,19 +988,45 @@ router.post("/change-password", requireAuth, async (req, res) => {
 });
 
 router.post("/refresh", async (req, res) => {
+  const cookies = parseCookies(req.headers.cookie || "");
+  const bodyToken = String(req.body?.refreshToken || "").trim();
+  const cookieToken = String(cookies[env.authRefreshCookieName] || "").trim();
+  logAuthRoute(req, "refresh requested", {
+    hasRefreshCookieToken: Boolean(cookieToken),
+    hasRefreshBodyToken: Boolean(bodyToken),
+    refreshCookieName: env.authRefreshCookieName,
+    cookieDomain: normalizeCookieDomain(env.authCookieDomain) || null,
+    cookieSameSite: env.nodeEnv === "production" ? "none" : env.authCookieSameSite,
+    cookieSecure: env.nodeEnv === "production" ? true : env.authCookieSecure,
+    refreshTtlDays: Number(env.refreshTokenTtlDays || 30),
+  });
+
   const rawToken = readRefreshToken(req);
   if (!rawToken) {
     clearSessionCookies(res);
     logAuthRoute(req, "refresh denied", { reason: "missing_refresh_token" });
-    return res.status(401).json({ error: "Refresh token inválido" });
+    return res.status(401).json({ error: "Refresh token ausente", code: "REFRESH_TOKEN_MISSING" });
   }
 
   const tokenHash = hashToken(rawToken);
   const stored = await findActiveRefreshTokenByHash(tokenHash);
   if (!stored) {
+    const storedAny = await findRefreshTokenByHash(tokenHash);
     clearSessionCookies(res);
-    logAuthRoute(req, "refresh denied", { reason: "unknown_refresh_token" });
-    return res.status(401).json({ error: "Refresh token inválido" });
+    const isExpired =
+      Boolean(storedAny?.expires_at) && new Date(storedAny.expires_at).getTime() <= Date.now();
+    const isRevoked = Boolean(storedAny?.revoked_at);
+    const reason = storedAny ? (isExpired ? "expired_refresh_token" : isRevoked ? "revoked_refresh_token" : "inactive_refresh_token") : "unknown_refresh_token";
+    logAuthRoute(req, "refresh denied", {
+      reason,
+      tokenSource: bodyToken ? "body" : cookieToken ? "cookie" : "unknown",
+      refreshExpiresAt: storedAny?.expires_at || null,
+      refreshRevokedAt: storedAny?.revoked_at || null,
+    });
+    return res.status(401).json({
+      error: isExpired ? "Refresh token expirado" : isRevoked ? "Refresh token revogado" : "Refresh token inválido",
+      code: isExpired ? "REFRESH_TOKEN_EXPIRED" : isRevoked ? "REFRESH_TOKEN_REVOKED" : "REFRESH_TOKEN_INVALID",
+    });
   }
 
   const user = await findUserById(stored.user_id);
@@ -993,7 +1034,7 @@ router.post("/refresh", async (req, res) => {
     await revokeRefreshTokenById(stored.id);
     clearSessionCookies(res);
     logAuthRoute(req, "refresh denied", { reason: "missing_user", userId: stored.user_id });
-    return res.status(401).json({ error: "Sessão inválida" });
+    return res.status(401).json({ error: "Sessão inválida", code: "SESSION_INVALID" });
   }
 
   await revokeRefreshTokenById(stored.id);

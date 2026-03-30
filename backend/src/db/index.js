@@ -905,6 +905,17 @@ export async function findActiveRefreshTokenByHash(tokenHash) {
   return result.rows[0] || null;
 }
 
+export async function findRefreshTokenByHash(tokenHash) {
+  const result = await pool.query(
+    `SELECT *
+     FROM refresh_tokens
+     WHERE token_hash = $1
+     LIMIT 1`,
+    [tokenHash]
+  );
+  return result.rows[0] || null;
+}
+
 export async function revokeRefreshTokenById(id) {
   const result = await pool.query(
     `UPDATE refresh_tokens

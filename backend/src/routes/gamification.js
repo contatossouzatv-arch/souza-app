@@ -436,6 +436,8 @@ async function listAppSettingsMap() {
   return map;
 }
 
+const FORCE_DAILY_CHEST_FREE_ACCESS = true;
+
 function buildDayKey(value) {
   if (!value) return "";
   const date = new Date(value);
@@ -5065,7 +5067,9 @@ router.get("/admin/daily-chest/config", requireAuth, requireAdmin, async (_req, 
       daily_chest_base_daily_chests: settingsMap.get("daily_chest_base_daily_chests")?.value ?? "1",
       daily_chest_xp_per_open: settingsMap.get("daily_chest_xp_per_open")?.value ?? "18",
       daily_chest_balance_wins_per_user_day: settingsMap.get("daily_chest_balance_wins_per_user_day")?.value ?? "1",
-      daily_chest_access_code_required: settingsMap.get("daily_chest_access_code_required")?.value ?? "true",
+      daily_chest_access_code_required: FORCE_DAILY_CHEST_FREE_ACCESS
+        ? "false"
+        : settingsMap.get("daily_chest_access_code_required")?.value ?? "true",
       daily_chest_message_of_day: settingsMap.get("daily_chest_message_of_day")?.value || "Toque no baú para abrir",
       daily_chest_reset_hour: settingsMap.get("daily_chest_reset_hour")?.value ?? "0",
       daily_chest_reset_minute: settingsMap.get("daily_chest_reset_minute")?.value ?? "0",

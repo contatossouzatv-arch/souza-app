@@ -26,6 +26,7 @@ const router = Router();
 const DAILY_CHEST_SETTINGS_TTL_MS = 15000;
 const DAILY_CHEST_REWARD_POOL_TTL_MS = 15000;
 const DAILY_CHEST_STATE_TTL_MS = 10000;
+const FORCE_DAILY_CHEST_FREE_ACCESS = true;
 
 const DEFAULT_DAILY_CHEST_SETTINGS = {
   enabled: false,
@@ -45,7 +46,7 @@ const DEFAULT_DAILY_CHEST_SETTINGS = {
   bonusAmountStep: 0,
   bonusChestsPerStep: 0,
   balanceWinsPerUserDay: 1,
-  accessCodeRequired: true,
+  accessCodeRequired: false,
   accessGroupLink: "",
 };
 
@@ -152,10 +153,12 @@ async function loadDailyChestSettings() {
         0,
         10
       ),
-      accessCodeRequired: readBooleanSetting(
-        map.get("daily_chest_access_code_required"),
-        DEFAULT_DAILY_CHEST_SETTINGS.accessCodeRequired
-      ),
+      accessCodeRequired: FORCE_DAILY_CHEST_FREE_ACCESS
+        ? false
+        : readBooleanSetting(
+            map.get("daily_chest_access_code_required"),
+            DEFAULT_DAILY_CHEST_SETTINGS.accessCodeRequired
+          ),
       accessCode: normalizeAccessCode(map.get("daily_chest_access_code")),
       accessCodeDayKey: String(map.get("daily_chest_access_code_day_key") || "").trim(),
       accessGroupLink: String(map.get("daily_chest_access_group_link") || DEFAULT_DAILY_CHEST_SETTINGS.accessGroupLink).trim(),
