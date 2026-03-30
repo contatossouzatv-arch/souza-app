@@ -255,6 +255,7 @@ export function createApp(io) {
   });
 
   app.get("/version", (_req, res) => {
+    // Runtime probe route used to verify that the latest backend revision is active in production.
     res.setHeader("Cache-Control", "no-store");
     res.json({
       ok: true,
