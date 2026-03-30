@@ -53,6 +53,7 @@ export default function DailyChestHub() {
   const [tapPulseToken, setTapPulseToken] = React.useState(0);
   const [spinToken, setSpinToken] = React.useState(0);
   const [displayState, setDisplayState] = React.useState("available");
+  const [revealedReward, setRevealedReward] = React.useState(null);
   const [viewMode, setViewMode] = React.useState("main");
   const [sceneReady, setSceneReady] = React.useState(false);
   const menuAudioRef = React.useRef(null);
@@ -118,7 +119,11 @@ export default function DailyChestHub() {
     }
     if (backendState === "available") {
       setTapCount(0);
+      setRevealedReward(null);
       return;
+    }
+    if (backendState === "cooldown") {
+      setRevealedReward(null);
     }
     setTapCount(Number(state.tapGoal || 0));
   }, [displayState, state]);
@@ -193,10 +198,12 @@ export default function DailyChestHub() {
     try {
       await new Promise((resolve) => window.setTimeout(resolve, 900));
       const nextState = await openChest(slotType);
+      setRevealedReward(nextState?.opening?.rewardSnapshot || nextState?.rewardPreview || null);
       setDisplayState(String(nextState?.state || "opened"));
     } catch (openError) {
       setDisplayState("available");
       setTapCount(0);
+      setRevealedReward(null);
       toast({
         title: "Não foi possível abrir",
         description: openError?.message || "Tente novamente em instantes.",
@@ -225,6 +232,7 @@ export default function DailyChestHub() {
     try {
       playAudio(collectAudioRef, isInteractionSoundEnabled(), 0.92);
       const nextState = await claimChest();
+      setRevealedReward((current) => nextState?.opening?.rewardSnapshot || current || null);
       setDisplayState(String(nextState?.state || "claimed"));
       toast({
         title: "Prêmio resgatado",
@@ -264,7 +272,7 @@ export default function DailyChestHub() {
     );
   }
 
-  const reward = state.opening?.rewardSnapshot || state.rewardPreview || {};
+  const reward = revealedReward || state.opening?.rewardSnapshot || state.rewardPreview || {};
   const rewardMessage = resolveRewardMessage(reward, state);
   const sceneState =
     displayState === "claimed" || displayState === "cooldown"
