@@ -1177,7 +1177,7 @@ router.post("/open", requireAuth, async (req, res) => {
     return res.status(409).json({ error: "Voce ja atingiu o limite de bancas permitido para hoje." });
   }
 
-  const selectedReward = await reserveRewardFromPool(filteredRewardPool, windowInfo.chestDayKey);
+  const selectedReward = pickWeightedReward(filteredRewardPool) || filteredRewardPool[0] || null;
   if (!selectedReward) {
     return res.status(409).json({ error: "Nao ha premios disponíveis para este ciclo no momento." });
   }
@@ -1221,6 +1221,7 @@ router.post("/open", requireAuth, async (req, res) => {
   );
 
   runDailyChestBackgroundTask("open-followup", async () => {
+    await incrementRewardDailyUsage(selectedReward?.id || "", windowInfo.chestDayKey);
     await incrementRewardClaimCount(selectedReward?.id || "");
 
     const xpGrant = await awardChestXp({
