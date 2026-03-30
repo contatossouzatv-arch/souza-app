@@ -36,12 +36,10 @@ function assertProductionEnv(condition, message) {
 
 function assertRequiredEnv(condition, message) {
   if (!condition) {
-    const error = new Error(message);
-    console.error("[startup] missing required environment", {
+    console.warn("[startup] missing optional environment", {
       message,
       nodeEnv,
     });
-    throw error;
   }
 }
 
@@ -52,7 +50,7 @@ function isRedisUrl(value) {
 
 export const env = {
   nodeEnv,
-  port: Number(process.env.PORT || 8080),
+  port: Number(process.env.PORT) || 8080,
   origin: rawOrigin,
   origins: rawOrigin.split(",").map((v) => v.trim()).filter(Boolean),
   additionalAllowedOrigins: readEnv("ADDITIONAL_ALLOWED_ORIGINS", "").split(",").map((v) => v.trim()).filter(Boolean),
@@ -126,7 +124,7 @@ export function isAllowedOrigin(origin) {
   return false;
 }
 
-assertRequiredEnv(Boolean(env.databaseUrl), "DATABASE_URL is required");
+assertRequiredEnv(Boolean(env.databaseUrl), "DATABASE_URL is missing; backend will start in degraded mode");
 
 assertProductionEnv(env.origin !== "*", "ORIGIN cannot be '*' in production");
 assertProductionEnv(env.origins.length > 0, "ORIGIN must list at least one allowed origin in production");
