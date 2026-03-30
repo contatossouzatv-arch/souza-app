@@ -1112,6 +1112,7 @@ router.post("/open", requireAuth, async (req, res) => {
     windowInfo,
     scheduleUnlocked: unlocked,
   });
+  // Emergency stabilization: keep the base chest open while the access-key flow is disabled.
   const accessGate = FORCE_DAILY_CHEST_FREE_ACCESS
     ? { ...resolvedAccessGate, required: false, unlocked: true }
     : resolvedAccessGate;
