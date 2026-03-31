@@ -2010,13 +2010,17 @@ function buildPrizeRewardLabel(item = {}) {
 
 function shouldShowPrizeInHomeFeed(item = {}) {
   const rewardType = String(item.reward_type || "").trim().toLowerCase();
+  const sourceType = String(item.source_type || "").trim().toLowerCase();
+  const isDailyChestTicketReward =
+    sourceType === "daily_chest" &&
+    (rewardType === "tickets_active" ||
+      rewardType === "tickets_bonus" ||
+      rewardType === "ticket_bonus" ||
+      rewardType === "bilhetes");
   return (
     rewardType === "points_balance" ||
     rewardType === "cash_prize" ||
-    rewardType === "tickets_active" ||
-    rewardType === "tickets_bonus" ||
-    rewardType === "ticket_bonus" ||
-    rewardType === "bilhetes"
+    isDailyChestTicketReward
   );
 }
 
