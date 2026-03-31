@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ExternalLink, Save, AlertCircle } from "lucide-react";
-import { usePlatformsSummary } from "@/hooks/usePlatformsSummary";
+import { PLATFORMS_SUMMARY_QUERY_KEY, usePlatformsSummary } from "@/hooks/usePlatformsSummary";
 
 export default function CurrentPlatformTab() {
   const queryClient = useQueryClient();
@@ -22,11 +22,10 @@ export default function CurrentPlatformTab() {
   const currentPlatform = platforms[0] || null;
 
   React.useEffect(() => {
-    if (currentPlatform) {
-      setName(currentPlatform.name);
-      setLink(currentPlatform.link);
-      setActive(currentPlatform.active);
-    }
+    if (!currentPlatform) return;
+    setName(currentPlatform.name);
+    setLink(currentPlatform.link);
+    setActive(currentPlatform.active);
   }, [currentPlatform]);
 
   const saveMutation = useMutation({
@@ -35,7 +34,7 @@ export default function CurrentPlatformTab() {
         throw new Error("Preencha todos os campos");
       }
 
-      // Gerar ID único para a plataforma
+      // Gera um novo identificador para forcar a reconfirmacao da plataforma.
       const platformId = `platform_${Date.now()}`;
 
       if (currentPlatform) {
@@ -43,55 +42,56 @@ export default function CurrentPlatformTab() {
           name,
           link,
           active,
-          platform_id: platformId // Novo ID ao atualizar
+          platform_id: platformId,
         });
-      } else {
-        await base44.entities.CurrentPlatform.create({
-          name,
-          link,
-          active,
-          platform_id: platformId
-        });
+        return;
       }
+
+      await base44.entities.CurrentPlatform.create({
+        name,
+        link,
+        active,
+        platform_id: platformId,
+      });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['current-platform'] });
-      alert('Plataforma salva com sucesso! Todos os usuários serão notificados.');
+      queryClient.invalidateQueries({ queryKey: PLATFORMS_SUMMARY_QUERY_KEY });
+      alert("Plataforma salva com sucesso! Todos os usuarios serao notificados.");
     },
     onError: (error) => {
-      alert(error.message || 'Erro ao salvar plataforma');
-    }
+      alert(error.message || "Erro ao salvar plataforma");
+    },
   });
 
   return (
-    <Card className="bg-gradient-to-br from-purple-900/50 to-indigo-900/50 border-purple-700/50 p-6 mt-6">
+    <Card className="mt-6 border-purple-700/50 bg-gradient-to-br from-purple-900/50 to-indigo-900/50 p-6">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-pink-300 mb-2">
+        <h2 className="mb-2 bg-gradient-to-r from-yellow-300 to-pink-300 bg-clip-text text-2xl font-bold text-transparent">
           Plataforma Atual
         </h2>
         <p className="text-sm text-purple-300">
-          Configure a plataforma principal. Quando você alterar, todos os usuários precisarão confirmar o cadastro novamente.
+          Configure a plataforma principal. Quando voce alterar, todos os usuarios precisarao confirmar o cadastro novamente.
         </p>
       </div>
 
-      {currentPlatform && (
-        <div className="mb-6 p-4 bg-yellow-900/30 border border-yellow-600/50 rounded-lg">
+      {currentPlatform ? (
+        <div className="mb-6 rounded-lg border border-yellow-600/50 bg-yellow-900/30 p-4">
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-yellow-400" />
             <div>
-              <p className="text-yellow-200 font-bold mb-1">Plataforma Ativa</p>
-              <p className="text-sm text-yellow-300 mb-2">
+              <p className="mb-1 font-bold text-yellow-200">Plataforma Ativa</p>
+              <p className="mb-2 text-sm text-yellow-300">
                 ID da Plataforma: <span className="font-mono font-bold">{currentPlatform.platform_id}</span>
               </p>
               <p className="text-xs text-yellow-200">
-                ⚠️ Ao salvar alterações, um novo ID será gerado e TOODOS os usuários verão o box de confirmação novamente.
+                Ao salvar alteracoes, um novo ID sera gerado e todos os usuarios verao o box de confirmacao novamente.
               </p>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
-      <div className="space-y-4 mb-6">
+      <div className="mb-6 space-y-4">
         <div>
           <Label htmlFor="platform-name" className="text-purple-200">
             Nome da Plataforma
@@ -99,9 +99,9 @@ export default function CurrentPlatformTab() {
           <Input
             id="platform-name"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(event) => setName(event.target.value)}
             placeholder="Ex: P20BET"
-            className="bg-purple-900/50 border-purple-700 text-white"
+            className="border-purple-700 bg-purple-900/50 text-white"
           />
         </div>
 
@@ -112,34 +112,31 @@ export default function CurrentPlatformTab() {
           <Input
             id="platform-link"
             value={link}
-            onChange={(e) => setLink(e.target.value)}
+            onChange={(event) => setLink(event.target.value)}
             placeholder="https://..."
-            className="bg-purple-900/50 border-purple-700 text-white"
+            className="border-purple-700 bg-purple-900/50 text-white"
           />
-          {link && (
+          {link ? (
             <a
               href={link}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 mt-1"
+              className="mt-1 flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
             >
-              <ExternalLink className="w-3 h-3" />
+              <ExternalLink className="h-3 w-3" />
               Testar link
             </a>
-          )}
+          ) : null}
         </div>
 
-        <div className="flex items-center justify-between p-4 bg-purple-900/50 rounded-lg">
+        <div className="flex items-center justify-between rounded-lg bg-purple-900/50 p-4">
           <div>
             <Label className="text-purple-200">Plataforma Ativa</Label>
             <p className="text-xs text-purple-400">
-              {active ? 'Usuários verão o box de confirmação' : 'Box de confirmação desativado'}
+              {active ? "Usuarios verao o box de confirmacao" : "Box de confirmacao desativado"}
             </p>
           </div>
-          <Switch
-            checked={active}
-            onCheckedChange={setActive}
-          />
+          <Switch checked={active} onCheckedChange={setActive} />
         </div>
       </div>
 
@@ -149,23 +146,24 @@ export default function CurrentPlatformTab() {
           disabled={saveMutation.isPending || !name || !link}
           className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
         >
-          <Save className="w-4 h-4 mr-2" />
-          {saveMutation.isPending ? 'Salvando...' : 'Salvar Configurações'}
+          <Save className="mr-2 h-4 w-4" />
+          {saveMutation.isPending ? "Salvando..." : "Salvar Configuracoes"}
         </Button>
       </div>
 
-      {currentPlatform && (
-        <div className="mt-6 p-4 bg-blue-900/30 border border-blue-600/50 rounded-lg">
-          <h3 className="text-blue-200 font-bold mb-2">Como funciona:</h3>
-          <ul className="text-sm text-blue-300 space-y-1 list-disc list-inside">
-            <li>Usuários que já confirmaram esta plataforma não verão o box novamente</li>
-            <li>Ao alterar nome/link e salvar, um novo ID é gerado automaticamente</li>
-            <li>Com o novo ID, TOODOS os usuários precisarão confirmar o cadastro novamente</li>
-            <li>Usuários novos que se cadastrarem já com a plataforma atual não verão o box</li>
-            <li>Desative a plataforma para esconder o box de todos temporariamente</li>
+      {currentPlatform ? (
+        <div className="mt-6 rounded-lg border border-blue-600/50 bg-blue-900/30 p-4">
+          <h3 className="mb-2 font-bold text-blue-200">Como funciona:</h3>
+          <ul className="list-inside list-disc space-y-1 text-sm text-blue-300">
+            <li>Usuarios que ja confirmaram esta plataforma nao verao o box novamente.</li>
+            <li>Ao alterar nome ou link e salvar, um novo ID e gerado automaticamente.</li>
+            <li>Com o novo ID, todos os usuarios precisarao confirmar o cadastro novamente.</li>
+            <li>Usuarios novos que se cadastrarem ja com a plataforma atual nao verao o box.</li>
+            <li>Desative a plataforma para esconder o box de todos temporariamente.</li>
           </ul>
         </div>
-      )}
+      ) : null}
     </Card>
   );
 }
+

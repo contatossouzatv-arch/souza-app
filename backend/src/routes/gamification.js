@@ -4066,7 +4066,7 @@ router.get("/admin/audits/winners", requireAuth, requireAdmin, async (req, res) 
       userHistory.find((entry) => String(entry?.platform_id || "").trim() === String(platformId || "").trim())?.platform_name ||
       userHistory[0]?.platform_name ||
       audit.platform ||
-      "NÃ£o informado";
+      "Nao informado";
     const avatarUrlRaw = audit.user_profile_image_url || user?.profile_image_url || "";
     const canUseApprovedPhoto =
       Boolean(audit.user_profile_image_url) ||
@@ -4766,7 +4766,7 @@ async function buildAdminGamificationOverviewPayload() {
     const usagePercent = dailyCap > 0 ? Math.min(100, Math.round((claimedToday / dailyCap) * 100)) : 0;
     return {
       id: entry.id,
-      title: entry.title || "PrÃªmio",
+      title: entry.title || "Premio",
       reward_type: entry.reward_type || "points_balance",
       reward_amount: Number(entry.reward_amount || 0),
       reward_unit: entry.reward_unit || "",
@@ -5436,3 +5436,4 @@ router.delete("/admin/daily-chest/rewards/:id", requireAuth, requireAdmin, async
 });
 
 export default router;
+
