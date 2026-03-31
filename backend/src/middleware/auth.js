@@ -19,8 +19,9 @@ export function requireAuth(req, res, next) {
   const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
   const cookies = parseCookies(req.headers.cookie || "");
   const cookieToken = cookies[env.authAccessCookieName] || null;
-  const token = bearerToken || cookieToken;
-  const payload = parseToken(token);
+  const bearerPayload = parseToken(bearerToken);
+  const cookiePayload = parseToken(cookieToken);
+  const payload = bearerPayload || cookiePayload || null;
 
   if (!payload?.sub) {
     console.warn("[auth-backend] requireAuth denied", {
@@ -29,12 +30,14 @@ export function requireAuth(req, res, next) {
       hasAuthorizationHeader: Boolean(bearerToken),
       hasCookieHeader: Boolean(req.headers.cookie),
       hasAccessCookie: Boolean(cookieToken),
+      hasValidBearer: Boolean(bearerPayload?.sub),
+      hasValidCookie: Boolean(cookiePayload?.sub),
     });
     return res.status(401).json({ error: "Authentication required" });
   }
 
   req.auth = payload;
-  req.authSource = bearerToken ? "bearer" : "cookie";
+  req.authSource = bearerPayload?.sub ? "bearer" : "cookie";
   next();
 }
 

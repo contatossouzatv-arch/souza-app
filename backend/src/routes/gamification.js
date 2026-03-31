@@ -58,6 +58,7 @@ const HOME_FEED_SUMMARY_TTL_MS = 30000;
 const HOME_FEED_SHARED_TTL_MS = 30000;
 const WEEKLY_LEADERBOARD_TTL_MS = 15000;
 const PUBLIC_UI_CONFIG_TTL_MS = 60000;
+const PLATFORMS_SUMMARY_TTL_MS = 60000;
 const PROFILE_SUMMARY_TTL_MS = 30000;
 const PUBLIC_PROFILE_SUMMARY_TTL_MS = 30000;
 const PROFILE_PUBLIC_BASICS_TTL_MS = 60000;
@@ -808,6 +809,16 @@ async function loadPublicUiConfig() {
     };
 
     return payload;
+  });
+}
+
+async function loadPlatformsSummary() {
+  return getOrComputeCacheJson("platforms:summary", PLATFORMS_SUMMARY_TTL_MS, async () => {
+    const [currentPlatform, activePlatforms] = await Promise.all([
+      getCurrentPlatform(),
+      listActivePlatforms(),
+    ]);
+    return { currentPlatform, activePlatforms };
   });
 }
 
@@ -3463,20 +3474,16 @@ router.get("/profile/platform-history", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/platforms/summary", requireAuth, async (_req, res) => {
+router.get("/platforms/summary", async (_req, res) => {
   try {
-    const [currentPlatform, activePlatforms] = await Promise.all([
-      getCurrentPlatform(),
-      listActivePlatforms(),
-    ]);
-    return res.json({ currentPlatform, activePlatforms });
+    return res.json(await loadPlatformsSummary());
   } catch (error) {
     console.error("Failed to load platforms summary", error);
     return res.status(500).json({ error: "Nao foi possivel carregar as plataformas agora." });
   }
 });
 
-router.get("/ui/public-config", requireAuth, async (_req, res) => {
+router.get("/ui/public-config", async (_req, res) => {
   try {
     return res.json(await loadPublicUiConfig());
   } catch (error) {

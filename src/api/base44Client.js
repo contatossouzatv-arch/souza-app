@@ -500,9 +500,9 @@ function notifyUnauthorized(path, error) {
 
 async function request(path, options = {}) {
   const startedAt = performance.now();
-  const { __skipAuthRefresh, __timeoutMs, ...fetchOptions } = options;
+  const { __skipAuthRefresh, __timeoutMs, __omitAuthToken, ...fetchOptions } = options;
   const headers = { ...(fetchOptions.headers || {}) };
-  const token = getToken();
+  const token = __omitAuthToken ? null : getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   const diagnosticMeta = registerRequestStart(path);
   if (diagnosticMeta) {
@@ -534,7 +534,7 @@ async function request(path, options = {}) {
     throw error;
   }
 
-  const skipRefresh = shouldSkipAuthRefresh(path, __skipAuthRefresh);
+  const skipRefresh = shouldSkipAuthRefresh(path, __skipAuthRefresh || __omitAuthToken);
 
   if (response.status === 401 && !skipRefresh) {
     const refreshResult = await tryRefreshSession();
@@ -1358,7 +1358,10 @@ export const base44 = {
 
   platforms: {
     async summary(options = {}) {
-      return request("/api/platforms/summary", options);
+      return request("/api/platforms/summary", {
+        ...options,
+        __omitAuthToken: true,
+      });
     },
   },
 
@@ -1885,8 +1888,11 @@ export const base44 = {
   },
 
   ui: {
-    async publicConfig() {
-      return request("/api/ui/public-config");
+    async publicConfig(options = {}) {
+      return request("/api/ui/public-config", {
+        ...options,
+        __omitAuthToken: true,
+      });
     },
   },
 

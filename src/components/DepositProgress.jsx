@@ -14,7 +14,15 @@ import { useAppSettings } from "@/hooks/useAppSettings";
 
 const safeFind = (list, predicate) => (Array.isArray(list) ? list.find(predicate) : undefined);
 
-export default function DepositProgress({ totalApproved, pendingAmount, user, onDepositSubmit, promoEndDate, activeCycle }) {
+export default function DepositProgress({
+  totalApproved,
+  pendingAmount,
+  user,
+  onDepositSubmit,
+  promoEndDate,
+  activeCycle,
+  settings: initialSettings = null,
+}) {
   const queryClient = useQueryClient();
   const [submissionStatus, setSubmissionStatus] = useState("idle");
   const [formExpanded, setFormExpanded] = useState(false);
@@ -37,8 +45,14 @@ export default function DepositProgress({ totalApproved, pendingAmount, user, on
     };
   }, []);
 
-  const { data: settings = [] } = useAppSettings();
-  const safeSettings = Array.isArray(settings) ? settings : [];
+  const { data: queriedSettings = [] } = useAppSettings({
+    enabled: !Array.isArray(initialSettings),
+  });
+  const safeSettings = Array.isArray(initialSettings)
+    ? initialSettings
+    : Array.isArray(queriedSettings)
+      ? queriedSettings
+      : [];
 
   const { data: activePlatforms = [] } = useQuery({
     queryKey: ["active-platforms"],

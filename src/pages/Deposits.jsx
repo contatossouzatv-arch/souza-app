@@ -300,6 +300,7 @@ export default function Deposits() {
         onDepositSubmit={refetchDeposits}
         promoEndDate={depositantDrawEndDate}
         activeCycle={activeCycle}
+        settings={settings}
         showProgressCard={false}
       />
 
@@ -469,6 +470,7 @@ export default function Deposits() {
         onDepositSubmit={refetchDeposits}
         promoEndDate={cashbackEndDate}
         activeCycle={activeCycle}
+        settings={settings}
       />
 
       {depositsLoading ? (
@@ -476,7 +478,11 @@ export default function Deposits() {
           Carregando seu histórico de depósitos...
         </Card>
       ) : (
-        <DepositHistory />
+        <DepositHistory
+          deposits={deposits}
+          cycles={cycles}
+          isLoading={depositsLoading || depositsDashboardLoading}
+        />
       )}
 
       {allDepositsLoading ? (
@@ -489,6 +495,8 @@ export default function Deposits() {
           allDeposits={allDeposits}
           currentUserId={user?.id}
           promoEndDate={depositantDrawEndDate}
+          settings={settings}
+          activeCycle={activeCycle}
           showSummaryInCard={false}
         />
       )}

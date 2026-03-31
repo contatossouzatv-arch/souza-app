@@ -18,12 +18,18 @@ import {
   getLiveDrawDisplaySummary,
   getWinningSummary,
 } from "../services/raffleReadService.js";
+import { deleteCacheKey, getOrComputeCacheJson } from "../lib/cache.js";
 import { emitDashboardGamecallUpdated, emitDashboardInstantUpdated, emitDashboardLiveUpdated } from "../lib/realtimeEvents.js";
 import { getDashboardDynamicsReadModel } from "../services/appReadModelService.js";
 import { getDashboardDynamicsSummary, invalidateDashboardDynamicsSummary } from "../services/dashboardDynamicsReadService.js";
 
 const router = Router();
 const DYNAMICS_SUMMARY_TTL_MS = 10_000;
+const CASHBACK_STATUS_TTL_MS = 15_000;
+
+function buildCashbackStatusCacheKey(userId = "") {
+  return `cashback:status:${String(userId || "").trim() || "anon"}`;
+}
 
 function requestMeta(req) {
   return {
@@ -279,22 +285,35 @@ router.post("/cashback/claim", requireAuth, async (req, res) => {
     claim_id: result.claim?.id || "",
     idempotent: result.idempotent,
   });
+  await deleteCacheKey(buildCashbackStatusCacheKey(req.auth?.sub || "")).catch((error) => {
+    console.error("[cashback-route] cache invalidation failed", {
+      userId: String(req.auth?.sub || "").trim(),
+      message: error?.message || "unknown error",
+    });
+  });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
 });
 
 router.get("/cashback/status", requireAuth, async (req, res) => {
   const userId = String(req.auth?.sub || "").trim();
-  const result = await pool.query(
-    `SELECT id, data, created_at, updated_at
-       FROM entity_records
-      WHERE entity_name = 'CashbackClaim'
-        AND COALESCE(data->>'user_id', '') = $1
-      ORDER BY created_at DESC
-      LIMIT 50`,
-    [userId]
+  const items = await getOrComputeCacheJson(
+    buildCashbackStatusCacheKey(userId),
+    CASHBACK_STATUS_TTL_MS,
+    async () => {
+      const result = await pool.query(
+        `SELECT id, data, created_at, updated_at
+           FROM entity_records
+          WHERE entity_name = 'CashbackClaim'
+            AND COALESCE(data->>'user_id', '') = $1
+          ORDER BY created_at DESC
+          LIMIT 50`,
+        [userId]
+      );
+      return result.rows.map(normalizeRecord);
+    }
   );
-  return res.json({ items: result.rows.map(normalizeRecord) });
+  return res.json({ items });
 });
 
 export default router;

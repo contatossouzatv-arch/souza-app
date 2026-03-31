@@ -44,6 +44,7 @@ export default function TicketsProgressBox({
   onDepositSubmit,
   promoEndDate,
   activeCycle,
+  settings: initialSettings = null,
   showProgressCard = true,
   showFormCard = true,
 }) {
@@ -75,8 +76,14 @@ export default function TicketsProgressBox({
     };
   }, []);
 
-  const { data: settings = [] } = useAppSettings();
-  const safeSettings = Array.isArray(settings) ? settings : [];
+  const { data: queriedSettings = [] } = useAppSettings({
+    enabled: !Array.isArray(initialSettings),
+  });
+  const safeSettings = Array.isArray(initialSettings)
+    ? initialSettings
+    : Array.isArray(queriedSettings)
+      ? queriedSettings
+      : [];
 
   const { data: activePlatforms = [] } = useQuery({
     queryKey: ["active-platforms"],

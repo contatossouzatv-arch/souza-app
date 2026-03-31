@@ -16,7 +16,7 @@ import {
   rejectDepositRecord,
   updateDepositAdminRecord,
 } from "../db/index.js";
-import { getOrComputeCacheJson } from "../lib/cache.js";
+import { deleteCacheByPrefix, deleteCacheKey, getOrComputeCacheJson } from "../lib/cache.js";
 import { emitLegacyEntityChanged } from "../lib/realtimeEvents.js";
 import { projectDepositMutation } from "../services/depositProjectionService.js";
 import { scheduleGamificationRefresh } from "./gamification.js";
@@ -24,6 +24,8 @@ import { scheduleGamificationRefresh } from "./gamification.js";
 const router = Router();
 const DEPOSIT_LEADERBOARD_TTL_MS = 15000;
 const DEPOSIT_DASHBOARD_SUMMARY_TTL_MS = 10000;
+const USER_DEPOSITS_TTL_MS = 5000;
+const ADMIN_DEPOSITS_TTL_MS = 5000;
 const DEPOSIT_ROUTE_SLOW_MS = 800;
 
 function asyncHandler(handler) {
@@ -108,6 +110,38 @@ function normalizeAdminPatchPayload(body = {}) {
       : [];
   }
   return patch;
+}
+
+function buildUserDepositsCacheKey(userId = "") {
+  return `deposits:my:${String(userId || "").trim() || "anon"}`;
+}
+
+function buildAdminDepositsCacheKey({ status = "", cycleId = "", limit = 200 } = {}) {
+  return `deposits:admin-list:${String(status || "").trim() || "all"}:${String(cycleId || "").trim() || "all"}:${Math.max(1, Math.min(500, Number(limit || 200) || 200))}`;
+}
+
+async function invalidateDepositReadCaches({ userId = "", includeAdmin = false } = {}) {
+  const tasks = [
+    deleteCacheKey("deposits:dashboard-summary"),
+    deleteCacheByPrefix("deposits:leaderboard:"),
+  ];
+  const safeUserId = String(userId || "").trim();
+
+  if (safeUserId) {
+    tasks.push(deleteCacheKey(buildUserDepositsCacheKey(safeUserId)));
+  }
+
+  if (includeAdmin) {
+    tasks.push(deleteCacheByPrefix("deposits:admin-list:"));
+  }
+
+  await Promise.all(tasks).catch((error) => {
+    console.error("[deposits-route] cache invalidation failed", {
+      userId: safeUserId,
+      includeAdmin,
+      message: error?.message || "unknown error",
+    });
+  });
 }
 
 async function runDepositProjection(req, deposit, action, { refreshGamification = false } = {}) {
@@ -206,12 +240,19 @@ router.post("/deposits", requireAuth, asyncHandler(async (req, res) => {
     status: result?.deposit?.status || "pending",
   });
   await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "create-idempotent" : "create");
+  await invalidateDepositReadCaches({
+    userId: req.auth.sub,
+    includeAdmin: true,
+  });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
 }));
 
 router.get("/deposits/my", requireAuth, asyncHandler(async (req, res) => {
-  const deposits = await listDepositsByUserId(req.auth.sub);
+  const userId = String(req.auth?.sub || "").trim();
+  const deposits = await withRouteTiming("my", { userId }, () =>
+    getOrComputeCacheJson(buildUserDepositsCacheKey(userId), USER_DEPOSITS_TTL_MS, () => listDepositsByUserId(userId))
+  );
   return res.json({ items: deposits });
 }));
 
@@ -257,15 +298,20 @@ router.get("/deposits/leaderboard", requireAuth, asyncHandler(async (req, res) =
 }));
 
 router.get("/admin/deposits", requireAuth, requireAdmin, asyncHandler(async (req, res) => {
+  const status = String(req.query.status || "").trim();
+  const cycleId = String(req.query.cycleId || "").trim();
+  const limit = Math.max(1, Math.min(500, Number(req.query.limit || 200) || 200));
   const items = await withRouteTiming("admin-list", {
-    status: String(req.query.status || "").trim(),
-    cycleId: String(req.query.cycleId || "").trim(),
-    limit: Math.max(1, Math.min(500, Number(req.query.limit || 200) || 200)),
-  }, () => listAdminDeposits({
-    status: String(req.query.status || "").trim(),
-    cycleId: String(req.query.cycleId || "").trim(),
-    limit: req.query.limit,
-  }));
+    status,
+    cycleId,
+    limit,
+  }, () =>
+    getOrComputeCacheJson(
+      buildAdminDepositsCacheKey({ status, cycleId, limit }),
+      ADMIN_DEPOSITS_TTL_MS,
+      () => listAdminDeposits({ status, cycleId, limit })
+    )
+  );
   return res.json({ items });
 }));
 
@@ -316,6 +362,10 @@ router.post("/admin/deposits/:id/approve", requireAuth, requireAdmin, asyncHandl
   await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "approve-idempotent" : "approve", {
     refreshGamification: true,
   });
+  await invalidateDepositReadCaches({
+    userId: result?.deposit?.user_id || "",
+    includeAdmin: true,
+  });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
 }));
@@ -355,6 +405,10 @@ router.patch("/admin/deposits/:id", requireAuth, requireAdmin, asyncHandler(asyn
     status: result?.deposit?.status || "",
   });
   await runDepositProjection(req, result?.deposit || {}, "update");
+  await invalidateDepositReadCaches({
+    userId: result?.deposit?.user_id || "",
+    includeAdmin: true,
+  });
 
   return res.status(result.idempotent ? 200 : 200).json(result);
 }));
@@ -401,6 +455,10 @@ router.post("/admin/deposits/:id/adjust-tickets", requireAuth, requireAdmin, asy
   await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "adjust-idempotent" : "adjust-tickets", {
     refreshGamification: true,
   });
+  await invalidateDepositReadCaches({
+    userId: result?.deposit?.user_id || "",
+    includeAdmin: true,
+  });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
 }));
@@ -439,6 +497,10 @@ router.post("/admin/deposits/:id/reject", requireAuth, requireAdmin, asyncHandle
     status: result?.deposit?.status || "rejected",
   });
   await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "reject-idempotent" : "reject");
+  await invalidateDepositReadCaches({
+    userId: result?.deposit?.user_id || "",
+    includeAdmin: true,
+  });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
 }));
@@ -483,6 +545,10 @@ router.post("/admin/deposits/:id/invalidate", requireAuth, requireAdmin, asyncHa
   await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "invalidate-idempotent" : "invalidate", {
     refreshGamification: true,
   });
+  await invalidateDepositReadCaches({
+    userId: result?.deposit?.user_id || "",
+    includeAdmin: true,
+  });
 
   return res.status(result.idempotent ? 200 : 201).json(result);
 }));
@@ -526,6 +592,10 @@ router.delete("/admin/deposits/:id", requireAuth, requireAdmin, asyncHandler(asy
   });
   await runDepositProjection(req, result?.deposit || {}, "delete", {
     refreshGamification: true,
+  });
+  await invalidateDepositReadCaches({
+    userId: result?.deposit?.user_id || "",
+    includeAdmin: true,
   });
 
   return res.status(200).json(result);

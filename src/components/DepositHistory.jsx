@@ -1,7 +1,4 @@
 import React, { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
-import { useAuth } from "@/lib/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, DollarSign, CheckCircle2, XCircle, AlertCircle, ChevronDown } from "lucide-react";
@@ -21,32 +18,12 @@ function toAmount(value) {
   return Number.isFinite(n) ? n : 0;
 }
 
-export default function DepositHistory() {
+export default function DepositHistory({
+  deposits = [],
+  cycles = [],
+  isLoading = false,
+}) {
   const [showOlderDeposits, setShowOlderDeposits] = useState(false);
-  const { user, isLoadingAuth } = useAuth();
-
-  const { data: deposits = [], isLoading } = useQuery({
-    queryKey: ["deposits", user?.id],
-    queryFn: async () => {
-      const response = await base44.deposits.my();
-      return response.items || [];
-    },
-    enabled: Boolean(user?.id) && !isLoadingAuth,
-    refetchOnWindowFocus: false,
-    staleTime: 30000,
-  });
-
-  const { data: cycles = [], isLoading: cyclesLoading } = useQuery({
-    queryKey: ["deposits-dashboard-cycles"],
-    queryFn: async () => {
-      const response = await base44.deposits.dashboardSummary();
-      return response.cycles || [];
-    },
-    enabled: Boolean(user?.id) && !isLoadingAuth,
-    refetchOnWindowFocus: false,
-    staleTime: 60000,
-    retry: false,
-  });
 
   const activeCycle = resolveCurrentDepositCycle(cycles);
   const cycleDeposits = activeCycle ? deposits.filter((deposit) => deposit.cycle_id === activeCycle.id) : [];
@@ -79,7 +56,7 @@ export default function DepositHistory() {
     );
   };
 
-  if (isLoadingAuth || isLoading || cyclesLoading) {
+  if (isLoading) {
     return (
       <Card className="bg-gradient-to-br from-slate-900/80 to-slate-800/80 border-slate-700/50 px-3 py-4 md:px-4 md:py-5">
         <p className="text-slate-400 text-center">Carregando histórico...</p>

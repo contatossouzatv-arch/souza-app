@@ -2,36 +2,20 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Ticket, Trophy, ChevronDown } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
-import { useAppSettings } from "@/hooks/useAppSettings";
-import { resolveCurrentDepositCycle } from "@/lib/depositCycles";
 
 export default function TicketsDisplay({
   deposits,
   allDeposits,
   currentUserId,
   promoEndDate,
+  settings = [],
+  activeCycle = null,
   showSummaryInCard = true,
 }) {
   const [expanded, setExpanded] = useState(false);
 
-  const { data: settings = [] } = useAppSettings();
-
-  const { data: cycles = [] } = useQuery({
-    queryKey: ["deposits-dashboard-cycles"],
-    queryFn: async () => {
-      const response = await base44.deposits.dashboardSummary();
-      return response.cycles || [];
-    },
-    retry: false,
-    refetchOnWindowFocus: false,
-    staleTime: 60000,
-  });
-
   const safeSettings = Array.isArray(settings) ? settings : [];
   const depositantDrawActive = safeSettings.find((s) => s.key === "depositant_draw_active")?.value === "true";
-  const activeCycle = resolveCurrentDepositCycle(cycles);
 
   const approvedDeposits = deposits.filter(
     (d) => d.status === "approved" && (!activeCycle || d.cycle_id === activeCycle.id)
