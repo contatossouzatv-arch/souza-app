@@ -184,6 +184,20 @@ async function bootstrap() {
     }
   }
 
+  if (runtime && !startupError) {
+    try {
+      await bootstrapRuntime(io, runtime);
+    } catch (error) {
+      startupError = error;
+      app = null;
+      logStartupError("runtime-bootstrap:failed", error);
+    }
+  } else if (startupError) {
+    logStartup("runtime-bootstrap:skipped", {
+      reason: "startup_error",
+    });
+  }
+
   const requestHandler = app || createFallbackApp(startupError, startedAt);
   const server = http.createServer(requestHandler);
   io.attach(server);
@@ -209,16 +223,6 @@ async function bootstrap() {
   server.listen(port, host, () => {
     console.log("[startup] server:ready", { port, host });
   });
-
-  if (runtime && !startupError) {
-    bootstrapRuntime(io, runtime).catch((error) => {
-      logStartupError("runtime-bootstrap:failed", error);
-    });
-  } else if (startupError) {
-    logStartup("runtime-bootstrap:skipped", {
-      reason: "startup_error",
-    });
-  }
 }
 
 bootstrap().catch((error) => {

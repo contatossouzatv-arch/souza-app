@@ -26,6 +26,8 @@ import {
   getHomeFeedSharedReadModel,
   getHomeFeedUserReadModel,
   getHomeSummaryReadModel,
+  getProfileCompetitionReadModel,
+  getProfileSummaryReadModel,
   getPublicProfileSummaryReadModel,
   invalidateHomeReadModels,
   invalidateProfileReadModels,
@@ -56,6 +58,7 @@ const HOME_FEED_SUMMARY_TTL_MS = 30000;
 const HOME_FEED_SHARED_TTL_MS = 30000;
 const WEEKLY_LEADERBOARD_TTL_MS = 15000;
 const PUBLIC_UI_CONFIG_TTL_MS = 60000;
+const PROFILE_SUMMARY_TTL_MS = 30000;
 const PUBLIC_PROFILE_SUMMARY_TTL_MS = 30000;
 const PROFILE_PUBLIC_BASICS_TTL_MS = 60000;
 const PROFILE_PRIZE_GALLERY_TTL_MS = 20000;
@@ -3205,16 +3208,22 @@ router.get("/profile/metrics", requireAuth, async (req, res) => {
 
 router.get("/profile/summary", requireAuth, async (req, res) => {
   const userId = req.auth?.sub || "";
+  const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
   const startedAt = Date.now();
   try {
-    const payload = await withSoftTimeout(
-      getProfileSummary({
-        viewerId: userId,
-        targetUserId: userId,
-      }),
-      2000,
-      "Profile summary emergency timeout"
-    );
+    const payload = await getProfileSummaryReadModel(userId, {
+      forceFresh: shouldForceRefresh,
+      ttlMs: PROFILE_SUMMARY_TTL_MS,
+      loader: async () =>
+        withSoftTimeout(
+          getProfileSummary({
+            viewerId: userId,
+            targetUserId: userId,
+          }),
+          PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
+          "Profile summary emergency timeout"
+        ),
+    });
 
     const durationMs = Date.now() - startedAt;
     if (durationMs >= 800) {
@@ -3238,17 +3247,23 @@ router.get("/profile/summary", requireAuth, async (req, res) => {
 
 router.get("/profile/competition-board", requireAuth, async (req, res) => {
   const userId = req.auth?.sub || "";
+  const shouldForceRefresh = String(req.query.force || "").trim().toLowerCase() === "true";
   const startedAt = Date.now();
   try {
-    const payload = await withSoftTimeout(
-      getProfileCompetitionBoard({
-        userId,
-        limit: 50,
-        ttlMs: WEEKLY_LEADERBOARD_TTL_MS,
-      }),
-      2000,
-      "Profile competition board emergency timeout"
-    );
+    const payload = await getProfileCompetitionReadModel(userId, {
+      forceFresh: shouldForceRefresh,
+      ttlMs: WEEKLY_LEADERBOARD_TTL_MS,
+      loader: async () =>
+        withSoftTimeout(
+          getProfileCompetitionBoard({
+            userId,
+            limit: 50,
+            ttlMs: WEEKLY_LEADERBOARD_TTL_MS,
+          }),
+          PROFILE_ENDPOINT_SOFT_TIMEOUT_MS,
+          "Profile competition board emergency timeout"
+        ),
+    });
 
     const durationMs = Date.now() - startedAt;
     if (durationMs >= 800) {
