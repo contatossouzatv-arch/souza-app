@@ -17,6 +17,7 @@ import createEntitiesRouter from "./routes/entities.js";
 import pointsRoutes from "./routes/points.js";
 import uploadsRoutes from "./routes/uploads.js";
 import { appendNavigationLog } from "./db/index.js";
+import { getClientIp, getForwardedForChain, recordClientTraffic } from "./lib/clientTrafficMonitor.js";
 import { genericUploadsDir, uploadsDir } from "./lib/paths.js";
 import { getHttpMetricsSnapshot, recordHttpMetric } from "./lib/httpMetrics.js";
 import { getRuntimeBuildInfo } from "./lib/runtimeBuildInfo.js";
@@ -72,12 +73,28 @@ function buildRateLimiter({ windowMs, limit, prefix = "ratelimit:" } = {}) {
     return (_req, _res, next) => next();
   }
 
+  const resolvedWindowMs = windowMs ?? Math.max(1, env.rateLimitApiWindowMin) * 60 * 1000;
+  const resolvedLimit = limit ?? Math.max(1, env.rateLimitApiMax);
   const baseConfig = {
-    windowMs: windowMs ?? Math.max(1, env.rateLimitApiWindowMin) * 60 * 1000,
-    limit: limit ?? Math.max(1, env.rateLimitApiMax),
+    windowMs: resolvedWindowMs,
+    limit: resolvedLimit,
     standardHeaders: "draft-7",
     legacyHeaders: false,
     message: { error: "Too many requests" },
+    handler(req, res, _next, options) {
+      console.warn("[ratelimit] blocked", {
+        method: req.method,
+        path: req.originalUrl,
+        clientIp: req._clientIp || getClientIp(req),
+        forwardedFor: req._forwardedForChain || getForwardedForChain(req),
+        origin: req.headers.origin || null,
+        userAgent: String(req.headers["user-agent"] || "").slice(0, 160),
+        statusCode: Number(options?.statusCode || 429),
+        limit: Number(options?.limit || resolvedLimit),
+        windowMs: Number(options?.windowMs || resolvedWindowMs),
+      });
+      return res.status(Number(options?.statusCode || 429)).json(options?.message || { error: "Too many requests" });
+    },
   };
 
   if (!env.redisUrl) {
@@ -160,6 +177,8 @@ export function createApp(io) {
     next();
   });
   app.use((req, res, next) => {
+    req._clientIp = getClientIp(req);
+    req._forwardedForChain = getForwardedForChain(req);
     req._startedAtMs = Date.now();
     const shouldLogStart = shouldLogRouteTiming(req.path);
 
@@ -167,6 +186,8 @@ export function createApp(io) {
       console.info("[http] request:start", {
         method: req.method,
         path: req.originalUrl,
+        clientIp: req._clientIp || null,
+        forwardedFor: req._forwardedForChain || [],
         origin: req.headers.origin || null,
         host: req.headers.host || null,
         hasCookieHeader: Boolean(req.headers.cookie),
@@ -181,6 +202,16 @@ export function createApp(io) {
       recordHttpMetric(metricPath, res.statusCode, durationMs, {
         slowThresholdMs: SLOW_HTTP_THRESHOLD_MS,
       });
+      const suspiciousClient = recordClientTraffic({
+        clientIp: req._clientIp || "",
+        path: req.originalUrl,
+        status: res.statusCode,
+        durationMs,
+        slowThresholdMs: SLOW_HTTP_THRESHOLD_MS,
+      });
+      if (suspiciousClient) {
+        console.warn("[traffic-monitor] suspicious-client", suspiciousClient);
+      }
       if (shouldLogStart || shouldLogRouteTiming(metricPath, durationMs, res.statusCode)) {
         console.info("[http] request:finish", {
           method: req.method,
@@ -188,6 +219,8 @@ export function createApp(io) {
           metricPath,
           status: res.statusCode,
           durationMs,
+          clientIp: req._clientIp || null,
+          forwardedFor: req._forwardedForChain || [],
           origin: req.headers.origin || null,
           hasCookieHeader: Boolean(req.headers.cookie),
           hasAuthorizationHeader: Boolean(req.headers.authorization),
@@ -347,6 +380,8 @@ export function createApp(io) {
       path: req.originalUrl,
       status: Number(error?.status || 500),
       durationMs: Date.now() - Number(req._startedAtMs || Date.now()),
+      clientIp: req._clientIp || getClientIp(req),
+      forwardedFor: req._forwardedForChain || getForwardedForChain(req),
       origin: req.headers.origin || null,
       hasCookieHeader: Boolean(req.headers.cookie),
       hasAuthorizationHeader: Boolean(req.headers.authorization),
