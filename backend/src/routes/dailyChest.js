@@ -28,6 +28,8 @@ const DAILY_CHEST_SETTINGS_TTL_MS = 15000;
 const DAILY_CHEST_REWARD_POOL_TTL_MS = 15000;
 const DAILY_CHEST_STATE_TTL_MS = 10000;
 const DAILY_CHEST_STATE_SOFT_TIMEOUT_MS = 2200;
+const DAILY_CHEST_SETTINGS_SOFT_TIMEOUT_MS = 1200;
+const DAILY_CHEST_ROUTE_SOFT_TIMEOUT_MS = 2500;
 // Production hotfix: keep the base daily chest free while the access-key flow is disabled.
 const FORCE_DAILY_CHEST_FREE_ACCESS = true; // force backend redeploy marker
 const FORCE_DAILY_CHEST_IGNORE_SCHEDULE = true; // deploy nudge
@@ -85,6 +87,15 @@ function pad(value) {
 function parseOptionalDate(value) {
   const parsed = new Date(value || "");
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function withTimeout(promise, timeoutMs, label) {
+  return Promise.race([
+    Promise.resolve().then(() => promise),
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} soft timeout`)), timeoutMs);
+    }),
+  ]);
 }
 
 function normalizeAccessCode(value) {
@@ -750,7 +761,11 @@ function buildFastChestStateFallback({ settings, windowInfo, cachedState = null 
 async function resolveCachedChestStateForUser(userId) {
   let settings;
   try {
-    settings = await loadDailyChestSettings();
+    settings = await withTimeout(
+      loadDailyChestSettings(),
+      DAILY_CHEST_SETTINGS_SOFT_TIMEOUT_MS,
+      "Daily chest settings"
+    );
   } catch (error) {
     console.error("[daily-chest] settings fallback activated", {
       userId: String(userId || ""),
@@ -1145,7 +1160,11 @@ async function createDailyChestAuditRecord({ userId, opening, grantResult, chest
 
 router.get("/state", requireAuth, async (req, res) => {
   try {
-    const state = await resolveCachedChestStateForUser(req.auth.sub);
+    const state = await withTimeout(
+      resolveCachedChestStateForUser(req.auth.sub),
+      DAILY_CHEST_ROUTE_SOFT_TIMEOUT_MS,
+      "Daily chest state route"
+    );
     res.json(state);
   } catch (error) {
     console.error("[daily-chest] state route emergency fallback", {
