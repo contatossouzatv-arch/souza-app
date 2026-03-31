@@ -45,6 +45,7 @@ import {
 } from "../auth.js";
 import { env } from "../config/env.js";
 import { deleteFromCloudinaryByUrl, getCloudinaryConfig, uploadToCloudinary } from "../lib/cloudinary.js";
+import { deleteCacheByPrefix, getOrComputeCacheJson, setCacheJson } from "../lib/cache.js";
 import { sendPasswordResetEmail } from "../lib/mailer.js";
 import { privateUploadsDir, uploadsDir } from "../lib/paths.js";
 
@@ -54,6 +55,7 @@ const profilePendingDir = path.resolve(privateUploadsDir, "profile-pending");
 const profilePublicDir = path.resolve(uploadsDir, "profile");
 const bannedNameTokens = ["nude", "porn", "sexo", "sex", "nsfw"];
 const profileImageCloudinaryConfig = getCloudinaryConfig();
+const ADMIN_PROFILE_IMAGES_TTL_MS = 10_000;
 
 fs.mkdirSync(profilePendingDir, { recursive: true });
 fs.mkdirSync(profilePublicDir, { recursive: true });
@@ -96,6 +98,10 @@ function sanitizeNick(nick) {
 
 function sanitizePhone(phone) {
   return String(phone || "").replace(/\D/g, "");
+}
+
+function buildAdminProfileImagesCacheKey(status = "") {
+  return `auth:admin-profile-images:${String(status || "").trim().toLowerCase() || "manual_review"}`;
 }
 
 async function ensureUniqueIdentityFields({ email = "", nick = "", phone = "", excludeUserId = "" }) {
@@ -1265,22 +1271,34 @@ router.get("/admin/profile-images", requireAuth, requireAdmin, async (req, res) 
   const status = String(req.query.status || "manual_review").toLowerCase();
   const allowed = new Set(["manual_review", "approved", "rejected", "none"]);
   const normalizedStatus = allowed.has(status) ? status : "manual_review";
+  const cacheKey = buildAdminProfileImagesCacheKey(normalizedStatus);
 
-  const rows = await listUsersByProfileImageStatus(normalizedStatus);
-  const items = rows.map((row) => ({
-    id: row.id,
-    email: row.email,
-    full_name: row.full_name,
-    nick: row.nick,
-    profile_image_status: row.profile_image_status,
-    profile_image_reject_reason: row.profile_image_reject_reason,
-    profile_image_moderation_score: row.profile_image_moderation_score,
-    profile_image_uploaded_at: row.profile_image_uploaded_at,
-    profile_image_url: row.profile_image_url,
-    has_pending_image: Boolean(row.profile_image_pending_name),
-  }));
+  try {
+    const items = await getOrComputeCacheJson(cacheKey, ADMIN_PROFILE_IMAGES_TTL_MS, async () => {
+      const rows = await listUsersByProfileImageStatus(normalizedStatus);
+      return rows.map((row) => ({
+        id: row.id,
+        email: row.email,
+        full_name: row.full_name,
+        nick: row.nick,
+        profile_image_status: row.profile_image_status,
+        profile_image_reject_reason: row.profile_image_reject_reason,
+        profile_image_moderation_score: row.profile_image_moderation_score,
+        profile_image_uploaded_at: row.profile_image_uploaded_at,
+        profile_image_url: row.profile_image_url,
+        has_pending_image: Boolean(row.profile_image_pending_name),
+      }));
+    });
 
-  return res.json(items);
+    return res.json(Array.isArray(items) ? items : []);
+  } catch (error) {
+    console.error("[auth-admin-profile-images] load failed", {
+      status: normalizedStatus,
+      message: error?.message || "unknown error",
+    });
+    await setCacheJson(cacheKey, [], 5000).catch(() => {});
+    return res.json([]);
+  }
 });
 
 router.get("/admin/profile-images/:userId/preview", requireAuth, requireAdmin, async (req, res) => {
@@ -1406,6 +1424,7 @@ router.post("/admin/profile-images/:userId/approve", requireAuth, requireAdmin, 
     profile_image_mode: "photo",
   });
 
+  await deleteCacheByPrefix("auth:admin-profile-images:").catch(() => {});
   emitEntityChanged(req, "user", user.id, "updated");
   return res.json({ ok: true, user: updated });
 });
@@ -1433,6 +1452,7 @@ router.post("/admin/profile-images/:userId/reject", requireAuth, requireAdmin, a
     profile_image_reject_reason: reason,
   });
 
+  await deleteCacheByPrefix("auth:admin-profile-images:").catch(() => {});
   emitEntityChanged(req, "user", user.id, "updated");
   return res.json({ ok: true, user: updated });
 });
