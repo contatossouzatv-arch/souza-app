@@ -4,7 +4,7 @@ import { deleteCacheKey, getOrComputeCacheJson } from "../lib/cache.js";
 import { emitProfileCompetitionBoardUpdated } from "../lib/realtimeEvents.js";
 import { requireAuth } from "../middleware/auth.js";
 import { invalidateProfileReadModels } from "../services/appReadModelService.js";
-import { scheduleGamificationRefresh } from "./gamification.js";
+import { refreshGamificationState, scheduleGamificationRefresh } from "./gamification.js";
 
 const router = Router();
 const DAILY_CHECKIN_CONFIG_KEY = "daily_checkin_config_v1";
@@ -612,7 +612,15 @@ router.post("/check-in/daily", requireAuth, async (req, res) => {
     emitEntityChanged(req, "daily_checkins", inserted?.id || dayKey, inserted ? "created" : "duplicate");
     emitEntityChanged(req, "gamification", userId, "updated");
     await syncGamificationProfileViews(req, userId, "daily_checkin");
-    scheduleGamificationRefresh({ persistDerived: true });
+    try {
+      await refreshGamificationState({ persistDerived: true });
+    } catch (refreshError) {
+      console.error("Daily check-in refresh failed, scheduling retry", {
+        userId,
+        message: refreshError?.message || String(refreshError),
+      });
+      scheduleGamificationRefresh({ persistDerived: true });
+    }
 
     return res.json({
       ok: true,

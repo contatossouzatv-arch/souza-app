@@ -243,12 +243,26 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
           [safeTargetUserId]
         ),
         pool.query(
-          `SELECT COUNT(*)::int AS total_wins
+          `SELECT
+             COALESCE(SUM(
+               CASE
+                 WHEN LOWER(COALESCE(data->>'source_type', '')) = 'daily_chest'
+                  AND LOWER(COALESCE(data->>'reward_type', '')) IN ('tickets_active', 'tickets_bonus', 'ticket_bonus', 'bilhetes')
+                 THEN GREATEST(0, COALESCE(NULLIF(data->>'reward_amount', '')::int, 0))
+                 ELSE 0
+               END
+             ), 0)::int AS chest_ticket_wins,
+             COALESCE(SUM(
+               CASE
+                 WHEN LOWER(COALESCE(data->>'reward_type', '')) IN ('points_balance', 'saldo', 'bonus', 'cash_prize')
+                 THEN 1
+                 ELSE 0
+               END
+             ), 0)::int AS balance_win_count
              FROM entity_records
             WHERE entity_name = 'UserPrizeGalleryItem'
               AND COALESCE(data->>'user_id', '') = $1
-              AND LOWER(COALESCE(data->>'claim_status', 'validated')) IN ('validated', 'applied')
-              AND LOWER(COALESCE(data->>'reward_type', '')) IN ('points_balance', 'saldo', 'bonus', 'tickets_active', 'tickets_bonus', 'ticket_bonus', 'bilhetes')`,
+              AND LOWER(COALESCE(data->>'claim_status', 'validated')) IN ('validated', 'applied')`,
           [safeTargetUserId]
         ),
       ]);
@@ -262,7 +276,9 @@ export async function getProfileSummary({ viewerId = "", targetUserId } = {}) {
       (balancesResult.rows || []).map((row) => [`${row.metric_key}::${row.cycle_key || ""}`, Number(row.amount || 0)])
     );
     const authoritativeTickets = Number(ticketsResult.rows[0]?.total_tickets || 0);
-    const authoritativeWins = Number(winsResult.rows[0]?.total_wins || 0);
+    const chestTicketWins = Number(winsResult.rows[0]?.chest_ticket_wins || 0);
+    const balanceWinCount = Number(winsResult.rows[0]?.balance_win_count || 0);
+    const authoritativeWins = chestTicketWins + balanceWinCount;
     const participation = participationResult.rows[0] || {};
     const social = socialResult.rows[0] || {};
       const currentCompetitionEntry = {
