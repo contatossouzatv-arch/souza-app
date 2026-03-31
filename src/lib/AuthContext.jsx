@@ -28,6 +28,18 @@ function writeLastKnownUser(user) {
   }
 }
 
+function canSkipAuthBootstrap(pathname = "") {
+  const normalizedPath = String(pathname || "").trim().toLowerCase();
+  const publicBootstrapRoutes = new Set([
+    "/login",
+    "/login-2fa",
+    "/reset-password",
+    "/termos-de-uso",
+    "/politica-de-privacidade",
+  ]);
+  return publicBootstrapRoutes.has(normalizedPath);
+}
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -100,9 +112,22 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     console.info('[auth-bootstrap] mount');
     const hasToken = base44.auth.hasToken();
+    const hasRefreshToken = base44.auth.hasRefreshToken();
     const cachedUser = hasToken ? readLastKnownUser() : null;
+    const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+    const shouldSkipBootstrap =
+      !hasToken &&
+      !hasRefreshToken &&
+      !cachedUser?.id &&
+      canSkipAuthBootstrap(pathname);
 
-    if (cachedUser?.id) {
+    if (shouldSkipBootstrap) {
+      console.info('[auth-bootstrap] mount:skip-public-route', {
+        pathname,
+      });
+      setHasResolvedAuthBootstrap(true);
+      setIsLoadingAuth(false);
+    } else if (cachedUser?.id) {
       console.info('[auth-bootstrap] mount:using-cached-user', {
         userId: cachedUser.id,
       });

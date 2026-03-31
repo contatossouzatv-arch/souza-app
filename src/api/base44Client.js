@@ -197,6 +197,10 @@ function hasToken() {
   return Boolean(getToken());
 }
 
+function hasRefreshToken() {
+  return Boolean(getRefreshToken());
+}
+
 function setToken(token) {
   if (token) {
     window.localStorage.setItem(TOKEN_KEY, token);
@@ -418,6 +422,22 @@ function isAuthPath(path = "") {
   return String(path || "").startsWith("/api/auth/");
 }
 
+function shouldSkipAuthRefresh(path = "", explicitSkip = false) {
+  if (Boolean(explicitSkip)) return true;
+  const normalizedPath = String(path || "").trim();
+  const refreshExcludedPaths = new Set([
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/google",
+    "/api/auth/dev-login",
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
+    "/api/auth/logout",
+    "/api/auth/refresh",
+  ]);
+  return refreshExcludedPaths.has(normalizedPath);
+}
+
 function shouldHandleUnauthorized(path, status) {
   if (Number(status) !== 401 || !isAuthPath(path)) return false;
   const normalizedPath = String(path || "").trim();
@@ -495,11 +515,7 @@ async function request(path, options = {}) {
     throw error;
   }
 
-  const skipRefresh =
-    Boolean(__skipAuthRefresh) ||
-    path === "/api/auth/refresh" ||
-    path === "/api/auth/login" ||
-    path === "/api/auth/logout";
+  const skipRefresh = shouldSkipAuthRefresh(path, __skipAuthRefresh);
 
   if (response.status === 401 && !skipRefresh) {
     const refreshed = await tryRefreshSession();
@@ -575,11 +591,7 @@ async function requestBlob(path, options = {}) {
     throw error;
   }
 
-  const skipRefresh =
-    Boolean(__skipAuthRefresh) ||
-    path === "/api/auth/refresh" ||
-    path === "/api/auth/login" ||
-    path === "/api/auth/logout";
+  const skipRefresh = shouldSkipAuthRefresh(path, __skipAuthRefresh);
 
   if (response.status === 401 && !skipRefresh) {
     const refreshed = await tryRefreshSession();
@@ -711,6 +723,7 @@ async function deleteFile({ fileUrl, path } = {}) {
 export const base44 = {
   auth: {
     hasToken,
+    hasRefreshToken,
 
     clearClientAuthState,
 
@@ -757,6 +770,7 @@ export const base44 = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, otp }),
+        __skipAuthRefresh: true,
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
@@ -769,6 +783,7 @@ export const base44 = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password, full_name, nick, phone }),
+        __skipAuthRefresh: true,
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
@@ -781,6 +796,7 @@ export const base44 = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ credential, otp }),
+        __skipAuthRefresh: true,
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
@@ -989,6 +1005,7 @@ export const base44 = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: "admin@local.dev" }),
+        __skipAuthRefresh: true,
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
