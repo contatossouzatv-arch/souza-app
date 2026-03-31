@@ -11,6 +11,7 @@ import { toast } from "@/components/ui/use-toast";
 import { isInteractionSoundEnabled } from "@/lib/soundPrefs";
 import depositSuccessSound from "../../assets-para-app/moeda effect song deposit.mp3";
 import { useAppSettings } from "@/hooks/useAppSettings";
+import { usePlatformsSummary } from "@/hooks/usePlatformsSummary";
 
 const safeFind = (list, predicate) => (Array.isArray(list) ? list.find(predicate) : undefined);
 
@@ -54,15 +55,8 @@ export default function DepositProgress({
       ? queriedSettings
       : [];
 
-  const { data: activePlatforms = [] } = useQuery({
-    queryKey: ["active-platforms"],
-    queryFn: async () => {
-      const response = await base44.platforms.summary();
-      return response.activePlatforms || [];
-    },
-    staleTime: 300000,
-    refetchOnWindowFocus: false,
-    retry: false,
+  const { data: activePlatforms = [] } = usePlatformsSummary({
+    select: (data) => data?.activePlatforms || [],
   });
 
   const { data: cashbackClaims = [] } = useQuery({

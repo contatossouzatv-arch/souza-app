@@ -62,6 +62,8 @@ export default function Layout({ children }) {
   const location = useLocation();
   const menuClickAudioRef = React.useRef(null);
   const [platformModalVisible, setPlatformModalVisible] = React.useState(false);
+  const isAdminUser = user?.role === "admin";
+  const depositsPath = createPageUrl("Deposits");
   const enableBlockingOverlays = import.meta.env.VITE_ENABLE_BLOCKING_OVERLAYS !== "false";
   const pathname = String(location.pathname || "").toLowerCase();
   const isAdminPanel = pathname === createPageUrl("AdminPanel");
@@ -70,19 +72,21 @@ export default function Layout({ children }) {
   const shouldLoadDailyChestState =
     isDailyChestLoadReady &&
     !isLoadingAuth &&
+    isAdminUser &&
     Boolean(user?.id) &&
     (
       pathname === createPageUrl("Home").toLowerCase() ||
       pathname === createPageUrl("Dashboard").toLowerCase()
     );
   const showDailyChestEntry =
-    FEATURE_FLAGS.DAILY_CHEST_3D_ENABLED && !isAdminPanel && !isDailyChestPage;
+    FEATURE_FLAGS.DAILY_CHEST_3D_ENABLED && isAdminUser && !isAdminPanel && !isDailyChestPage;
   const hideBottomNav = isDailyChestPage;
 
   React.useEffect(() => {
     setIsDailyChestLoadReady(false);
     if (
       isLoadingAuth ||
+      !isAdminUser ||
       !user?.id ||
       !(
         pathname === createPageUrl("Home").toLowerCase() ||
@@ -99,7 +103,7 @@ export default function Layout({ children }) {
     return () => {
       window.clearTimeout(timerId);
     };
-  }, [isLoadingAuth, pathname, user?.id]);
+  }, [isAdminUser, isLoadingAuth, pathname, user?.id]);
 
   React.useEffect(() => {
     const audio = new Audio(mainMenuClickSound);
@@ -113,6 +117,7 @@ export default function Layout({ children }) {
   React.useEffect(() => {
     const likelyNextRoutes = navItems
       .map((item) => item.path)
+      .filter((path) => isAdminUser || path === depositsPath)
       .filter((path) => path && path !== location.pathname)
       .slice(0, 2);
     const idleScheduler = window.requestIdleCallback || ((callback) => window.setTimeout(callback, 600));
@@ -133,7 +138,7 @@ export default function Layout({ children }) {
       }
       window.clearTimeout(idleHandle);
     };
-  }, [location.pathname]);
+  }, [depositsPath, isAdminUser, location.pathname]);
 
   const playMenuClickSound = () => {
     if (!isMenuSoundEnabled()) return;
@@ -178,14 +183,14 @@ export default function Layout({ children }) {
     <ErrorBoundary resetKey={`${location.pathname}${location.search}`}>
       <DataRefresher />
       <NotificationListener />
-      {enableBlockingOverlays && user ? (
+      {enableBlockingOverlays && user && isAdminUser ? (
         <PlatformMigrationModal
           user={user}
           onVisibilityChange={setPlatformModalVisible}
           onConfirmed={checkAppState}
         />
       ) : null}
-      {enableBlockingOverlays && user ? (
+      {enableBlockingOverlays && user && isAdminUser ? (
         <PhoneAlert user={user} onUpdate={checkAppState} platformModalVisible={platformModalVisible} />
       ) : null}
       <div className="min-h-screen bg-slate-950 text-white">
@@ -216,6 +221,30 @@ export default function Layout({ children }) {
             {navItems.map((item) => {
               const isActive = item.match.includes(location.pathname);
               const Icon = item.icon;
+              const isDisabled = !isAdminUser && item.path !== depositsPath;
+              const navClassName = `flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-1 py-2 text-[9px] font-semibold tracking-wide transition-all sm:text-[10px] ${
+                isDisabled
+                  ? "cursor-not-allowed bg-slate-900/60 text-slate-600 opacity-60"
+                  : isActive
+                    ? "bg-cyan-500/15 text-cyan-300"
+                    : "text-slate-400 hover:bg-slate-800/70 hover:text-slate-200"
+              }`;
+
+              if (isDisabled) {
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    title="Menu desativado temporariamente"
+                    className={navClassName}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              }
 
               return (
                 <Link
@@ -228,11 +257,7 @@ export default function Layout({ children }) {
                   onMouseEnter={() => preloadRoute(item.path)}
                   onTouchStart={() => preloadRoute(item.path)}
                   onFocus={() => preloadRoute(item.path)}
-                  className={`flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-1 py-2 text-[9px] font-semibold tracking-wide transition-all sm:text-[10px] ${
-                    isActive
-                      ? "bg-cyan-500/15 text-cyan-300"
-                      : "text-slate-400 hover:bg-slate-800/70 hover:text-slate-200"
-                  }`}
+                  className={navClassName}
                 >
                   <Icon className="h-5 w-5" />
                   <span>{item.label}</span>

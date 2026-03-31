@@ -16,6 +16,7 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import { warmAppShell } from '@/lib/appBoot';
 import { lazyWithRecovery } from '@/lib/lazyWithRecovery';
+import { createPageUrl } from '@/utils';
 
 const Login = lazyWithRecovery(() => import('@/pages/Login'));
 const LoginTwoFactor = lazyWithRecovery(() => import('@/pages/LoginTwoFactor'));
@@ -34,6 +35,16 @@ const MAINTENANCE_SESSION_KEY = "souza_maintenance_bypass_v1";
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 const visiblePages = Object.entries(Pages);
+const DEPOSITS_ROUTE_PATH = createPageUrl("Deposits");
+const PUBLIC_ENABLED_PAGE_NAMES = new Set(["Deposits"]);
+
+const isAdminUser = (user) => user?.role === "admin";
+
+const getAuthenticatedHomePath = (user) =>
+  isAdminUser(user) ? "/" : DEPOSITS_ROUTE_PATH;
+
+const canAccessPage = (pageName, user) =>
+  isAdminUser(user) || PUBLIC_ENABLED_PAGE_NAMES.has(pageName);
 
 const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
@@ -340,6 +351,8 @@ const AuthenticatedApp = () => {
     return <UserNotRegisteredError />;
   }
 
+  const authenticatedHomePath = getAuthenticatedHomePath(user);
+
   return (
     <Suspense fallback={<RouteLoader />}>
       {/*
@@ -356,7 +369,7 @@ const AuthenticatedApp = () => {
         path="/login"
         element={
           isAuthenticated ? (
-            <Navigate to={needsOnboarding(user) ? "/onboarding" : "/"} replace />
+            <Navigate to={needsOnboarding(user) ? "/onboarding" : authenticatedHomePath} replace />
           ) : (
             <Login />
           )
@@ -367,7 +380,7 @@ const AuthenticatedApp = () => {
         path="/login-2fa"
         element={
           isAuthenticated ? (
-            <Navigate to={needsOnboarding(user) ? "/onboarding" : "/"} replace />
+            <Navigate to={needsOnboarding(user) ? "/onboarding" : authenticatedHomePath} replace />
           ) : (
             <LoginTwoFactor />
           )
@@ -378,7 +391,7 @@ const AuthenticatedApp = () => {
         path="/onboarding"
         element={
           isAuthenticated ? (
-            needsOnboarding(user) ? <Onboarding /> : <Navigate to="/" replace />
+            needsOnboarding(user) ? <Onboarding /> : <Navigate to={authenticatedHomePath} replace />
           ) : (
             <Navigate to="/login" replace />
           )
@@ -391,6 +404,8 @@ const AuthenticatedApp = () => {
           isAuthenticated ? (
             needsOnboarding(user) ? (
               <Navigate to="/onboarding" replace />
+            ) : !isAdminUser(user) ? (
+              <Navigate to={DEPOSITS_ROUTE_PATH} replace />
             ) : (
               <LayoutWrapper currentPageName={mainPageKey}>
                 <MainPage key={getPageElementKey(mainPageKey, location)} />
@@ -408,6 +423,8 @@ const AuthenticatedApp = () => {
           isAuthenticated ? (
             needsOnboarding(user) ? (
               <Navigate to="/onboarding" replace />
+            ) : !isAdminUser(user) ? (
+              <Navigate to={DEPOSITS_ROUTE_PATH} replace />
             ) : (
               <MainGameComingSoon />
             )
@@ -423,10 +440,12 @@ const AuthenticatedApp = () => {
           isAuthenticated ? (
             needsOnboarding(user) ? (
               <Navigate to="/onboarding" replace />
+            ) : !isAdminUser(user) ? (
+              <Navigate to={DEPOSITS_ROUTE_PATH} replace />
             ) : FEATURE_FLAGS.DAILY_CHEST_3D_ENABLED ? (
               <DailyChestHub />
             ) : (
-              <Navigate to="/" replace />
+              <Navigate to={authenticatedHomePath} replace />
             )
           ) : (
             <Navigate to="/login" replace />
@@ -442,6 +461,8 @@ const AuthenticatedApp = () => {
             isAuthenticated ? (
               needsOnboarding(user) ? (
                 <Navigate to="/onboarding" replace />
+              ) : !canAccessPage(path, user) ? (
+                <Navigate to={DEPOSITS_ROUTE_PATH} replace />
               ) : (
                 <LayoutWrapper currentPageName={path}>
                   <Page key={getPageElementKey(path, location)} />

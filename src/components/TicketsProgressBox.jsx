@@ -12,6 +12,7 @@ import { toast } from "@/components/ui/use-toast";
 import { isInteractionSoundEnabled } from "@/lib/soundPrefs";
 import depositSuccessSound from "../../assets-para-app/moeda effect song deposit.mp3";
 import { useAppSettings } from "@/hooks/useAppSettings";
+import { usePlatformsSummary } from "@/hooks/usePlatformsSummary";
 
 const SUPPORTED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp|gif)$/i;
 const SUPPORTED_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
@@ -85,14 +86,8 @@ export default function TicketsProgressBox({
       ? queriedSettings
       : [];
 
-  const { data: activePlatforms = [] } = useQuery({
-    queryKey: ["active-platforms"],
-    queryFn: async () => {
-      const response = await base44.platforms.summary();
-      return response.activePlatforms || [];
-    },
-    staleTime: 300000,
-    refetchOnWindowFocus: false,
+  const { data: activePlatforms = [] } = usePlatformsSummary({
+    select: (data) => data?.activePlatforms || [],
   });
 
   const { data: platformHistory = [] } = useQuery({
@@ -104,6 +99,7 @@ export default function TicketsProgressBox({
     enabled: !!user?.id,
     staleTime: 300000,
     refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const depositsEnabled = safeFind(safeSettings, (s) => s.key === "deposits_enabled")?.value === "true";

@@ -1,6 +1,5 @@
 ﻿import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +10,7 @@ import { Check, CircleHelp, ExternalLink, ShieldCheck, Sparkles } from "lucide-r
 import caricaturaSouza from "../../assets-para-app/13a71c5e4_caricatura-001.png";
 import profileCoverTile from "../../assets-para-app/profile-cover-tile.png";
 import { useAppSettings } from "@/hooks/useAppSettings";
+import { usePlatformsSummary } from "@/hooks/usePlatformsSummary";
 
 const stepTitles = {
   1: "Regras e segurança",
@@ -43,12 +43,8 @@ export default function Onboarding() {
 
   const { data: settings = [] } = useAppSettings();
 
-  const { data: platforms = [] } = useQuery({
-    queryKey: ["current-platform-onboarding"],
-    queryFn: async () => {
-      const response = await base44.platforms.summary();
-      return response.currentPlatform ? [response.currentPlatform] : [];
-    },
+  const { data: platforms = [] } = usePlatformsSummary({
+    select: (data) => (data?.currentPlatform ? [data.currentPlatform] : []),
   });
 
   const platformLink = settings.find((s) => s.key === "platform_link")?.value || "#";

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/use-toast";
 import { AlertCircle, Check, ExternalLink, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
+import { usePlatformsSummary } from "@/hooks/usePlatformsSummary";
 
 export default function PlatformMigrationModal({ user, onVisibilityChange, onConfirmed }) {
   const queryClient = useQueryClient();
@@ -25,12 +26,8 @@ export default function PlatformMigrationModal({ user, onVisibilityChange, onCon
     return () => window.clearTimeout(timerId);
   }, [isLoadingAuth, user?.id, user?.onboarding_completed]);
 
-  const { data: platforms = [] } = useQuery({
-    queryKey: ["current-platform-modal"],
-    queryFn: async () => {
-      const response = await base44.platforms.summary();
-      return response.currentPlatform ? [response.currentPlatform] : [];
-    },
+  const { data: platforms = [] } = usePlatformsSummary({
+    select: (data) => (data?.currentPlatform ? [data.currentPlatform] : []),
     enabled: isQueryReady,
     staleTime: 300000,
     refetchOnWindowFocus: false,

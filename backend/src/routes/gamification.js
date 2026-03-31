@@ -64,6 +64,15 @@ const PUBLIC_PROFILE_SUMMARY_TTL_MS = 30000;
 const PROFILE_PUBLIC_BASICS_TTL_MS = 60000;
 const PROFILE_PRIZE_GALLERY_TTL_MS = 20000;
 const PROFILE_ENDPOINT_SOFT_TIMEOUT_MS = 2500;
+const EMPTY_PUBLIC_UI_CONFIG = {
+  settings: [],
+  banners: [],
+  socials: [],
+};
+const EMPTY_PLATFORMS_SUMMARY = {
+  currentPlatform: null,
+  activePlatforms: [],
+};
 
 const DEFAULT_POINTS_RULES = {
   points_per_participation: 12,
@@ -791,35 +800,49 @@ async function buildUserFeedLikeState(userId, targetPostIds) {
 }
 
 async function loadPublicUiConfig() {
-  return getOrComputeCacheJson("ui:public-config", PUBLIC_UI_CONFIG_TTL_MS, async () => {
-    const [settings, banners, socials] = await Promise.all([
-      listEntity("AppSettings"),
-      listEntity("BannerCarousel"),
-      listEntity("SocialMedia"),
-    ]);
+  try {
+    return await getOrComputeCacheJson("ui:public-config", PUBLIC_UI_CONFIG_TTL_MS, async () => {
+      const [settings, banners, socials] = await Promise.all([
+        listEntity("AppSettings"),
+        listEntity("BannerCarousel"),
+        listEntity("SocialMedia"),
+      ]);
 
-    const payload = {
-      settings: Array.isArray(settings) ? settings : [],
-      banners: (Array.isArray(banners) ? banners : [])
-        .filter((entry) => entry?.active !== false)
-        .sort((a, b) => Number(a?.order || 0) - Number(b?.order || 0)),
-      socials: (Array.isArray(socials) ? socials : [])
-        .filter((entry) => entry?.active !== false)
-        .sort((a, b) => Number(a?.order || 0) - Number(b?.order || 0)),
-    };
-
-    return payload;
-  });
+      return {
+        settings: Array.isArray(settings) ? settings : [],
+        banners: (Array.isArray(banners) ? banners : [])
+          .filter((entry) => entry?.active !== false)
+          .sort((a, b) => Number(a?.order || 0) - Number(b?.order || 0)),
+        socials: (Array.isArray(socials) ? socials : [])
+          .filter((entry) => entry?.active !== false)
+          .sort((a, b) => Number(a?.order || 0) - Number(b?.order || 0)),
+      };
+    });
+  } catch (error) {
+    console.error("[public-ui-config] load failed", {
+      message: error?.message || "unknown error",
+    });
+    await setCacheJson("ui:public-config", EMPTY_PUBLIC_UI_CONFIG, 5000).catch(() => {});
+    return EMPTY_PUBLIC_UI_CONFIG;
+  }
 }
 
 async function loadPlatformsSummary() {
-  return getOrComputeCacheJson("platforms:summary", PLATFORMS_SUMMARY_TTL_MS, async () => {
-    const [currentPlatform, activePlatforms] = await Promise.all([
-      getCurrentPlatform(),
-      listActivePlatforms(),
-    ]);
-    return { currentPlatform, activePlatforms };
-  });
+  try {
+    return await getOrComputeCacheJson("platforms:summary", PLATFORMS_SUMMARY_TTL_MS, async () => {
+      const [currentPlatform, activePlatforms] = await Promise.all([
+        getCurrentPlatform(),
+        listActivePlatforms(),
+      ]);
+      return { currentPlatform, activePlatforms };
+    });
+  } catch (error) {
+    console.error("[platforms-summary] load failed", {
+      message: error?.message || "unknown error",
+    });
+    await setCacheJson("platforms:summary", EMPTY_PLATFORMS_SUMMARY, 5000).catch(() => {});
+    return EMPTY_PLATFORMS_SUMMARY;
+  }
 }
 
 export async function refreshGamificationState(options = {}) {
@@ -3469,8 +3492,11 @@ router.get("/profile/platform-history", requireAuth, async (req, res) => {
     const items = await listPlatformHistory(userId, limit);
     return res.json({ items });
   } catch (error) {
-    console.error("Failed to load platform history", error);
-    return res.status(500).json({ error: "Nao foi possivel carregar o historico de plataformas agora." });
+    console.error("[profile-platform-history] load failed", {
+      userId: String(req.auth?.sub || "").trim(),
+      message: error?.message || "unknown error",
+    });
+    return res.json({ items: [] });
   }
 });
 

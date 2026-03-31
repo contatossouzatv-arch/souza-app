@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
-import { PUBLIC_UI_CONFIG_QUERY_KEY } from "@/hooks/useAppSettings";
+import { PUBLIC_UI_CONFIG_QUERY_KEY, loadSafePublicUiConfig } from "@/hooks/useAppSettings";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -11,7 +10,7 @@ export default function BannerCarousel() {
 
   const { data: banners = [] } = useQuery({
     queryKey: PUBLIC_UI_CONFIG_QUERY_KEY,
-    queryFn: () => base44.ui.publicConfig(),
+    queryFn: loadSafePublicUiConfig,
     select: (data) => data?.banners || [],
   });
 

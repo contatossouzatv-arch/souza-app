@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { base44 } from "@/api/base44Client";
-import { useQuery } from "@tanstack/react-query";
 import { Check, CircleHelp, ExternalLink, Sparkles } from "lucide-react";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { useAuth } from "@/lib/AuthContext";
+import { usePlatformsSummary } from "@/hooks/usePlatformsSummary";
 
 export default function OnboardingModal({ open, onComplete }) {
   const { user, checkAppState } = useAuth();
@@ -20,12 +20,8 @@ export default function OnboardingModal({ open, onComplete }) {
 
   const { data: settings = [] } = useAppSettings();
 
-  const { data: platforms = [] } = useQuery({
-    queryKey: ["current-platform-onboarding"],
-    queryFn: async () => {
-      const response = await base44.platforms.summary();
-      return response.currentPlatform ? [response.currentPlatform] : [];
-    },
+  const { data: platforms = [] } = usePlatformsSummary({
+    select: (data) => (data?.currentPlatform ? [data.currentPlatform] : []),
   });
 
   const platformLink = settings.find((s) => s.key === "platform_link")?.value || "#";

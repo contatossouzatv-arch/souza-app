@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Save, AlertCircle } from "lucide-react";
+import { usePlatformsSummary } from "@/hooks/usePlatformsSummary";
 
 export default function CurrentPlatformTab() {
   const queryClient = useQueryClient();
@@ -15,12 +16,8 @@ export default function CurrentPlatformTab() {
   const [link, setLink] = useState("");
   const [active, setActive] = useState(true);
 
-  const { data: platforms = [] } = useQuery({
-    queryKey: ['current-platform'],
-    queryFn: async () => {
-      const response = await base44.platforms.summary();
-      return response.currentPlatform ? [response.currentPlatform] : [];
-    },
+  const { data: platforms = [] } = usePlatformsSummary({
+    select: (data) => (data?.currentPlatform ? [data.currentPlatform] : []),
   });
 
   const currentPlatform = platforms[0] || null;

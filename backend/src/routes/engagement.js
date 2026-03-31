@@ -297,23 +297,31 @@ router.post("/cashback/claim", requireAuth, async (req, res) => {
 
 router.get("/cashback/status", requireAuth, async (req, res) => {
   const userId = String(req.auth?.sub || "").trim();
-  const items = await getOrComputeCacheJson(
-    buildCashbackStatusCacheKey(userId),
-    CASHBACK_STATUS_TTL_MS,
-    async () => {
-      const result = await pool.query(
-        `SELECT id, data, created_at, updated_at
-           FROM entity_records
-          WHERE entity_name = 'CashbackClaim'
-            AND COALESCE(data->>'user_id', '') = $1
-          ORDER BY created_at DESC
-          LIMIT 50`,
-        [userId]
-      );
-      return result.rows.map(normalizeRecord);
-    }
-  );
-  return res.json({ items });
+  try {
+    const items = await getOrComputeCacheJson(
+      buildCashbackStatusCacheKey(userId),
+      CASHBACK_STATUS_TTL_MS,
+      async () => {
+        const result = await pool.query(
+          `SELECT id, data, created_at, updated_at
+             FROM entity_records
+            WHERE entity_name = 'CashbackClaim'
+              AND COALESCE(data->>'user_id', '') = $1
+            ORDER BY created_at DESC
+            LIMIT 50`,
+          [userId]
+        );
+        return result.rows.map(normalizeRecord);
+      }
+    );
+    return res.json({ items });
+  } catch (error) {
+    console.error("[cashback-route] status failed", {
+      userId,
+      message: error?.message || "unknown error",
+    });
+    return res.json({ items: [] });
+  }
 });
 
 export default router;

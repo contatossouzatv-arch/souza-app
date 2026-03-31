@@ -1,15 +1,10 @@
 ﻿import React from "react";
 import { ExternalLink } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { usePlatformsSummary } from "@/hooks/usePlatformsSummary";
 
 export default function PlatformSelector() {
-  const { data: platforms = [] } = useQuery({
-    queryKey: ["active-platforms"],
-    queryFn: async () => {
-      const response = await base44.platforms.summary();
-      return response.activePlatforms || [];
-    },
+  const { data: platforms = [] } = usePlatformsSummary({
+    select: (data) => data?.activePlatforms || [],
   });
 
   if (platforms.length === 0) return null;
