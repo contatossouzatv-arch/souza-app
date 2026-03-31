@@ -191,7 +191,19 @@ async function invalidateSocialCaches(viewerUserId, targetUserId) {
   await Promise.all(keys.map((key) => deleteCacheKey(key)));
 }
 
-async function runFollowSideEffects(req, { active, applied, actor, relation, requestId, userId, targetUserId }) {
+async function runFollowSideEffects(req, { active, applied, relation, requestId, userId, targetUserId }) {
+  const actor =
+    active && applied
+      ? await findUserById(userId).catch((error) => {
+          console.error("[social] actor lookup failed", {
+            userId,
+            targetUserId,
+            message: error?.message || "unknown error",
+          });
+          return null;
+        })
+      : null;
+
   await Promise.allSettled([
     createSecurityEvent({
       user_id: userId,
@@ -640,71 +652,85 @@ router.get("/social/state/:targetUserId", requireAuth, async (req, res) => {
   const viewerUserId = req.auth.sub;
   const targetUserId = req.params.targetUserId === "me" ? viewerUserId : String(req.params.targetUserId || "");
 
-  const target = await findUserById(targetUserId);
-  if (!target) {
-    return res.status(404).json({ error: "Perfil não encontrado" });
+  const state = await getOrComputeCacheJson(
+    buildSocialStateCacheKey(viewerUserId, targetUserId),
+    SOCIAL_STATE_TTL_MS,
+    async () => {
+      const client = await pool.connect();
+      try {
+        if (targetUserId !== viewerUserId) {
+          const targetResult = await client.query("SELECT id FROM users WHERE id = $1 LIMIT 1", [targetUserId]);
+          if (!targetResult.rows[0]) {
+            return null;
+          }
+        }
+        return buildSocialState(client, viewerUserId, targetUserId);
+      } finally {
+        client.release();
+      }
+    }
+  );
+
+  if (!state) {
+    return res.status(404).json({ error: "Perfil nao encontrado" });
   }
 
-  const client = await pool.connect();
-  try {
-    const state = await getOrComputeCacheJson(
-      buildSocialStateCacheKey(viewerUserId, targetUserId),
-      SOCIAL_STATE_TTL_MS,
-      () => buildSocialState(client, viewerUserId, targetUserId)
-    );
-    res.json(state);
-  } finally {
-    client.release();
-  }
+  res.json(state);
 });
 
 router.get("/social/following/my", requireAuth, async (req, res) => {
-  const client = await pool.connect();
-  try {
-    const limit = normalizeListLimit(req.query?.limit, 24, 60);
-    const offset = normalizeListOffset(req.query?.offset);
-    const items = await getOrComputeCacheJson(
-      buildSocialRelationListPageCacheKey("following", req.auth.sub, { limit, offset }),
-      SOCIAL_RELATION_LIST_TTL_MS,
-      () => listRelationProfiles(client, "following", req.auth.sub, { limit, offset })
-    );
-    res.json(items);
-  } finally {
-    client.release();
-  }
+  const limit = normalizeListLimit(req.query?.limit, 24, 60);
+  const offset = normalizeListOffset(req.query?.offset);
+  const items = await getOrComputeCacheJson(
+    buildSocialRelationListPageCacheKey("following", req.auth.sub, { limit, offset }),
+    SOCIAL_RELATION_LIST_TTL_MS,
+    async () => {
+      const client = await pool.connect();
+      try {
+        return listRelationProfiles(client, "following", req.auth.sub, { limit, offset });
+      } finally {
+        client.release();
+      }
+    }
+  );
+  res.json(items);
 });
 
 router.get("/social/followers/my", requireAuth, async (req, res) => {
-  const client = await pool.connect();
-  try {
-    const limit = normalizeListLimit(req.query?.limit, 24, 60);
-    const offset = normalizeListOffset(req.query?.offset);
-    const items = await getOrComputeCacheJson(
-      buildSocialRelationListPageCacheKey("followers", req.auth.sub, { limit, offset }),
-      SOCIAL_RELATION_LIST_TTL_MS,
-      () => listRelationProfiles(client, "followers", req.auth.sub, { limit, offset })
-    );
-    res.json(items);
-  } finally {
-    client.release();
-  }
+  const limit = normalizeListLimit(req.query?.limit, 24, 60);
+  const offset = normalizeListOffset(req.query?.offset);
+  const items = await getOrComputeCacheJson(
+    buildSocialRelationListPageCacheKey("followers", req.auth.sub, { limit, offset }),
+    SOCIAL_RELATION_LIST_TTL_MS,
+    async () => {
+      const client = await pool.connect();
+      try {
+        return listRelationProfiles(client, "followers", req.auth.sub, { limit, offset });
+      } finally {
+        client.release();
+      }
+    }
+  );
+  res.json(items);
 });
 
 router.get("/social/discover", requireAuth, async (req, res) => {
-  const client = await pool.connect();
-  try {
-    const limit = normalizeListLimit(req.query?.limit, 12, 60);
-    const offset = normalizeListOffset(req.query?.offset);
-    const sort = String(req.query?.sort || "recent").toLowerCase();
-    const result = await getOrComputeCacheJson(
-      buildSocialDiscoverCacheKey(req.auth.sub, { limit, offset, sort }),
-      SOCIAL_DISCOVER_TTL_MS,
-      () => listDiscoverProfiles(client, req.auth.sub, { limit, offset, sort })
-    );
-    res.json(result);
-  } finally {
-    client.release();
-  }
+  const limit = normalizeListLimit(req.query?.limit, 12, 60);
+  const offset = normalizeListOffset(req.query?.offset);
+  const sort = String(req.query?.sort || "recent").toLowerCase();
+  const result = await getOrComputeCacheJson(
+    buildSocialDiscoverCacheKey(req.auth.sub, { limit, offset, sort }),
+    SOCIAL_DISCOVER_TTL_MS,
+    async () => {
+      const client = await pool.connect();
+      try {
+        return listDiscoverProfiles(client, req.auth.sub, { limit, offset, sort });
+      } finally {
+        client.release();
+      }
+    }
+  );
+  res.json(result);
 });
 
 async function upsertFollowState(req, res, active) {
@@ -719,14 +745,16 @@ async function upsertFollowState(req, res, active) {
     return res.status(400).json({ error: "Não é permitido seguir o próprio perfil" });
   }
 
-  const [target, actor] = await Promise.all([findUserById(targetUserId), findUserById(userId)]);
-  if (!target) {
-    return res.status(404).json({ error: "Perfil não encontrado" });
-  }
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const targetResult = await client.query("SELECT id FROM users WHERE id = $1 LIMIT 1", [targetUserId]);
+    if (!targetResult.rows[0]) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Perfil nao encontrado" });
+    }
+
 
     const existingEvent = await findEngagementEventByRequestId(client, requestId);
     if (existingEvent) {
@@ -793,7 +821,6 @@ async function upsertFollowState(req, res, active) {
     void runFollowSideEffects(req, {
       active,
       applied,
-      actor,
       relation,
       requestId,
       userId,
