@@ -748,7 +748,16 @@ function buildFastChestStateFallback({ settings, windowInfo, cachedState = null 
 }
 
 async function resolveCachedChestStateForUser(userId) {
-  const settings = await loadDailyChestSettings();
+  let settings;
+  try {
+    settings = await loadDailyChestSettings();
+  } catch (error) {
+    console.error("[daily-chest] settings fallback activated", {
+      userId: String(userId || ""),
+      message: error?.message || String(error),
+    });
+    settings = { ...DEFAULT_DAILY_CHEST_SETTINGS };
+  }
   const windowInfo = getLocalWindow(settings);
   const cacheKey = `daily-chest:state:${String(userId || "")}:${String(windowInfo.chestDayKey || "")}`;
 
@@ -1135,8 +1144,24 @@ async function createDailyChestAuditRecord({ userId, opening, grantResult, chest
 }
 
 router.get("/state", requireAuth, async (req, res) => {
-  const state = await resolveCachedChestStateForUser(req.auth.sub);
-  res.json(state);
+  try {
+    const state = await resolveCachedChestStateForUser(req.auth.sub);
+    res.json(state);
+  } catch (error) {
+    console.error("[daily-chest] state route emergency fallback", {
+      userId: String(req.auth?.sub || ""),
+      message: error?.message || String(error),
+    });
+    const fallbackSettings = { ...DEFAULT_DAILY_CHEST_SETTINGS };
+    const windowInfo = getLocalWindow(fallbackSettings);
+    res.json(
+      buildFastChestStateFallback({
+        settings: fallbackSettings,
+        windowInfo,
+        cachedState: null,
+      })
+    );
+  }
 });
 
 router.post("/unlock", requireAuth, async (req, res) => {
