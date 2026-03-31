@@ -17,7 +17,7 @@ function wait(ms) {
 
 export default function LoginTwoFactor() {
   const navigate = useNavigate();
-  const { checkAppState } = useAuth();
+  const { checkAppState, applyAuthenticatedUser } = useAuth();
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -61,6 +61,14 @@ export default function LoginTwoFactor() {
     return () => clearInterval(timer);
   }, [loading]);
 
+  const finalizeAuthenticatedSession = async (session) => {
+    if (session?.user?.id) {
+      applyAuthenticatedUser(session.user);
+      return;
+    }
+    await checkAppState();
+  };
+
   const handleVerify = async (e) => {
     e.preventDefault();
     if (!pendingLogin) return;
@@ -70,10 +78,11 @@ export default function LoginTwoFactor() {
 
     try {
       const normalizedOtp = String(otp || "").replace(/\D/g, "").slice(0, 8);
+      let session;
       if (pendingLogin.provider === "google") {
-        await base44.auth.loginWithGoogle(pendingLogin.credential, normalizedOtp);
+        session = await base44.auth.loginWithGoogle(pendingLogin.credential, normalizedOtp);
       } else {
-        await base44.auth.login({
+        session = await base44.auth.login({
           email: pendingLogin.email,
           password: pendingLogin.password,
           otp: normalizedOtp,
@@ -81,7 +90,7 @@ export default function LoginTwoFactor() {
       }
 
       window.sessionStorage.removeItem(LOGIN_2FA_PENDING_KEY);
-      await checkAppState();
+      await finalizeAuthenticatedSession(session);
       navigate("/");
     } catch (err) {
       setError(err?.message || "Código inválido.");

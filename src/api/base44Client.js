@@ -401,21 +401,40 @@ async function tryRefreshSession() {
       if (!response.ok) {
         if (response.status === 401) {
           clearClientAuthState("refresh_failed");
+          return { ok: false, reason: "unauthorized" };
         }
-        return false;
+        return { ok: false, reason: "server_error", status: response.status };
       }
       const data = await response.json();
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
-      return Boolean(data?.token);
-    } catch {
-      return false;
+      cacheAuthenticatedUser(data?.user || null);
+      return {
+        ok: Boolean(data?.token),
+        reason: data?.token ? "success" : "invalid_payload",
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        reason: isRecoverableAuthError(error) ? "network_error" : "unknown_error",
+        error,
+      };
     } finally {
       refreshPromise = null;
     }
   })();
 
   return refreshPromise;
+}
+
+function createRecoverableAuthRefreshError(path = "", refreshResult = null) {
+  const error = refreshResult?.error instanceof Error
+    ? refreshResult.error
+    : new Error("Nao foi possivel renovar sua sessao agora.");
+  error.status = 0;
+  error.code = "AUTH_REFRESH_UNAVAILABLE";
+  error.authPath = path;
+  return error;
 }
 
 function isAuthPath(path = "") {
@@ -518,8 +537,8 @@ async function request(path, options = {}) {
   const skipRefresh = shouldSkipAuthRefresh(path, __skipAuthRefresh);
 
   if (response.status === 401 && !skipRefresh) {
-    const refreshed = await tryRefreshSession();
-    if (refreshed) {
+    const refreshResult = await tryRefreshSession();
+    if (refreshResult?.ok) {
       const retryHeaders = { ...(fetchOptions.headers || {}) };
       const retryToken = getToken();
       if (retryToken) retryHeaders.Authorization = `Bearer ${retryToken}`;
@@ -529,6 +548,21 @@ async function request(path, options = {}) {
         credentials: DEFAULT_FETCH_CREDENTIALS,
         __timeoutMs,
       });
+    } else if (refreshResult?.reason === "network_error" || refreshResult?.reason === "server_error") {
+      const error = createRecoverableAuthRefreshError(path, refreshResult);
+      logRequestResult("refresh unavailable", {
+        path,
+        apiBaseUrl: API_BASE_URL,
+        hasToken: hasToken(),
+        refreshReason: refreshResult.reason,
+        message: error?.message || "Nao foi possivel renovar sua sessao agora.",
+      });
+      registerRequestEnd(diagnosticMeta, 0, "network_failure", {
+        isTimeout: error?.name === "TimeoutError",
+        message: error?.message || "Nao foi possivel renovar sua sessao agora.",
+        refreshReason: refreshResult.reason,
+      });
+      throw error;
     }
   }
   try {
@@ -594,8 +628,8 @@ async function requestBlob(path, options = {}) {
   const skipRefresh = shouldSkipAuthRefresh(path, __skipAuthRefresh);
 
   if (response.status === 401 && !skipRefresh) {
-    const refreshed = await tryRefreshSession();
-    if (refreshed) {
+    const refreshResult = await tryRefreshSession();
+    if (refreshResult?.ok) {
       const retryHeaders = { ...(fetchOptions.headers || {}) };
       const retryToken = getToken();
       if (retryToken) retryHeaders.Authorization = `Bearer ${retryToken}`;
@@ -605,6 +639,8 @@ async function requestBlob(path, options = {}) {
         credentials: DEFAULT_FETCH_CREDENTIALS,
         __timeoutMs,
       });
+    } else if (refreshResult?.reason === "network_error" || refreshResult?.reason === "server_error") {
+      throw createRecoverableAuthRefreshError(path, refreshResult);
     }
   }
 
@@ -774,7 +810,7 @@ export const base44 = {
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
-      clearMeCache();
+      cacheAuthenticatedUser(data?.user || null);
       return data;
     },
 
@@ -787,7 +823,7 @@ export const base44 = {
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
-      clearMeCache();
+      cacheAuthenticatedUser(data?.user || null);
       return data;
     },
 
@@ -800,7 +836,7 @@ export const base44 = {
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
-      clearMeCache();
+      cacheAuthenticatedUser(data?.user || null);
       return data;
     },
 
@@ -892,7 +928,7 @@ export const base44 = {
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
-      clearMeCache();
+      cacheAuthenticatedUser(data?.user || null);
       return data;
     },
 
@@ -1009,7 +1045,7 @@ export const base44 = {
       });
       setToken(data?.token || null);
       setRefreshToken(data?.refreshToken || null);
-      clearMeCache();
+      cacheAuthenticatedUser(data?.user || null);
       return data;
     },
   },

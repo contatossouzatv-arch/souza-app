@@ -47,7 +47,7 @@ async function syncAutoCreatorEngagementForCurrentUser() {
 
 export default function Login() {
   const navigate = useNavigate();
-  const { isAuthenticated, checkAppState } = useAuth();
+  const { isAuthenticated, checkAppState, applyAuthenticatedUser } = useAuth();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
@@ -78,6 +78,14 @@ export default function Login() {
     }
   }, [isAuthenticated, navigate]);
 
+  const finalizeAuthenticatedSession = async (session) => {
+    if (session?.user?.id) {
+      applyAuthenticatedUser(session.user);
+      return;
+    }
+    await checkAppState();
+  };
+
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) return;
 
@@ -94,9 +102,13 @@ export default function Login() {
           try {
             setLoading(true);
             setError("");
-            await base44.auth.loginWithGoogle(response.credential);
+            const session = await base44.auth.loginWithGoogle(response.credential);
+            if (session?.user?.id) {
+              applyAuthenticatedUser(session.user);
+            } else {
+              await checkAppState();
+            }
             await syncAutoCreatorEngagementForCurrentUser();
-            await checkAppState();
             navigate("/");
           } catch (err) {
             const message = String(err?.message || "");
@@ -151,7 +163,7 @@ export default function Login() {
     } else if (window.google) {
       initGoogle();
     }
-  }, [checkAppState, navigate]);
+  }, [applyAuthenticatedUser, checkAppState, navigate]);
 
   useEffect(() => {
     if (!loading) return;
@@ -195,8 +207,8 @@ export default function Login() {
     setError("");
 
     try {
-      await base44.auth.login(loginData);
-      await checkAppState();
+      const session = await base44.auth.login(loginData);
+      await finalizeAuthenticatedSession(session);
       navigate("/");
     } catch (err) {
       const message = String(err?.message || "");
@@ -245,15 +257,15 @@ export default function Login() {
         throw new Error("As senhas não conferem");
       }
 
-      await base44.auth.register({
+      const session = await base44.auth.register({
         email: registerData.email,
         password: registerData.password,
         full_name: registerData.full_name,
         nick: registerData.nick,
         phone: registerData.phone,
       });
+      await finalizeAuthenticatedSession(session);
       await syncAutoCreatorEngagementForCurrentUser();
-      await checkAppState();
       navigate("/");
     } catch (err) {
       setError(err?.message || "Falha no cadastro");

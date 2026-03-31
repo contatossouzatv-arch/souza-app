@@ -49,6 +49,16 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState(null);
   const [appPublicSettings] = useState(null);
 
+  const applyAuthenticatedUser = (nextUser) => {
+    if (!nextUser || typeof nextUser !== 'object') return;
+    writeLastKnownUser(nextUser);
+    setUser(nextUser);
+    setIsAuthenticated(true);
+    setAuthError(null);
+    setHasResolvedAuthBootstrap(true);
+    setIsLoadingAuth(false);
+  };
+
   const checkAppState = async ({ background = false } = {}) => {
     console.info('[auth-bootstrap] checkAppState:start', {
       hasToken: base44.auth.hasToken(),
@@ -64,9 +74,7 @@ export const AuthProvider = ({ children }) => {
       console.info('[auth-bootstrap] checkAppState:authenticated', {
         userId: currentUser?.id || null,
       });
-      writeLastKnownUser(currentUser);
-      setUser(currentUser);
-      setIsAuthenticated(true);
+      applyAuthenticatedUser(currentUser);
     } catch (error) {
       const isRecoverable = base44.auth.isRecoverableAuthError(error);
       const hasToken = base44.auth.hasToken();
@@ -82,9 +90,7 @@ export const AuthProvider = ({ children }) => {
         console.warn('[auth-bootstrap] checkAppState:using-cached-user', {
           userId: cachedUser.id,
         });
-        setUser(cachedUser);
-        setIsAuthenticated(true);
-        setAuthError(null);
+        applyAuthenticatedUser(cachedUser);
       } else if (isRecoverable) {
         setAuthError({
           type: 'auth_unreachable',
@@ -182,6 +188,7 @@ export const AuthProvider = ({ children }) => {
         logout,
         navigateToLogin,
         checkAppState,
+        applyAuthenticatedUser,
       }}
     >
       {children}
