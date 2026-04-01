@@ -41,7 +41,7 @@ export default function Dashboard() {
   const { data: dynamicsSummary, isLoading: dynamicsLoading } = useQuery({
     queryKey: ["dashboard-dynamics-summary"],
     queryFn: () => base44.dynamics.summary(),
-    enabled: !!user,
+    enabled: !!user?.id && !isLoadingAuth,
     staleTime: 120000,
     gcTime: 30 * 60 * 1000,
     refetchOnMount: false,

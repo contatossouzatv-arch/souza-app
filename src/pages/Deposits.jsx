@@ -59,25 +59,7 @@ export default function Deposits() {
       const response = await base44.deposits.my({ signal });
       return response.items || [];
     },
-    enabled: !!user,
-    staleTime: 120000,
-    gcTime: 30 * 60 * 1000,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    retry: false,
-  });
-
-  const { data: allDeposits = [], isLoading: allDepositsLoading } = useQuery({
-    queryKey: ["all-deposits"],
-    queryFn: async ({ signal }) => {
-      if (user?.role === "admin") {
-        const response = await base44.deposits.adminList({ signal });
-        return response.items || [];
-      }
-      return [];
-    },
-    enabled: !!user && user?.role === "admin",
+    enabled: !!user?.id && !isLoadingAuth,
     staleTime: 120000,
     gcTime: 30 * 60 * 1000,
     refetchOnMount: false,
@@ -89,7 +71,7 @@ export default function Deposits() {
   const { data: depositsDashboardSummary, isLoading: depositsDashboardLoading } = useQuery({
     queryKey: ["deposits-dashboard-summary"],
     queryFn: ({ signal }) => base44.deposits.dashboardSummary({ signal }),
-    enabled: !!user,
+    enabled: !!user?.id && !isLoadingAuth,
     staleTime: 180000,
     gcTime: 30 * 60 * 1000,
     refetchOnMount: false,
@@ -99,7 +81,7 @@ export default function Deposits() {
   });
 
   const { data: settings = [], isLoading: settingsLoading } = useAppSettings({
-    enabled: !!user,
+    enabled: !!user?.id && !isLoadingAuth,
   });
 
   const cycles = Array.isArray(depositsDashboardSummary?.cycles) ? depositsDashboardSummary.cycles : [];
@@ -110,7 +92,7 @@ export default function Deposits() {
   const { data: leaderboardData, isLoading: leaderboardLoading } = useQuery({
     queryKey: ["deposit-cycle-leaderboard", activeCycle?.id],
     queryFn: ({ signal }) => base44.deposits.leaderboard({ cycleId: activeCycle?.id, limit: 20, signal }),
-    enabled: !!user && !!activeCycle?.id,
+    enabled: !!user?.id && !isLoadingAuth && !!activeCycle?.id,
     staleTime: 120000,
     gcTime: 30 * 60 * 1000,
     refetchOnMount: false,
@@ -206,20 +188,8 @@ export default function Deposits() {
 
   const endedCycles = resolveEndedDepositCycles(cycles);
 
-  const getCycleTop3 = (cycleId) => {
-    const cycleRankingMap = {};
-    allDeposits
-      .filter((d) => d.status === "approved" && d.cycle_id === cycleId)
-      .forEach((d) => {
-        if (!cycleRankingMap[d.user_id]) {
-          cycleRankingMap[d.user_id] = { user_id: d.user_id, total: 0 };
-        }
-        cycleRankingMap[d.user_id].total += parseFloat(d.amount) || 0;
-      });
-
-    return Object.values(cycleRankingMap)
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 3);
+  const getCycleTop3 = (cycle) => {
+    return Array.isArray(cycle?.top_participants) ? cycle.top_participants.slice(0, 3) : [];
   };
 
   const getCycleDrawWinners = (cycle) => {
@@ -485,21 +455,14 @@ export default function Deposits() {
         />
       )}
 
-      {allDepositsLoading ? (
-        <Card className="border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-400">
-          Carregando seus bilhetes e ranking do ciclo...
-        </Card>
-      ) : (
-        <TicketsDisplay
-          deposits={deposits}
-          allDeposits={allDeposits}
-          currentUserId={user?.id}
-          promoEndDate={depositantDrawEndDate}
-          settings={settings}
-          activeCycle={activeCycle}
-          showSummaryInCard={false}
-        />
-      )}
+      <TicketsDisplay
+        deposits={deposits}
+        currentUserId={user?.id}
+        promoEndDate={depositantDrawEndDate}
+        settings={settings}
+        activeCycle={activeCycle}
+        showSummaryInCard={false}
+      />
 
       <Card className="border-purple-500/35 bg-gradient-to-br from-purple-950/50 via-slate-900 to-indigo-950/40 p-4 shadow-[0_10px_30px_rgba(147,51,234,0.18)]">
         <div className="mb-4 flex items-center justify-center gap-2">
@@ -514,7 +477,7 @@ export default function Deposits() {
         ) : (
           <div className="space-y-3">
             {endedCycles.map((cycle) => {
-              const cycleTop3 = getCycleTop3(cycle.id);
+              const cycleTop3 = getCycleTop3(cycle);
               const cycleWinners = getCycleDrawWinners(cycle);
               const myCycleData = getUserCycleData(cycle.id);
               const isExpanded = expandedHistoryCycle === cycle.id;

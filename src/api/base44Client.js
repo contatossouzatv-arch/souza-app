@@ -12,7 +12,6 @@ const PROFILE_REQUEST_TIMEOUT_MS = 30000;
 const ADMIN_ACTION_TIMEOUT_MS = 45000;
 const ADMIN_READ_TIMEOUT_MS = 30000;
 const RAFFLE_PARTICIPANT_TIMEOUT_MS = 30000;
-const AUTH_RECOVERABLE_RETRY_DELAY_MS = 1200;
 const REQUEST_DIAGNOSTIC_SLOW_MS = 1200;
 const REQUEST_DIAGNOSTIC_NOISY_CONCURRENCY = 4;
 const DEFAULT_FETCH_CREDENTIALS = "include";
@@ -478,12 +477,6 @@ function isRecoverableAuthError(error) {
   return error?.name === "TimeoutError" || !Number.isFinite(Number(error?.status || NaN));
 }
 
-function delay(ms) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
-
 function notifyUnauthorized(path, error) {
   clearMeCache();
   clearClientAuthState(`401:${path}`);
@@ -774,25 +767,9 @@ export const base44 = {
       }
 
       mePromise = (async () => {
-        try {
-          const user = await request("/api/auth/me");
-          cacheAuthenticatedUser(user);
-          return user;
-        } catch (error) {
-          if (!isRecoverableAuthError(error)) {
-            throw error;
-          }
-
-          logAuthClient("me retry scheduled", {
-            delayMs: AUTH_RECOVERABLE_RETRY_DELAY_MS,
-            message: error?.message || "Recoverable auth error",
-          });
-          await delay(AUTH_RECOVERABLE_RETRY_DELAY_MS);
-
-          const user = await request("/api/auth/me");
-          cacheAuthenticatedUser(user);
-          return user;
-        }
+        const user = await request("/api/auth/me");
+        cacheAuthenticatedUser(user);
+        return user;
       })()
         .finally(() => {
           mePromise = null;

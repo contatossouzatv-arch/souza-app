@@ -13,6 +13,7 @@ import { isInteractionSoundEnabled } from "@/lib/soundPrefs";
 import depositSuccessSound from "../../assets-para-app/moeda effect song deposit.mp3";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { usePlatformsSummary } from "@/hooks/usePlatformsSummary";
+import { useAuth } from "@/lib/AuthContext";
 
 const SUPPORTED_IMAGE_EXTENSIONS = /\.(jpe?g|png|webp|gif)$/i;
 const SUPPORTED_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
@@ -51,6 +52,7 @@ export default function TicketsProgressBox({
 }) {
   const ADD_NEW_PLATFORM_VALUE = "__add_new_platform__";
   const queryClient = useQueryClient();
+  const { isLoadingAuth } = useAuth();
   const [submissionStatus, setSubmissionStatus] = useState("idle");
   const [formExpanded, setFormExpanded] = useState(false);
   const [amount, setAmount] = useState("");
@@ -90,20 +92,21 @@ export default function TicketsProgressBox({
     select: (data) => data?.activePlatforms || [],
   });
 
+  const depositsEnabled = safeFind(safeSettings, (s) => s.key === "deposits_enabled")?.value === "true";
+  const ticketsActive = safeFind(safeSettings, (s) => s.key === "tickets_box_active")?.value === "true";
+
   const { data: platformHistory = [] } = useQuery({
     queryKey: ["platform-history", user?.id],
     queryFn: async () => {
       const response = await base44.adminEvents.profile.platformHistory();
       return response.items || [];
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !isLoadingAuth && ticketsActive && formExpanded,
     staleTime: 300000,
     refetchOnWindowFocus: false,
     retry: false,
   });
 
-  const depositsEnabled = safeFind(safeSettings, (s) => s.key === "deposits_enabled")?.value === "true";
-  const ticketsActive = safeFind(safeSettings, (s) => s.key === "tickets_box_active")?.value === "true";
   const depositCheckOptions = React.useMemo(() => {
     const map = new Map();
 

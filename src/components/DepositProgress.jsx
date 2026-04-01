@@ -12,6 +12,7 @@ import { isInteractionSoundEnabled } from "@/lib/soundPrefs";
 import depositSuccessSound from "../../assets-para-app/moeda effect song deposit.mp3";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { usePlatformsSummary } from "@/hooks/usePlatformsSummary";
+import { useAuth } from "@/lib/AuthContext";
 
 const safeFind = (list, predicate) => (Array.isArray(list) ? list.find(predicate) : undefined);
 
@@ -25,6 +26,7 @@ export default function DepositProgress({
   settings: initialSettings = null,
 }) {
   const queryClient = useQueryClient();
+  const { isLoadingAuth } = useAuth();
   const [submissionStatus, setSubmissionStatus] = useState("idle");
   const [formExpanded, setFormExpanded] = useState(false);
   const [amount, setAmount] = useState("");
@@ -59,20 +61,22 @@ export default function DepositProgress({
     select: (data) => data?.activePlatforms || [],
   });
 
+  const depositsEnabled = safeFind(safeSettings, (s) => s.key === "deposits_enabled")?.value === "true";
+  const cashbackActive = safeFind(safeSettings, (s) => s.key === "cashback_active")?.value === "true";
+  const shouldRenderCashback = cashbackActive;
+
   const { data: cashbackClaims = [] } = useQuery({
     queryKey: ["my-cashback-claims", user?.id],
     queryFn: async () => {
       const response = await base44.cashback.status();
       return response.items || [];
     },
-    enabled: !!user,
+    enabled: !!user?.id && !isLoadingAuth && shouldRenderCashback,
     refetchOnWindowFocus: false,
     staleTime: 30000,
     retry: false,
   });
 
-  const depositsEnabled = safeFind(safeSettings, (s) => s.key === "deposits_enabled")?.value === "true";
-  const cashbackActive = safeFind(safeSettings, (s) => s.key === "cashback_active")?.value === "true";
   const depositCheckOptions = React.useMemo(() => {
     const map = new Map();
 
@@ -105,7 +109,6 @@ export default function DepositProgress({
       .filter((item) => item.link);
   }, [activePlatforms, safeSettings]);
   const cashbackRedeemLink = safeFind(safeSettings, (s) => s.key === "cashback_redeem_link")?.value || "#";
-  const shouldRenderCashback = cashbackActive;
 
   const firstGoalClaimed = cashbackClaims.find((c) => c.goal_type === "first_goal" && c.claimed);
 
