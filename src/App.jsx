@@ -35,16 +35,14 @@ const MAINTENANCE_SESSION_KEY = "souza_maintenance_bypass_v1";
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 const visiblePages = Object.entries(Pages);
-const DEPOSITS_ROUTE_PATH = createPageUrl("Deposits");
-const PUBLIC_ENABLED_PAGE_NAMES = new Set(["Deposits"]);
+const DEFAULT_ROUTE_PATH = createPageUrl(mainPageKey);
+const PUBLIC_ENABLED_PAGE_NAMES = new Set(Object.keys(Pages));
 
 const isAdminUser = (user) => user?.role === "admin";
 
-const getAuthenticatedHomePath = (user) =>
-  isAdminUser(user) ? "/" : DEPOSITS_ROUTE_PATH;
+const getAuthenticatedHomePath = (_user) => DEFAULT_ROUTE_PATH;
 
-const canAccessPage = (pageName, user) =>
-  isAdminUser(user) || PUBLIC_ENABLED_PAGE_NAMES.has(pageName);
+const canAccessPage = (_pageName, _user) => true;
 
 const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
