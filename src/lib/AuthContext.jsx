@@ -78,6 +78,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       const isRecoverable = base44.auth.isRecoverableAuthError(error);
       const hasToken = base44.auth.hasToken();
+      const fallbackUser = user?.id ? user : hasToken ? readLastKnownUser() : null;
       console.warn('[auth-bootstrap] checkAppState:failed', {
         status: error?.status || null,
         message: error?.message || 'Authentication required',
@@ -85,10 +86,14 @@ export const AuthProvider = ({ children }) => {
         hasToken,
       });
       if (isRecoverable) {
+        if (fallbackUser?.id && hasToken) {
+          console.warn('[auth-bootstrap] checkAppState:recoverable-fallback', {
+            userId: fallbackUser.id,
+          });
+          applyAuthenticatedUser(fallbackUser);
+          return;
+        }
         if (!background) {
-          writeLastKnownUser(null);
-          setUser(null);
-          setIsAuthenticated(false);
           setAuthError({
             type: 'auth_unreachable',
             message: 'Nao foi possivel validar sua sessao agora. Tente novamente em instantes.',
@@ -119,7 +124,7 @@ export const AuthProvider = ({ children }) => {
     console.info('[auth-bootstrap] mount');
     const hasToken = base44.auth.hasToken();
     const hasRefreshToken = base44.auth.hasRefreshToken();
-    const cachedUser = hasToken ? readLastKnownUser() : null;
+    const cachedUser = hasToken || hasRefreshToken ? readLastKnownUser() : null;
     const pathname = typeof window !== "undefined" ? window.location.pathname : "";
     const shouldSkipBootstrap =
       !hasToken &&
@@ -133,12 +138,13 @@ export const AuthProvider = ({ children }) => {
       });
       setHasResolvedAuthBootstrap(true);
       setIsLoadingAuth(false);
+    } else if (cachedUser?.id) {
+      console.info('[auth-bootstrap] mount:cached-user-found-awaiting-validation', {
+        userId: cachedUser.id,
+      });
+      applyAuthenticatedUser(cachedUser);
+      checkAppState({ background: true });
     } else {
-      if (cachedUser?.id) {
-        console.info('[auth-bootstrap] mount:cached-user-found-awaiting-validation', {
-          userId: cachedUser.id,
-        });
-      }
       checkAppState();
     }
 

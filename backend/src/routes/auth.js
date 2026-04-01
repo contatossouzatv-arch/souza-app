@@ -45,7 +45,7 @@ import {
 } from "../auth.js";
 import { env } from "../config/env.js";
 import { deleteFromCloudinaryByUrl, getCloudinaryConfig, uploadToCloudinary } from "../lib/cloudinary.js";
-import { deleteCacheByPrefix, getOrComputeCacheJson, setCacheJson } from "../lib/cache.js";
+import { deleteCacheByPrefix, deleteCacheKey, getOrComputeCacheJson, setCacheJson } from "../lib/cache.js";
 import { sendPasswordResetEmail } from "../lib/mailer.js";
 import { privateUploadsDir, uploadsDir } from "../lib/paths.js";
 
@@ -56,6 +56,7 @@ const profilePublicDir = path.resolve(uploadsDir, "profile");
 const bannedNameTokens = ["nude", "porn", "sexo", "sex", "nsfw"];
 const profileImageCloudinaryConfig = getCloudinaryConfig();
 const ADMIN_PROFILE_IMAGES_TTL_MS = 10_000;
+const AUTH_SESSION_USER_TTL_MS = 5 * 60 * 1000;
 
 fs.mkdirSync(profilePendingDir, { recursive: true });
 fs.mkdirSync(profilePublicDir, { recursive: true });
@@ -102,6 +103,34 @@ function sanitizePhone(phone) {
 
 function buildAdminProfileImagesCacheKey(status = "") {
   return `auth:admin-profile-images:${String(status || "").trim().toLowerCase() || "manual_review"}`;
+}
+
+function buildAuthSessionUserCacheKey(userId = "") {
+  const normalizedUserId = String(userId || "").trim();
+  return normalizedUserId ? `auth:session-user:${normalizedUserId}` : "";
+}
+
+async function primeAuthSessionUserCache(user) {
+  const safeUser = user && typeof user === "object" ? user : null;
+  const cacheKey = buildAuthSessionUserCacheKey(safeUser?.id || "");
+  if (!cacheKey || !safeUser) return safeUser;
+  await setCacheJson(cacheKey, safeUser, AUTH_SESSION_USER_TTL_MS).catch(() => {});
+  return safeUser;
+}
+
+async function clearAuthSessionUserCache(userId = "") {
+  const cacheKey = buildAuthSessionUserCacheKey(userId);
+  if (!cacheKey) return;
+  await deleteCacheKey(cacheKey).catch(() => {});
+}
+
+async function resolveSessionUser(userId = "") {
+  const cacheKey = buildAuthSessionUserCacheKey(userId);
+  if (!cacheKey) return null;
+  return getOrComputeCacheJson(cacheKey, AUTH_SESSION_USER_TTL_MS, async () => {
+    const loadedUser = await findUserById(userId);
+    return loadedUser || null;
+  });
 }
 
 async function ensureUniqueIdentityFields({ email = "", nick = "", phone = "", excludeUserId = "" }) {
@@ -506,6 +535,7 @@ async function issueSession(req, user, familyId = null) {
     rotate_family_id: rotateFamilyId,
   });
 
+  await primeAuthSessionUserCache(user);
   const token = signAccessToken(user);
   return { token, refreshToken, user };
 }
@@ -784,10 +814,11 @@ router.post("/2fa/setup", requireAuth, async (req, res) => {
   if (!userRow) return res.status(404).json({ error: "User not found" });
 
   const secret = generateTotpSecret();
-  await updateUserById(req.auth.sub, {
+  const updatedUser = await updateUserById(req.auth.sub, {
     two_factor_secret: secret,
     two_factor_enabled: false,
   });
+  await primeAuthSessionUserCache(updatedUser);
 
   const appName = "APP do Souza";
   const label = encodeURIComponent(`${appName}:${userRow.email}`);
@@ -815,7 +846,8 @@ router.post("/2fa/enable", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Código 2FA inválido." });
   }
 
-  await updateUserById(req.auth.sub, { two_factor_enabled: true });
+  const updatedUser = await updateUserById(req.auth.sub, { two_factor_enabled: true });
+  await primeAuthSessionUserCache(updatedUser);
   await auditEvent(req, "2FA_ENABLED", req.auth.sub);
   return res.json({ ok: true, two_factor_enabled: true });
 });
@@ -833,10 +865,11 @@ router.post("/2fa/disable", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Código 2FA inválido." });
   }
 
-  await updateUserById(req.auth.sub, {
+  const updatedUser = await updateUserById(req.auth.sub, {
     two_factor_enabled: false,
     two_factor_secret: null,
   });
+  await primeAuthSessionUserCache(updatedUser);
   await auditEvent(req, "2FA_DISABLED", req.auth.sub);
   return res.json({ ok: true, two_factor_enabled: false });
 });
@@ -958,7 +991,8 @@ router.post("/reset-password", async (req, res) => {
   }
 
   const newHash = await bcrypt.hash(newPassword, 10);
-  await updateUserById(stored.user_id, { password_hash: newHash });
+  const updatedUser = await updateUserById(stored.user_id, { password_hash: newHash });
+  await primeAuthSessionUserCache(updatedUser);
   await markPasswordResetTokenUsed(stored.id);
   await revokeRefreshTokensByUserId(stored.user_id);
   await auditEvent(req, "PASSWORD_RESET_COMPLETED", stored.user_id);
@@ -987,7 +1021,8 @@ router.post("/change-password", requireAuth, async (req, res) => {
   }
 
   const newHash = await bcrypt.hash(newPassword, 10);
-  await updateUserById(req.auth.sub, { password_hash: newHash });
+  const updatedUser = await updateUserById(req.auth.sub, { password_hash: newHash });
+  await primeAuthSessionUserCache(updatedUser);
   await revokeRefreshTokensByUserId(req.auth.sub);
   await auditEvent(req, "PASSWORD_CHANGED", req.auth.sub);
   return res.json({ ok: true });
@@ -1035,9 +1070,10 @@ router.post("/refresh", async (req, res) => {
     });
   }
 
-  const user = await findUserById(stored.user_id);
+  const user = await resolveSessionUser(stored.user_id);
   if (!user) {
     await revokeRefreshTokenById(stored.id);
+    await clearAuthSessionUserCache(stored.user_id);
     clearSessionCookies(res);
     logAuthRoute(req, "refresh denied", { reason: "missing_user", userId: stored.user_id });
     return res.status(401).json({ error: "Sessão inválida", code: "SESSION_INVALID" });
@@ -1078,8 +1114,9 @@ router.get("/me", requireAuth, async (req, res) => {
     authSource: req.authSource || "unknown",
     userId: req.auth?.sub || null,
   });
-  const user = await findUserById(req.auth.sub);
+  const user = await resolveSessionUser(req.auth.sub);
   if (!user) {
+    await clearAuthSessionUserCache(req.auth.sub);
     clearSessionCookies(res);
     logAuthRoute(req, "me denied", { reason: "missing_user", userId: req.auth.sub });
     return res.status(401).json({ error: "User not found" });
@@ -1100,6 +1137,7 @@ router.post("/me/deactivate", requireAuth, async (req, res) => {
     account_status: "deactivated",
     deactivated_at: new Date().toISOString(),
   });
+  await primeAuthSessionUserCache(updated);
 
   return res.json({ ok: true, user: updated });
 });
@@ -1115,6 +1153,7 @@ router.delete("/me", requireAuth, async (req, res) => {
 
   removePublicFileByUrl(user.profile_image_url);
   await deleteUserById(req.auth.sub);
+  await clearAuthSessionUserCache(req.auth.sub);
 
   return res.status(204).send();
 });
@@ -1193,6 +1232,7 @@ router.post(
     }
 
     const updated = await updateUserById(req.auth.sub, updatePayload);
+    await primeAuthSessionUserCache(updated);
     emitEntityChanged(req, "user", req.auth.sub, "updated");
     return res.status(201).json({
       ok: true,
@@ -1227,6 +1267,7 @@ router.delete("/me/profile-image/pending", requireAuth, async (req, res) => {
     profile_image_moderation_score: null,
     profile_image_uploaded_at: null,
   });
+  await primeAuthSessionUserCache(updated);
 
   emitEntityChanged(req, "user", req.auth.sub, "updated");
   return res.json({ ok: true, user: updated });
@@ -1423,6 +1464,7 @@ router.post("/admin/profile-images/:userId/approve", requireAuth, requireAdmin, 
     profile_image_reject_reason: "",
     profile_image_mode: "photo",
   });
+  await primeAuthSessionUserCache(updated);
 
   await deleteCacheByPrefix("auth:admin-profile-images:").catch(() => {});
   emitEntityChanged(req, "user", user.id, "updated");
@@ -1451,6 +1493,7 @@ router.post("/admin/profile-images/:userId/reject", requireAuth, requireAdmin, a
     profile_image_pending_name: "",
     profile_image_reject_reason: reason,
   });
+  await primeAuthSessionUserCache(updated);
 
   await deleteCacheByPrefix("auth:admin-profile-images:").catch(() => {});
   emitEntityChanged(req, "user", user.id, "updated");
@@ -1576,6 +1619,7 @@ router.patch("/me", requireAuth, async (req, res) => {
 
   const updated = await updateUserById(req.auth.sub, update);
   if (!updated) return res.status(404).json({ error: "User not found" });
+  await primeAuthSessionUserCache(updated);
   emitEntityChanged(req, "user", req.auth.sub, "updated");
   return res.json(updated);
 });

@@ -312,7 +312,8 @@ const AuthenticatedApp = () => {
   ]);
 
   const shouldShowAuthUnavailable =
-    authError?.type === 'auth_unreachable' || (isLoadingAuth && hasAuthBootFailsafeElapsed);
+    !isAuthenticated &&
+    (authError?.type === 'auth_unreachable' || (isLoadingAuth && hasAuthBootFailsafeElapsed));
 
   const bootStatus = useMemo(() => {
     if (isLoadingPublicSettings) return "Sincronizando configurações públicas";
