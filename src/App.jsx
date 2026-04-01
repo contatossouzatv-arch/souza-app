@@ -36,6 +36,7 @@ const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 const visiblePages = Object.entries(Pages);
 const DEFAULT_ROUTE_PATH = createPageUrl(mainPageKey);
+const DEPOSITS_ROUTE_PATH = createPageUrl("Deposits");
 const PUBLIC_ENABLED_PAGE_NAMES = new Set(Object.keys(Pages));
 
 const isAdminUser = (user) => user?.role === "admin";
