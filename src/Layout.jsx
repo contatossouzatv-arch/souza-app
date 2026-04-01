@@ -221,7 +221,7 @@ export default function Layout({ children }) {
             {navItems.map((item) => {
               const isActive = item.match.includes(location.pathname);
               const Icon = item.icon;
-              const isDisabled = !isAdminUser && item.path !== depositsPath;
+              const isDisabled = false;
               const navClassName = `flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-1 py-2 text-[9px] font-semibold tracking-wide transition-all sm:text-[10px] ${
                 isDisabled
                   ? "cursor-not-allowed bg-slate-900/60 text-slate-600 opacity-60"
