@@ -1,9 +1,13 @@
 import http from "node:http";
+import dotenv from "dotenv";
 import { createAdapter } from "@socket.io/redis-adapter";
 import Redis from "ioredis";
 import bcrypt from "bcryptjs";
 import { Server } from "socket.io";
 import { getRuntimeBuildInfo } from "./lib/runtimeBuildInfo.js";
+
+// Ensure .env is loaded before reading process.env (e.g., PORT) in bootstrap
+dotenv.config();
 
 const buildInfo = getRuntimeBuildInfo();
 

@@ -56,7 +56,11 @@ export async function getCacheJson(key) {
   }
 
   try {
-    await client.connect().catch(() => {});
+    if (client.status !== "ready") {
+      client.connect().catch(() => {});
+      // Evita bloquear a rota quando o Redis está lento/indisponível
+      return readMemory(key);
+    }
     const raw = await client.get(key);
     if (!raw) return MISS;
     const parsed = JSON.parse(raw);
@@ -77,7 +81,10 @@ export async function setCacheJson(key, value, ttlMs) {
   if (!client) return value;
 
   try {
-    await client.connect().catch(() => {});
+    if (client.status !== "ready") {
+      client.connect().catch(() => {});
+      return value;
+    }
     await client.set(key, JSON.stringify({ value }), "PX", Math.max(1, Number(ttlMs || 1)));
   } catch (error) {
     console.warn("[cache] redis set failed, keeping memory cache", {
@@ -94,7 +101,10 @@ export async function deleteCacheKey(key) {
   const client = getRedisClient();
   if (!client) return;
   try {
-    await client.connect().catch(() => {});
+    if (client.status !== "ready") {
+      client.connect().catch(() => {});
+      return;
+    }
     await client.del(key);
   } catch (error) {
     console.warn("[cache] redis delete failed", {
@@ -118,7 +128,10 @@ export async function deleteCacheByPrefix(prefix) {
   if (!client) return;
 
   try {
-    await client.connect().catch(() => {});
+    if (client.status !== "ready") {
+      client.connect().catch(() => {});
+      return;
+    }
     let cursor = "0";
     do {
       const [nextCursor, keys] = await client.scan(cursor, "MATCH", `${normalizedPrefix}*`, "COUNT", 100);

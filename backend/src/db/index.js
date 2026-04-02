@@ -4,6 +4,7 @@ const { Pool } = pg;
 const poolMax = Math.max(1, Number(process.env.DB_POOL_MAX || 10));
 const poolIdleTimeoutMs = Math.max(1000, Number(process.env.DB_IDLE_TIMEOUT_MS || 30000));
 const poolConnectionTimeoutMs = Math.max(1000, Number(process.env.DB_CONNECTION_TIMEOUT_MS || 5000));
+const useSsl = String(process.env.DB_SSL || "").toLowerCase() === "true";
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -11,9 +12,8 @@ export const pool = new Pool({
   idleTimeoutMillis: poolIdleTimeoutMs,
   connectionTimeoutMillis: poolConnectionTimeoutMs,
   keepAlive: true,
-  ssl: {
-    rejectUnauthorized: false,
-  },
+  // Local postgres (docker-compose) não aceita SSL por padrão; habilite apenas se DB_SSL=true
+  ssl: useSsl ? { rejectUnauthorized: false } : false,
 });
 
 pool.on("error", (error) => {
