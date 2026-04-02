@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
+import LegalLinksBar from "@/components/LegalLinksBar";
 import { Eye, EyeOff } from "lucide-react";
 import caricaturaSouza from "../../assets-para-app/13a71c5e4_caricatura-001.png";
 import profileCoverTile from "../../assets-para-app/profile-cover-tile.png";
@@ -615,6 +616,8 @@ export default function Login() {
               {forgotInfo}
             </p>
           )}
+
+          <LegalLinksBar />
         </Card>
       </div>
     </div>
