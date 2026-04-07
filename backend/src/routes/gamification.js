@@ -5301,6 +5301,7 @@ router.get("/admin/gamification/weekly-results/:cycleId", requireAuth, requireAd
 // Valida ou anula um ganhador do Top Semanal.
 // Ao anular, o próximo da lista (cascade) passa a ser o ganhador efetivo.
 router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth, requireAdmin, async (req, res) => {
+  const _t0 = Date.now();
   const cycleId = String(req.params.cycleId || "");
   const userId = String(req.body?.userId || "").trim();
   const action = String(req.body?.action || "").trim();
@@ -5317,6 +5318,7 @@ router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth,
   if (!cycleRow) return res.status(404).json({ error: "Ciclo não encontrado." });
   const userRow = userResult.rows[0];
   if (!userRow) return res.status(404).json({ error: "Usuário não encontrado." });
+  console.info("[weekly-validate] step:lookup", { ms: Date.now() - _t0, cycleId, userId, action });
 
   const config = normalizeWeeklyConfig(cycleRow.config_snapshot || {});
   const winnersCount = Math.max(1, Number(config.winners_count || 10));
@@ -5331,6 +5333,7 @@ router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth,
      FROM weekly w JOIN users u ON u.id = w.user_id ORDER BY position LIMIT 200`,
     [String(cycleRow.cycle_key)]
   );
+  console.info("[weekly-validate] step:leaderboard", { ms: Date.now() - _t0 });
 
   let effectivePos = 0;
   let userEffectivePos = null;
@@ -5366,8 +5369,10 @@ router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth,
     const visualTheme = userEffectivePos === 1 ? "gold" : userEffectivePos <= 3 ? "spotlight" : "premium";
 
     // Transação: prize gallery item
+    console.info("[weekly-validate] step:tx-start", { ms: Date.now() - _t0 });
     let prizeItemId = null;
     const client = await pool.connect();
+    console.info("[weekly-validate] step:tx-connected", { ms: Date.now() - _t0 });
     try {
       await client.query("BEGIN");
       const prizeItem = await upsertPrizeGalleryItem(client, {
@@ -5395,6 +5400,7 @@ router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth,
       });
       prizeItemId = prizeItem.id;
       await client.query("COMMIT");
+      console.info("[weekly-validate] step:tx-committed", { ms: Date.now() - _t0 });
     } catch (err) {
       await client.query("ROLLBACK");
       throw err;
@@ -5426,12 +5432,14 @@ router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth,
       redemption_status: "pending",
     });
 
+    console.info("[weekly-validate] step:audit-created", { ms: Date.now() - _t0 });
     // Salva estado de validação no ciclo
     validations[userId] = { status: "validated", validated_at: now, audit_id: audit.id, prize_gallery_item_id: prizeItemId };
     await pool.query(
       `UPDATE weekly_cycles SET metadata = jsonb_set(COALESCE(metadata,'{}'), '{winner_validations}', $2::jsonb, true), updated_at = NOW() WHERE id = $1`,
       [cycleId, JSON.stringify(validations)]
     );
+    console.info("[weekly-validate] step:cycle-updated", { ms: Date.now() - _t0 });
 
     // Notifica o usuário (fire & forget)
     createEntity("ProfileNotification", {
@@ -5454,6 +5462,7 @@ router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth,
 
     emitEntityChanged(req, "UserPrizeGalleryItem", userId, "created");
     emitEntityChanged(req, "ProfileNotification", userId, "created");
+    console.info("[weekly-validate] step:done", { ms: Date.now() - _t0, action: "validated" });
     // Respond before writing the audit log (fire & forget — it's a non-critical append)
     res.json({ ok: true, action: "validated", audit_id: audit.id, prize_gallery_item_id: prizeItemId });
     appendAdminAudit({
@@ -5470,8 +5479,10 @@ router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth,
   }
 
   // action === "annul"
+  console.info("[weekly-validate] step:annul-start", { ms: Date.now() - _t0 });
   const existing = validations[userId];
   const client = await pool.connect();
+  console.info("[weekly-validate] step:annul-connected", { ms: Date.now() - _t0 });
   try {
     await client.query("BEGIN");
     await removePrizeGalleryItem(client, { userId, sourceType: "weekly_top", sourceRefId });
@@ -5493,6 +5504,7 @@ router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth,
   );
 
   emitEntityChanged(req, "UserPrizeGalleryItem", userId, "deleted");
+  console.info("[weekly-validate] step:done", { ms: Date.now() - _t0, action: "annulled" });
   res.json({ ok: true, action: "annulled" });
   appendAdminAudit({
     domain: "weekly_top",

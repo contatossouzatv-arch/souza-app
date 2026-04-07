@@ -23,6 +23,7 @@ export async function upsertPrizeGalleryItem(client, payload) {
   }
 
   // Direct query (no COALESCE) so expression indexes on data->>'source_ref_id' are used
+  const _tq = Date.now();
   const existingResult = await client.query(
     `SELECT * FROM entity_records
      WHERE entity_name = 'UserPrizeGalleryItem'
@@ -34,6 +35,7 @@ export async function upsertPrizeGalleryItem(client, payload) {
      FOR UPDATE`,
     [userId, sourceType, sourceRefId]
   );
+  console.info("[prize-gallery] upsert:select-for-update", { ms: Date.now() - _tq, found: existingResult.rows.length });
   const existing = existingResult.rows[0] ? normalizeRecord(existingResult.rows[0]) : null;
   const claimedAt = String(payload?.claimedAt || new Date().toISOString());
   const metadata = {
