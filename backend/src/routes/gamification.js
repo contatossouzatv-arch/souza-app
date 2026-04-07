@@ -48,18 +48,18 @@ const POINTS_RULES_KEY = "achievement_points_rules_v1";
 const PROFILE_COMPETITION_KEY = "profile_competition_rules_v1";
 const WEEKLY_TOP_CONFIG_KEY = "weekly_top_config_v2";
 const DAILY_CHECKIN_CONFIG_KEY = "daily_checkin_config_v1";
-const GAMIFICATION_STATE_TTL_MS = 30000;
-const GAMIFICATION_RULES_TTL_MS = 60000;
-const WEEKLY_CYCLE_TTL_MS = 30000;
-const PROFILE_METRICS_TTL_MS = 45000;
-const WINNERS_HISTORY_TTL_MS = 60000;
+const GAMIFICATION_STATE_TTL_MS = 60000;       // era 30s — query cara, não precisa de 30s
+const GAMIFICATION_RULES_TTL_MS = 120000;
+const WEEKLY_CYCLE_TTL_MS = 60000;             // era 30s
+const PROFILE_METRICS_TTL_MS = 60000;          // era 45s
+const WINNERS_HISTORY_TTL_MS = 120000;         // era 60s
 const HOME_SUMMARY_TTL_MS = 120000;
-const HOME_FEED_SUMMARY_TTL_MS = 30000;
-const HOME_FEED_SHARED_TTL_MS = 30000;
-const WEEKLY_LEADERBOARD_TTL_MS = 15000;
-const PUBLIC_UI_CONFIG_TTL_MS = 60000;
-const PLATFORMS_SUMMARY_TTL_MS = 60000;
-const PROFILE_SUMMARY_TTL_MS = 30000;
+const HOME_FEED_SUMMARY_TTL_MS = 60000;        // era 30s
+const HOME_FEED_SHARED_TTL_MS = 60000;         // era 30s
+const WEEKLY_LEADERBOARD_TTL_MS = 30000;       // era 15s — 15s é muito agressivo
+const PUBLIC_UI_CONFIG_TTL_MS = 300000;        // era 60s — config muda raramente
+const PLATFORMS_SUMMARY_TTL_MS = 120000;       // era 60s
+const PROFILE_SUMMARY_TTL_MS = 60000;          // era 30s
 const PUBLIC_PROFILE_SUMMARY_TTL_MS = 30000;
 const PROFILE_PUBLIC_BASICS_TTL_MS = 60000;
 const PROFILE_PRIZE_GALLERY_TTL_MS = 20000;
@@ -2073,9 +2073,9 @@ async function buildGamificationStateFresh(options = {}) {
       listEntity("UserPrizeGalleryItem"),
       listEntity("DailyChestXpGrant"),
       listEntity("CompetitionPointEvent"),
-      pool.query("SELECT * FROM daily_checkins ORDER BY created_at DESC").then((result) => result.rows),
-      pool.query("SELECT * FROM user_follows ORDER BY first_followed_at DESC, updated_at DESC").then((result) => result.rows),
-      pool.query("SELECT * FROM profile_likes ORDER BY first_liked_at DESC, updated_at DESC").then((result) => result.rows),
+      pool.query("SELECT user_id, checked_in_date, created_at FROM daily_checkins WHERE created_at >= NOW() - INTERVAL '60 days' ORDER BY created_at DESC LIMIT 50000").then((result) => result.rows),
+      pool.query("SELECT follower_user_id, followed_user_id, first_followed_at, updated_at FROM user_follows ORDER BY first_followed_at DESC, updated_at DESC LIMIT 100000").then((result) => result.rows),
+      pool.query("SELECT liker_user_id, liked_user_id, first_liked_at, updated_at FROM profile_likes ORDER BY first_liked_at DESC, updated_at DESC LIMIT 100000").then((result) => result.rows),
     ]);
 
   const settingsMap = await listAppSettingsMap();

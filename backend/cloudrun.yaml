@@ -1,0 +1,41 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: souza-cass-api
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        # Mantém mínimo 1 instância sempre quente — elimina cold start e custo por "no available instance"
+        autoscaling.knative.dev/minScale: "1"
+        # Limita instâncias para não estourar o pool do Cloud SQL
+        # 5 instâncias × DB_POOL_MAX=20 = 100 conexões máximas
+        autoscaling.knative.dev/maxScale: "5"
+        # Quantas requisições simultâneas por instância antes de escalar
+        # Valor baixo = escala mais rápido mas custa mais; 40 é equilibrado
+        autoscaling.knative.dev/target: "40"
+        # CPU sempre alocada (não apenas durante request) — elimina cold start de CPU
+        run.googleapis.com/cpu-throttling: "false"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 60
+      containers:
+        - image: gcr.io/SEU_PROJECT_ID/souza-cass-api:latest
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: DB_POOL_MAX
+              value: "20"
+            - name: DB_IDLE_TIMEOUT_MS
+              value: "10000"
+            - name: DB_CONNECTION_TIMEOUT_MS
+              value: "15000"
