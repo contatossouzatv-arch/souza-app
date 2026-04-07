@@ -711,6 +711,295 @@ function FieldHint({ children }) {
   return <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{children}</p>;
 }
 
+// ─── Resultado Top Semanal ────────────────────────────────────────────────────
+
+const STATUS_LABEL = {
+  pending:   { text: "Pendente",  classes: "border-slate-600/60 bg-slate-700/40 text-slate-300" },
+  validated: { text: "Validado",  classes: "border-emerald-500/50 bg-emerald-500/15 text-emerald-300" },
+  annulled:  { text: "Anulado",   classes: "border-red-500/50 bg-red-500/15 text-red-300" },
+};
+
+const MEDAL = ["🥇", "🥈", "🥉"];
+
+function WeeklyResultsSection({ cycles = [], queryClient }) {
+  const [selectedCycleId, setSelectedCycleId] = React.useState("");
+  const [confirmDialog, setConfirmDialog] = React.useState(null); // { userId, nick, action }
+
+  // Seleciona automaticamente o ciclo mais recente fechado
+  React.useEffect(() => {
+    if (selectedCycleId) return;
+    const first = cycles.find((c) => c.status === "closed") || cycles[0];
+    if (first) setSelectedCycleId(first.id);
+  }, [cycles, selectedCycleId]);
+
+  const { data: resultsData, isLoading, isFetching } = useQuery({
+    queryKey: ["admin-weekly-results", selectedCycleId],
+    queryFn: () => base44.adminGamification.weeklyResults(selectedCycleId),
+    enabled: Boolean(selectedCycleId),
+    staleTime: 15000,
+  });
+
+  const validateMutation = useMutation({
+    mutationFn: ({ userId, action }) =>
+      base44.adminGamification.validateWeeklyWinner(selectedCycleId, userId, action),
+    onSuccess: (_, vars) => {
+      toast({
+        title: vars.action === "validate" ? "✅ Ganhador validado!" : "❌ Ganhador anulado",
+        description: vars.action === "validate"
+          ? "Prêmio adicionado à galeria e usuário notificado."
+          : "Prêmio removido. O próximo da lista assumiu a posição.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["admin-weekly-results", selectedCycleId] });
+    },
+    onError: (err) => {
+      toast({ title: "Erro", description: err?.message || "Operação falhou.", variant: "destructive" });
+    },
+  });
+
+  const handleConfirm = () => {
+    if (!confirmDialog) return;
+    validateMutation.mutate({ userId: confirmDialog.userId, action: confirmDialog.action });
+    setConfirmDialog(null);
+  };
+
+  const entries = resultsData?.entries || [];
+  const winnersCount = resultsData?.winners_count || 10;
+  const cycle = resultsData?.cycle || null;
+
+  // Separa ganhadores efetivos dos demais
+  const effectiveWinners = entries.filter((e) => e.is_effective_winner);
+  const others = entries.filter((e) => !e.is_effective_winner);
+
+  return (
+    <div className="space-y-4">
+      {/* Seletor de ciclo */}
+      <Card className="border-slate-800 bg-slate-900/80 p-5">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex-1 space-y-1.5">
+            <label className="text-sm font-semibold text-slate-300">Ciclo</label>
+            <select
+              value={selectedCycleId}
+              onChange={(e) => setSelectedCycleId(e.target.value)}
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            >
+              <option value="">Selecione um ciclo...</option>
+              {cycles.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title || c.cycle_key} — {c.status === "active" ? "🟢 Ativo" : "🔒 Encerrado"}
+                </option>
+              ))}
+            </select>
+          </div>
+          {cycle ? (
+            <div className="rounded-lg border border-slate-700/60 bg-slate-950/60 px-4 py-2 text-xs text-slate-400">
+              <span className="font-semibold text-slate-200">{cycle.title}</span>
+              &nbsp;·&nbsp;
+              {new Date(cycle.starts_at).toLocaleDateString("pt-BR")}
+              &nbsp;→&nbsp;
+              {new Date(cycle.ends_at).toLocaleDateString("pt-BR")}
+              &nbsp;·&nbsp;
+              <span className={cycle.status === "closed" ? "text-amber-400" : "text-emerald-400"}>
+                {cycle.status === "closed" ? "Encerrado" : "Ativo"}
+              </span>
+            </div>
+          ) : null}
+        </div>
+      </Card>
+
+      {/* Conteúdo */}
+      {isLoading || isFetching ? (
+        <Card className="border-slate-800 bg-slate-900/80 p-8 text-center">
+          <p className="text-sm text-slate-400">Carregando resultados...</p>
+        </Card>
+      ) : !selectedCycleId ? (
+        <Card className="border-slate-800 bg-slate-900/80 p-8 text-center">
+          <p className="text-sm text-slate-500">Selecione um ciclo acima para ver os resultados.</p>
+        </Card>
+      ) : entries.length === 0 ? (
+        <Card className="border-slate-800 bg-slate-900/80 p-8 text-center">
+          <p className="text-sm text-slate-500">Nenhum participante com pontuação neste ciclo.</p>
+        </Card>
+      ) : (
+        <>
+          {/* Top ganhadores */}
+          <Card className="border-amber-400/25 bg-slate-900/80 p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <span className="text-lg">🏆</span>
+              <h3 className="text-base font-black text-amber-300">
+                Top {winnersCount} Ganhadores Efetivos
+              </h3>
+              <span className="ml-auto rounded-full border border-slate-700 px-2 py-0.5 text-[11px] text-slate-400">
+                {effectiveWinners.length}/{winnersCount} preenchidos
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {effectiveWinners.map((entry) => {
+                const statusInfo = STATUS_LABEL[entry.validation_status] || STATUS_LABEL.pending;
+                const medal = MEDAL[entry.effective_position - 1] || null;
+                return (
+                  <div
+                    key={entry.user_id}
+                    className="flex items-center gap-3 rounded-xl border border-slate-700/60 bg-slate-950/60 px-4 py-2.5"
+                  >
+                    {/* Posição */}
+                    <div className="w-8 shrink-0 text-center">
+                      {medal ? (
+                        <span className="text-xl">{medal}</span>
+                      ) : (
+                        <span className="text-sm font-black text-slate-400">#{entry.effective_position}</span>
+                      )}
+                    </div>
+
+                    {/* Nick + pontos */}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-white">{entry.nick}</p>
+                      <p className="text-[11px] text-slate-400">
+                        {Number(entry.weekly_points).toLocaleString("pt-BR")} pts
+                        {entry.reward_label ? ` · ${entry.reward_label}` : ""}
+                      </p>
+                    </div>
+
+                    {/* Status badge */}
+                    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${statusInfo.classes}`}>
+                      {statusInfo.text}
+                    </span>
+
+                    {/* Ações */}
+                    <div className="flex shrink-0 gap-2">
+                      {entry.validation_status !== "validated" ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={validateMutation.isPending}
+                          onClick={() => setConfirmDialog({ userId: entry.user_id, nick: entry.nick, action: "validate" })}
+                          className="h-7 bg-emerald-600 px-3 text-[11px] font-bold text-white hover:bg-emerald-500"
+                        >
+                          Validar
+                        </Button>
+                      ) : null}
+                      {entry.validation_status !== "annulled" ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={validateMutation.isPending}
+                          onClick={() => setConfirmDialog({ userId: entry.user_id, nick: entry.nick, action: "annul" })}
+                          className="h-7 border border-red-500/50 bg-red-500/10 px-3 text-[11px] font-bold text-red-300 hover:bg-red-500/20"
+                        >
+                          Anular
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Aviso de posições ainda a preencher */}
+              {effectiveWinners.length < winnersCount ? (
+                <div className="rounded-xl border border-amber-500/25 bg-amber-500/8 px-4 py-2.5 text-xs text-amber-200">
+                  ⚠️ {winnersCount - effectiveWinners.length} posição(ões) ainda sem ganhador efetivo.
+                  Adicione mais participantes ou reduza o número de ganhadores no painel de configuração.
+                </div>
+              ) : null}
+            </div>
+          </Card>
+
+          {/* Demais participantes */}
+          {others.length > 0 ? (
+            <Card className="border-slate-800 bg-slate-900/80 p-5">
+              <h3 className="mb-3 text-sm font-bold text-slate-300">
+                Participantes fora do Top {winnersCount}
+                <span className="ml-2 text-slate-500">({others.length})</span>
+              </h3>
+              <div className="space-y-1.5">
+                {others.map((entry) => {
+                  const statusInfo = STATUS_LABEL[entry.validation_status] || STATUS_LABEL.pending;
+                  return (
+                    <div
+                      key={entry.user_id}
+                      className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
+                        entry.validation_status === "annulled"
+                          ? "border border-red-500/20 bg-red-500/5"
+                          : "border border-slate-800/60 bg-slate-950/40"
+                      }`}
+                    >
+                      <span className="w-7 shrink-0 text-center text-xs font-black text-slate-500">
+                        #{entry.position}
+                      </span>
+                      <p className="min-w-0 flex-1 truncate text-sm text-slate-300">{entry.nick}</p>
+                      <p className="shrink-0 text-[11px] text-slate-500">
+                        {Number(entry.weekly_points).toLocaleString("pt-BR")} pts
+                      </p>
+                      {entry.validation_status === "annulled" ? (
+                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusInfo.classes}`}>
+                          Anulado — subiu na lista
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          ) : null}
+        </>
+      )}
+
+      {/* Modal de confirmação */}
+      {confirmDialog ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+            <h3 className="text-base font-black text-white">
+              {confirmDialog.action === "validate" ? "✅ Confirmar validação" : "❌ Confirmar anulação"}
+            </h3>
+            <p className="mt-2 text-sm text-slate-300">
+              {confirmDialog.action === "validate" ? (
+                <>
+                  Validar <strong className="text-white">{confirmDialog.nick}</strong> como ganhador?
+                  <br />
+                  <span className="text-xs text-slate-400">
+                    O prêmio será adicionado à galeria e o usuário será notificado.
+                  </span>
+                </>
+              ) : (
+                <>
+                  Anular <strong className="text-white">{confirmDialog.nick}</strong>?
+                  <br />
+                  <span className="text-xs text-slate-400">
+                    O prêmio será removido e o próximo da lista assumirá a posição automaticamente.
+                  </span>
+                </>
+              )}
+            </p>
+            <div className="mt-5 flex gap-3">
+              <Button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="flex-1 border border-slate-700 bg-slate-800 text-white hover:bg-slate-700"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={handleConfirm}
+                disabled={validateMutation.isPending}
+                className={`flex-1 font-bold ${
+                  confirmDialog.action === "validate"
+                    ? "bg-emerald-600 text-white hover:bg-emerald-500"
+                    : "bg-red-600 text-white hover:bg-red-500"
+                }`}
+              >
+                {validateMutation.isPending ? "Aguarde..." : "Confirmar"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function GamificationTab() {
   const queryClient = useQueryClient();
   const [ruleGroupsDraft, setRuleGroupsDraft] = React.useState([]);
@@ -1005,6 +1294,7 @@ export default function GamificationTab() {
             { id: "checkin", label: "Check-in diário" },
             { id: "rules", label: "Regras de pontos" },
             { id: "weekly", label: "Top semanal" },
+            { id: "results", label: "Resultado Top Semanal" },
             { id: "summary", label: "Resumo do sistema" },
           ].map((section) => (
             <Button
@@ -1435,6 +1725,10 @@ export default function GamificationTab() {
             {saveWeeklyMutation.isPending ? "Salvando..." : "Salvar top semanal"}
           </Button>
         </Card>
+      ) : null}
+
+      {activeSection === "results" ? (
+        <WeeklyResultsSection cycles={cycles} queryClient={queryClient} />
       ) : null}
 
       {activeSection === "summary" ? (

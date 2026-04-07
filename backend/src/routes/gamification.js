@@ -40,6 +40,7 @@ import {
   setCacheJson,
   cacheMiss,
 } from "../lib/cache.js";
+import { upsertPrizeGalleryItem, removePrizeGalleryItem } from "../services/prizeGalleryService.js";
 
 const router = Router();
 
@@ -5195,6 +5196,315 @@ router.get("/admin/leaderboards/weekly", requireAuth, requireAdmin, async (_req,
     entries: state.leaderboardEntries,
   });
 });
+
+// ─── Resultado Top Semanal ────────────────────────────────────────────────────
+
+// Retorna leaderboard completo do ciclo com status de validação por usuário.
+// Cascade de anulação: effective_position ignora anulados, o próximo sobe.
+router.get("/admin/gamification/weekly-results/:cycleId", requireAuth, requireAdmin, async (req, res) => {
+  const cycleId = String(req.params.cycleId || "");
+  const cycleResult = await pool.query("SELECT * FROM weekly_cycles WHERE id = $1 LIMIT 1", [cycleId]);
+  const cycleRow = cycleResult.rows[0];
+  if (!cycleRow) return res.status(404).json({ error: "Ciclo não encontrado." });
+
+  const config = normalizeWeeklyConfig(cycleRow.config_snapshot || {});
+  const winnersCount = Math.max(1, Number(config.winners_count || 10));
+  const validations = (cycleRow.metadata || {}).winner_validations || {};
+
+  const lbResult = await pool.query(
+    `WITH weekly AS (
+       SELECT user_id, amount
+         FROM user_metric_balances
+        WHERE metric_key = 'weekly_points'
+          AND cycle_key = $1
+          AND amount > 0
+     ),
+     engagement AS (
+       SELECT user_id, amount
+         FROM user_metric_balances
+        WHERE metric_key = 'engagement_points'
+          AND cycle_key = ''
+     )
+     SELECT
+       w.user_id,
+       w.amount AS weekly_points,
+       COALESCE(e.amount, 0) AS engagement_points,
+       ROW_NUMBER() OVER (
+         ORDER BY w.amount DESC, COALESCE(e.amount, 0) DESC,
+                  COALESCE(NULLIF(BTRIM(u.nick),''), NULLIF(BTRIM(u.full_name),''), 'Usuario') ASC,
+                  u.id ASC
+       ) AS position,
+       u.id, u.nick, u.full_name, u.avatar_emoji,
+       u.profile_avatar_id, u.profile_image_mode, u.profile_image_status, u.profile_image_url
+     FROM weekly w
+     JOIN users u ON u.id = w.user_id
+     LEFT JOIN engagement e ON e.user_id = w.user_id
+     ORDER BY position
+     LIMIT 200`,
+    [String(cycleRow.cycle_key)]
+  );
+
+  let effectivePos = 0;
+  const entries = lbResult.rows.map((row) => {
+    const uid = String(row.user_id);
+    const v = validations[uid] || {};
+    const status = String(v.status || "pending");
+    const isAnnulled = status === "annulled";
+    if (!isAnnulled) effectivePos++;
+    const isWinner = !isAnnulled && effectivePos <= winnersCount;
+    const ePos = isAnnulled ? null : (isWinner ? effectivePos : null);
+    const posCfg = ePos ? (config.positions || []).find((p) => Number(p.position) === ePos) : null;
+    const rewardValue = Number(posCfg?.reward_value ?? config.fallback_reward_value ?? 0);
+    const rewardType = String(posCfg?.reward_type || config.fallback_reward_type || "cash_prize");
+    const rewardLabel = String(posCfg?.label || (rewardValue > 0 ? `R$${rewardValue.toFixed(2)}` : ""));
+    return {
+      user_id: uid,
+      nick: String(row.nick || row.full_name || "Usuário"),
+      avatar_emoji: String(row.avatar_emoji || ""),
+      profile_avatar_id: String(row.profile_avatar_id || ""),
+      profile_image_mode: String(row.profile_image_mode || "avatar"),
+      profile_image_status: String(row.profile_image_status || "none"),
+      profile_image_url: String(row.profile_image_url || ""),
+      weekly_points: Number(row.weekly_points || 0),
+      position: Number(row.position),
+      is_effective_winner: isWinner,
+      effective_position: ePos,
+      validation_status: status,
+      validated_at: v.validated_at || null,
+      annulled_at: v.annulled_at || null,
+      audit_id: v.audit_id || null,
+      prize_gallery_item_id: v.prize_gallery_item_id || null,
+      reward_value: rewardValue,
+      reward_type: rewardType,
+      reward_label: rewardLabel,
+    };
+  });
+
+  res.json({
+    cycle: {
+      id: cycleRow.id,
+      cycle_key: cycleRow.cycle_key,
+      title: cycleRow.title,
+      status: cycleRow.status,
+      starts_at: toIso(cycleRow.starts_at),
+      ends_at: toIso(cycleRow.ends_at),
+      closed_at: cycleRow.closed_at ? toIso(cycleRow.closed_at) : null,
+      config_snapshot: cycleRow.config_snapshot || {},
+      winners_snapshot: cycleRow.winners_snapshot || [],
+    },
+    entries,
+    winners_count: winnersCount,
+    config,
+  });
+});
+
+// Valida ou anula um ganhador do Top Semanal.
+// Ao anular, o próximo da lista (cascade) passa a ser o ganhador efetivo.
+router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth, requireAdmin, async (req, res) => {
+  const cycleId = String(req.params.cycleId || "");
+  const userId = String(req.body?.userId || "").trim();
+  const action = String(req.body?.action || "").trim();
+  if (!userId || !["validate", "annul"].includes(action)) {
+    return res.status(400).json({ error: "userId e action (validate|annul) são obrigatórios." });
+  }
+
+  const cycleResult = await pool.query("SELECT * FROM weekly_cycles WHERE id = $1 LIMIT 1", [cycleId]);
+  const cycleRow = cycleResult.rows[0];
+  if (!cycleRow) return res.status(404).json({ error: "Ciclo não encontrado." });
+
+  const config = normalizeWeeklyConfig(cycleRow.config_snapshot || {});
+  const winnersCount = Math.max(1, Number(config.winners_count || 10));
+  const currentMeta = cycleRow.metadata || {};
+  const validations = { ...(currentMeta.winner_validations || {}) };
+
+  const userResult = await pool.query("SELECT * FROM users WHERE id = $1 LIMIT 1", [userId]);
+  const userRow = userResult.rows[0];
+  if (!userRow) return res.status(404).json({ error: "Usuário não encontrado." });
+
+  // Recomputa effective_position considerando anulações atuais
+  const lbResult = await pool.query(
+    `WITH weekly AS (SELECT user_id, amount FROM user_metric_balances WHERE metric_key='weekly_points' AND cycle_key=$1 AND amount>0)
+     SELECT w.user_id, w.amount AS weekly_points,
+       ROW_NUMBER() OVER (ORDER BY w.amount DESC, u.nick ASC, u.id ASC) AS position
+     FROM weekly w JOIN users u ON u.id = w.user_id ORDER BY position LIMIT 200`,
+    [String(cycleRow.cycle_key)]
+  );
+
+  let effectivePos = 0;
+  let userEffectivePos = null;
+  let userWeeklyPoints = 0;
+  for (const row of lbResult.rows) {
+    const uid = String(row.user_id);
+    const isAnnulled = (action === "annul" ? false : validations[uid]?.status === "annulled");
+    if (!isAnnulled) effectivePos++;
+    if (uid === userId) {
+      userWeeklyPoints = Number(row.weekly_points || 0);
+      userEffectivePos = isAnnulled ? null : effectivePos;
+      break;
+    }
+  }
+
+  const now = new Date().toISOString();
+  const cycleTitle = String(cycleRow.title || cycleRow.cycle_key);
+  const sourceRefId = `weekly-top:${cycleId}:${userId}`;
+
+  if (action === "validate") {
+    if (!userEffectivePos || userEffectivePos > winnersCount) {
+      return res.status(409).json({ error: "Usuário não está na lista de ganhadores efetivos." });
+    }
+    if (validations[userId]?.status === "validated") {
+      return res.status(409).json({ error: "Já validado." });
+    }
+
+    const posCfg = (config.positions || []).find((p) => Number(p.position) === userEffectivePos);
+    const rewardValue = Number(posCfg?.reward_value ?? config.fallback_reward_value ?? 0);
+    const rewardType = String(posCfg?.reward_type || config.fallback_reward_type || "cash_prize");
+    const rewardLabel = String(posCfg?.label || (rewardValue > 0 ? `R$${rewardValue.toFixed(2)}` : "Prêmio do Top Semanal"));
+    const rarity = userEffectivePos === 1 ? "legendary" : userEffectivePos <= 3 ? "epic" : "rare";
+    const visualTheme = userEffectivePos === 1 ? "gold" : userEffectivePos <= 3 ? "spotlight" : "premium";
+
+    // Transação: prize gallery item
+    let prizeItemId = null;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const prizeItem = await upsertPrizeGalleryItem(client, {
+        userId,
+        sourceType: "weekly_top",
+        sourceRefId,
+        title: `Top Semanal — ${cycleTitle}`,
+        subtitle: `${userEffectivePos}º lugar · ${rewardLabel}`,
+        rewardType,
+        rewardAmount: rewardValue,
+        rewardUnit: "BRL",
+        rarity,
+        visualTheme,
+        icon: "trophy",
+        claimStatus: "validated",
+        claimedAt: now,
+        metadata: {
+          source_type: "weekly_top",
+          cycle_id: cycleId,
+          cycle_key: String(cycleRow.cycle_key),
+          effective_position: userEffectivePos,
+          reward_snapshot: { rewardType, rewardValue, rewardLabel },
+          admin_email: String(req.auth?.email || "admin"),
+        },
+      });
+      prizeItemId = prizeItem.id;
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // Audit record (fora da transação — é log, não crítico)
+    const audit = await createEntity("DrawWinnerAudit", {
+      source_type: "weekly_top",
+      cycle_id: cycleId,
+      cycle_key: String(cycleRow.cycle_key),
+      cycle_title: cycleTitle,
+      user_id: userId,
+      user_name: String(userRow.full_name || userRow.nick || ""),
+      user_nick: String(userRow.nick || ""),
+      user_email: String(userRow.email || ""),
+      user_phone: String(userRow.phone || ""),
+      user_avatar: String(userRow.avatar_emoji || ""),
+      user_platform_id: String(userRow.platform_id || ""),
+      weekly_points: userWeeklyPoints,
+      effective_position: userEffectivePos,
+      prize_amount: rewardValue,
+      reward_type: rewardType,
+      reward_label: rewardLabel,
+      admin_name: String(req.auth?.email || "admin"),
+      status: "validated",
+      validated_at: now,
+      redemption_status: "pending",
+    });
+
+    // Salva estado de validação no ciclo
+    validations[userId] = { status: "validated", validated_at: now, audit_id: audit.id, prize_gallery_item_id: prizeItemId };
+    await pool.query(
+      `UPDATE weekly_cycles SET metadata = jsonb_set(COALESCE(metadata,'{}'), '{winner_validations}', $2::jsonb, true), updated_at = NOW() WHERE id = $1`,
+      [cycleId, JSON.stringify(validations)]
+    );
+
+    // Notifica o usuário (fire & forget)
+    createEntity("ProfileNotification", {
+      user_id: userId,
+      actor_user_id: String(req.auth.sub),
+      actor_name: "SouzaTV",
+      actor_nick: "admin",
+      actor_avatar_emoji: "🏆",
+      actor_profile_avatar_id: "",
+      actor_profile_image_mode: "avatar",
+      actor_profile_image_status: "none",
+      actor_profile_image_url: "",
+      type: "weekly_top_winner",
+      title: "🏆 Você ganhou no Top Semanal!",
+      message: `Parabéns! Você ficou em ${userEffectivePos}º lugar no ${cycleTitle} e ganhou ${rewardLabel}. O prêmio já está na sua galeria.`,
+      status: "unread",
+      read_at: null,
+      metadata: { source_type: "weekly_top", cycle_id: cycleId, effective_position: userEffectivePos, reward_label: rewardLabel },
+    }).catch((err) => console.error("[weekly-top] notification failed", err?.message));
+
+    await appendAdminAudit({
+      domain: "weekly_top",
+      action: "validate_winner",
+      targetKey: `${cycleId}:${userId}`,
+      beforeData: {},
+      afterData: { effective_position: userEffectivePos, reward_label: rewardLabel },
+      metadata: { cycle_id: cycleId, user_id: userId, audit_id: audit.id },
+      adminUserId: req.auth.sub,
+      adminEmail: req.auth.email,
+    });
+
+    emitEntityChanged(req, "UserPrizeGalleryItem", userId, "created");
+    emitEntityChanged(req, "ProfileNotification", userId, "created");
+    return res.json({ ok: true, action: "validated", audit_id: audit.id, prize_gallery_item_id: prizeItemId });
+  }
+
+  // action === "annul"
+  const existing = validations[userId];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await removePrizeGalleryItem(client, { userId, sourceType: "weekly_top", sourceRefId });
+    if (existing?.audit_id) {
+      await client.query("DELETE FROM entity_records WHERE entity_name = 'DrawWinnerAudit' AND id = $1", [String(existing.audit_id)]);
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  validations[userId] = { status: "annulled", annulled_at: now };
+  await pool.query(
+    `UPDATE weekly_cycles SET metadata = jsonb_set(COALESCE(metadata,'{}'), '{winner_validations}', $2::jsonb, true), updated_at = NOW() WHERE id = $1`,
+    [cycleId, JSON.stringify(validations)]
+  );
+
+  await appendAdminAudit({
+    domain: "weekly_top",
+    action: "annul_winner",
+    targetKey: `${cycleId}:${userId}`,
+    beforeData: { status: existing?.status || "pending" },
+    afterData: { status: "annulled" },
+    metadata: { cycle_id: cycleId, user_id: userId },
+    adminUserId: req.auth.sub,
+    adminEmail: req.auth.email,
+  });
+
+  emitEntityChanged(req, "UserPrizeGalleryItem", userId, "deleted");
+  return res.json({ ok: true, action: "annulled" });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 router.get("/admin/daily-chest/config", requireAuth, requireAdmin, async (_req, res) => {
   const settingsMap = await listAppSettingsMap();

@@ -2004,6 +2004,18 @@ export const base44 = {
     async weeklyLeaderboard() {
       return request("/api/admin/leaderboards/weekly");
     },
+
+    async weeklyResults(cycleId) {
+      return request(`/api/admin/gamification/weekly-results/${cycleId}`);
+    },
+
+    async validateWeeklyWinner(cycleId, userId, action) {
+      return request(`/api/admin/gamification/weekly-results/${cycleId}/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, action }),
+      });
+    },
   },
 
   adminDailyChest: {
