@@ -567,8 +567,12 @@ router.post("/check-in/daily", requireAuth, async (req, res) => {
   if (!config.enabled) {
     return res.status(403).json({ error: "O check-in diario esta desativado no momento." });
   }
+  // Transação isolada: a conexão é liberada imediatamente após COMMIT/ROLLBACK,
+  // antes de qualquer side effect lento (refreshGamificationState leva 5-10s).
+  // Sem isso, cada check-in segura 1 conexão do pool por 5-10s enquanto reconstrói
+  // o estado de gamificação — com 6 usuários simultâneos o pool esgota.
+  let txResult = null;
   const client = await pool.connect();
-
   try {
     await client.query("BEGIN");
 
@@ -582,70 +586,76 @@ router.post("/check-in/daily", requireAuth, async (req, res) => {
         [userId, dayKey]
       );
       await client.query("COMMIT");
-      return res.json({
-        ok: true,
-        alreadyCheckedIn: true,
-        dayKey,
-        checkedAt: state.rows[0]?.created_at ? toIso(state.rows[0].created_at) : null,
+      txResult = { duplicate: true, checkedAt: state.rows[0]?.created_at || null };
+    } else {
+      const insertResult = await client.query(
+        `INSERT INTO daily_checkins (user_id, checkin_day_key, request_id, metadata, updated_at)
+         VALUES ($1, $2, $3, $4::jsonb, NOW())
+         ON CONFLICT (user_id, checkin_day_key)
+         DO NOTHING
+         RETURNING *`,
+        [userId, dayKey, requestId, JSON.stringify({ source: "daily_checkin" })]
+      );
+      const inserted = insertResult.rows[0] || null;
+      await appendEngagementEvent(client, {
+        domain: "social",
+        action: "daily_checkin",
+        request_id: requestId,
+        user_id: userId,
+        entity_name: "daily_checkins",
+        entity_id: inserted?.id || null,
+        status: inserted ? "accepted" : "duplicate",
+        metadata: { day_key: dayKey },
+        processed_by_user_id: userId,
       });
+      await client.query("COMMIT");
+      txResult = { duplicate: false, inserted };
     }
-
-    const insertResult = await client.query(
-      `INSERT INTO daily_checkins (user_id, checkin_day_key, request_id, metadata, updated_at)
-       VALUES ($1, $2, $3, $4::jsonb, NOW())
-       ON CONFLICT (user_id, checkin_day_key)
-       DO NOTHING
-       RETURNING *`,
-      [userId, dayKey, requestId, JSON.stringify({ source: "daily_checkin" })]
-    );
-    const inserted = insertResult.rows[0] || null;
-
-    await appendEngagementEvent(client, {
-      domain: "social",
-      action: "daily_checkin",
-      request_id: requestId,
-      user_id: userId,
-      entity_name: "daily_checkins",
-      entity_id: inserted?.id || null,
-      status: inserted ? "accepted" : "duplicate",
-      metadata: { day_key: dayKey },
-      processed_by_user_id: userId,
-    });
-
-    await client.query("COMMIT");
-
-    await createSecurityEvent({
-      user_id: userId,
-      type: inserted ? "DAILY_CHECKIN_ACCEPTED" : "DAILY_CHECKIN_DUPLICATE",
-      ...buildRequestMeta(req),
-      metadata: { day_key: dayKey, request_id: requestId },
-    });
-
-    emitEntityChanged(req, "daily_checkins", inserted?.id || dayKey, inserted ? "created" : "duplicate");
-    emitEntityChanged(req, "gamification", userId, "updated");
-    await syncGamificationProfileViews(req, userId, "daily_checkin");
-    try {
-      await refreshGamificationState({ persistDerived: true });
-    } catch (refreshError) {
-      console.error("Daily check-in refresh failed, scheduling retry", {
-        userId,
-        message: refreshError?.message || String(refreshError),
-      });
-      scheduleGamificationRefresh({ persistDerived: true });
-    }
-
-    return res.json({
-      ok: true,
-      alreadyCheckedIn: !inserted,
-      dayKey,
-      checkedAt: inserted?.created_at ? toIso(inserted.created_at) : new Date().toISOString(),
-    });
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
   } finally {
+    // Conexão devolvida ao pool AQUI — antes de qualquer operação lenta abaixo
     client.release();
   }
+
+  // === Side effects executam com a conexão já liberada ===
+  if (txResult.duplicate) {
+    return res.json({
+      ok: true,
+      alreadyCheckedIn: true,
+      dayKey,
+      checkedAt: txResult.checkedAt ? toIso(txResult.checkedAt) : null,
+    });
+  }
+
+  const { inserted } = txResult;
+  await createSecurityEvent({
+    user_id: userId,
+    type: inserted ? "DAILY_CHECKIN_ACCEPTED" : "DAILY_CHECKIN_DUPLICATE",
+    ...buildRequestMeta(req),
+    metadata: { day_key: dayKey, request_id: requestId },
+  });
+
+  emitEntityChanged(req, "daily_checkins", inserted?.id || dayKey, inserted ? "created" : "duplicate");
+  emitEntityChanged(req, "gamification", userId, "updated");
+  await syncGamificationProfileViews(req, userId, "daily_checkin");
+  try {
+    await refreshGamificationState({ persistDerived: true });
+  } catch (refreshError) {
+    console.error("Daily check-in refresh failed, scheduling retry", {
+      userId,
+      message: refreshError?.message || String(refreshError),
+    });
+    scheduleGamificationRefresh({ persistDerived: true });
+  }
+
+  return res.json({
+    ok: true,
+    alreadyCheckedIn: !inserted,
+    dayKey,
+    checkedAt: inserted?.created_at ? toIso(inserted.created_at) : new Date().toISOString(),
+  });
 });
 
 router.get("/social/state/:targetUserId", requireAuth, async (req, res) => {
