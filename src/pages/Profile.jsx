@@ -4648,7 +4648,13 @@ export default function Profile() {
   const renderCompetitionCard = ({ entry, titleSuffix = "Seu desempenho no ciclo atual." }) => {
     if (!competitionBoard.config.enabled || competitionBoard.config.active === false) return null;
     const safeEntryPoints = Number(entry?.weekly_points ?? entry?.points ?? 0);
-    const isCompetitionFinishedPreview = competitionBoard.config.preview_mode === "finished";
+    const cycleRemainingMs = Number(competitionBoard.cycle?.remainingMs ?? 0);
+    const cycleStatus = String(competitionBoard.cycle?.status || "").toLowerCase();
+    // Ativa modo encerrado se: admin forçou via preview_mode, ciclo fechado no banco, ou contador zerou
+    const isCompetitionFinishedPreview =
+      competitionBoard.config.preview_mode === "finished" ||
+      cycleStatus === "closed" ||
+      cycleRemainingMs <= 0;
     const topEntries = competitionBoard.entries.slice(0, 20);
     const shouldShowCompetitionBuildNotice =
       !isCompetitionFinishedPreview &&
@@ -4810,13 +4816,22 @@ export default function Profile() {
           </div>
 
           {isCompetitionFinishedPreview ? (
-            <div className="space-y-2">
-              <div className="rounded-xl border border-emerald-400/35 bg-emerald-500/10 p-3 text-center">
-                <p className="text-xs font-black uppercase tracking-wide text-emerald-200">Top {winnersCount} Ganhadores do ciclo</p>
-                <p className="mt-1 text-[11px] text-emerald-100">
-                  Premiação configurada no admin. Valor base atual: R${prizePerWinner.toFixed(2)}. Novo ciclo começa em breve.
+            <div className="space-y-3">
+              {/* Cabeçalho do resultado */}
+              <div className="relative overflow-hidden rounded-xl border border-amber-400/40 bg-gradient-to-r from-amber-950/60 via-yellow-900/40 to-amber-950/60 p-3 text-center">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(251,191,36,0.18),transparent_65%)]" />
+                <div className="relative flex items-center justify-center gap-2">
+                  <Trophy className="h-4 w-4 text-amber-400" />
+                  <p className="text-sm font-black uppercase tracking-widest text-amber-300">Resultado Final</p>
+                  <Trophy className="h-4 w-4 text-amber-400" />
+                </div>
+                <p className="mt-0.5 text-[11px] text-amber-100/80">
+                  Top {winnersCount} do ciclo
+                  {prizePerWinner > 0 ? ` · R$${prizePerWinner.toFixed(2)} por ganhador` : ""}
                 </p>
               </div>
+
+              {/* Lista de ganhadores */}
               <div
                 ref={competitionRankingRef}
                 onPointerDown={handleCompetitionRankingPointerDown}
@@ -4824,28 +4839,36 @@ export default function Profile() {
                 onPointerUp={handleCompetitionRankingPointerUpOrCancel}
                 onPointerCancel={handleCompetitionRankingPointerUpOrCancel}
                 onClickCapture={handleCompetitionRankingClickCapture}
-                className="hide-scrollbar max-h-52 space-y-1.5 overflow-y-auto select-none"
+                className="hide-scrollbar max-h-64 space-y-1.5 overflow-y-auto select-none"
               >
-                {winnerEntries.map((item) => (
-                  <button
-                    key={`winner-${item.user_id}`}
-                    type="button"
-                    onClick={() => {
-                      if (item.isSample) return;
-                      openPublicProfileByUserId(item.user_id);
-                    }}
-                    className={`relative flex w-full items-center rounded-lg border border-slate-700/70 bg-slate-900/75 px-2.5 py-2 text-left transition ${
-                      item.isSample ? "cursor-default" : "hover:border-cyan-400/55"
-                    }`}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 select-none text-4xl font-black leading-none text-slate-700/35"
+                {winnerEntries.map((item) => {
+                  const pos = item.winnerPosition;
+                  const medal = pos === 1 ? { icon: "🥇", border: "border-amber-400/70", bg: "bg-amber-500/15", text: "text-amber-300", glow: "shadow-[0_0_12px_rgba(251,191,36,0.25)]" }
+                             : pos === 2 ? { icon: "🥈", border: "border-slate-400/60", bg: "bg-slate-400/10", text: "text-slate-300", glow: "" }
+                             : pos === 3 ? { icon: "🥉", border: "border-orange-400/60", bg: "bg-orange-500/10", text: "text-orange-300", glow: "" }
+                             : { icon: null, border: "border-slate-700/60", bg: "bg-slate-900/60", text: "text-slate-400", glow: "" };
+                  const rewardLabel = formatCompetitionRewardLabel(pos);
+                  return (
+                    <button
+                      key={`winner-${item.user_id}`}
+                      type="button"
+                      onClick={() => {
+                        if (item.isSample) return;
+                        openPublicProfileByUserId(item.user_id);
+                      }}
+                      className={`relative flex w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition ${medal.border} ${medal.bg} ${medal.glow} ${item.isSample ? "cursor-default" : "hover:brightness-110"}`}
                     >
-                      {item.winnerPosition}
-                    </span>
-                    <div className="flex min-w-0 items-center gap-2">
-                      <div className="h-7 w-7 shrink-0 overflow-hidden rounded-full border border-slate-500/80 bg-slate-800">
+                      {/* Posição / medalha */}
+                      <div className="flex w-6 shrink-0 items-center justify-center">
+                        {medal.icon ? (
+                          <span className="text-lg leading-none">{medal.icon}</span>
+                        ) : (
+                          <span className={`text-xs font-black ${medal.text}`}>#{pos}</span>
+                        )}
+                      </div>
+
+                      {/* Avatar */}
+                      <div className={`h-7 w-7 shrink-0 overflow-hidden rounded-full border ${medal.border} bg-slate-800`}>
                         {item.isSample ? (
                           <div className="flex h-full w-full items-center justify-center text-[10px] font-black text-slate-200">
                             {(item.nick || "G").slice(0, 1).toUpperCase()}
@@ -4859,18 +4882,26 @@ export default function Profile() {
                           </>
                         )}
                       </div>
-                      <p className="truncate text-xs font-bold text-white">{item.nick}</p>
-                    </div>
-                    <div className="absolute right-12 top-1/2 w-[78px] -translate-y-1/2 text-center">
-                      <p className="text-[11px] font-black text-cyan-200">
-                        {Number(item.weekly_points ?? item.points ?? 0).toLocaleString("pt-BR")} pts
-                        {formatCompetitionRewardLabel(item.winnerPosition) ? ` / ${formatCompetitionRewardLabel(item.winnerPosition)}` : ""}
-                      </p>
-                      <p className="text-[10px] font-semibold text-emerald-300">#{item.winnerPosition}</p>
-                    </div>
-                  </button>
-                ))}
+
+                      {/* Nome */}
+                      <p className="min-w-0 flex-1 truncate text-xs font-bold text-white">{item.nick}</p>
+
+                      {/* Pontos + prêmio */}
+                      <div className="shrink-0 text-right">
+                        <p className={`text-[11px] font-black ${pos <= 3 ? medal.text : "text-cyan-300"}`}>
+                          {Number(item.weekly_points ?? item.points ?? 0).toLocaleString("pt-BR")} pts
+                        </p>
+                        {rewardLabel ? (
+                          <p className="text-[10px] font-semibold text-emerald-400">{rewardLabel}</p>
+                        ) : null}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
+
+              {/* Rodapé */}
+              <p className="text-center text-[10px] text-slate-500">Novo ciclo começa em breve</p>
             </div>
           ) : (
             <div className="space-y-1.5">
