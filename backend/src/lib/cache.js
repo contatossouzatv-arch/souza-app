@@ -4,6 +4,7 @@ import { env } from "../config/env.js";
 const memoryStore = new Map();
 const inflight = new Map();
 const MISS = Symbol("cache-miss");
+const MAX_MEMORY_STORE_SIZE = 500;
 
 let redisClient = null;
 let redisUnavailable = false;
@@ -46,6 +47,27 @@ function writeMemory(key, value, ttlMs) {
     value,
     expiresAt: Date.now() + Math.max(1, Number(ttlMs || 1)),
   });
+
+  if (memoryStore.size > MAX_MEMORY_STORE_SIZE) {
+    const now = Date.now();
+    // First pass: remove already-expired entries
+    for (const [k, v] of memoryStore) {
+      if (now >= v.expiresAt) memoryStore.delete(k);
+    }
+    // Second pass: if still over limit, evict the soonest-to-expire entry
+    if (memoryStore.size > MAX_MEMORY_STORE_SIZE) {
+      let evictKey = null;
+      let soonestExpiry = Infinity;
+      for (const [k, v] of memoryStore) {
+        if (v.expiresAt < soonestExpiry) {
+          soonestExpiry = v.expiresAt;
+          evictKey = k;
+        }
+      }
+      if (evictKey !== null) memoryStore.delete(evictKey);
+    }
+  }
+
   return value;
 }
 

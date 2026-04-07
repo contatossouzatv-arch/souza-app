@@ -1,5 +1,6 @@
 const routeMetrics = new Map();
 const MAX_DURATION_SAMPLES = 120;
+const MAX_ROUTE_BUCKETS = 500;
 
 function createBucket() {
   return {
@@ -51,6 +52,20 @@ export function recordHttpMetric(path, status, durationMs, options = {}) {
   }
 
   routeMetrics.set(key, bucket);
+
+  if (routeMetrics.size > MAX_ROUTE_BUCKETS) {
+    // Evict the least-recently-seen route to keep the map bounded
+    let oldestKey = null;
+    let oldestTime = Infinity;
+    for (const [k, b] of routeMetrics) {
+      const t = b.lastSeenAt ? new Date(b.lastSeenAt).getTime() : 0;
+      if (t < oldestTime) {
+        oldestTime = t;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey !== null) routeMetrics.delete(oldestKey);
+  }
 }
 
 export function getHttpMetricsSnapshot() {
