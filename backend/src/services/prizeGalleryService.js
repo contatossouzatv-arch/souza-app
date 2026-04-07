@@ -1,6 +1,6 @@
 import {
   createEntityRecordData,
-  listEntityRecordsForUpdate,
+  normalizeRecord,
   updateEntityRecordData,
 } from "../db/index.js";
 
@@ -22,12 +22,19 @@ export async function upsertPrizeGalleryItem(client, payload) {
     throw new Error("Prize gallery item requires userId, sourceType and sourceRefId.");
   }
 
-  const existingItems = await listEntityRecordsForUpdate(client, "UserPrizeGalleryItem", {
-    user_id: userId,
-    source_type: sourceType,
-    source_ref_id: sourceRefId,
-  });
-  const existing = existingItems[0] || null;
+  // Direct query (no COALESCE) so expression indexes on data->>'source_ref_id' are used
+  const existingResult = await client.query(
+    `SELECT * FROM entity_records
+     WHERE entity_name = 'UserPrizeGalleryItem'
+       AND data->>'user_id' = $1
+       AND data->>'source_type' = $2
+       AND data->>'source_ref_id' = $3
+     ORDER BY created_at ASC
+     LIMIT 1
+     FOR UPDATE`,
+    [userId, sourceType, sourceRefId]
+  );
+  const existing = existingResult.rows[0] ? normalizeRecord(existingResult.rows[0]) : null;
   const claimedAt = String(payload?.claimedAt || new Date().toISOString());
   const metadata = {
     ...(existing?.metadata || {}),
@@ -68,15 +75,13 @@ export async function upsertPrizeGalleryItem(client, payload) {
 }
 
 export async function removePrizeGalleryItem(client, { userId, sourceType, sourceRefId }) {
-  const items = await listEntityRecordsForUpdate(client, "UserPrizeGalleryItem", {
-    user_id: String(userId || "").trim(),
-    source_type: String(sourceType || "").trim(),
-    source_ref_id: String(sourceRefId || "").trim(),
-  });
-
-  for (const item of items) {
-    await client.query("DELETE FROM entity_records WHERE entity_name = 'UserPrizeGalleryItem' AND id = $1", [item.id]);
-  }
-
-  return items.length;
+  const result = await client.query(
+    `DELETE FROM entity_records
+     WHERE entity_name = 'UserPrizeGalleryItem'
+       AND data->>'user_id' = $1
+       AND data->>'source_type' = $2
+       AND data->>'source_ref_id' = $3`,
+    [String(userId || "").trim(), String(sourceType || "").trim(), String(sourceRefId || "").trim()]
+  );
+  return result.rowCount;
 }

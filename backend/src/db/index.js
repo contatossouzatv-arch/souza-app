@@ -434,6 +434,9 @@ export async function ensureDb() {
     "CREATE INDEX IF NOT EXISTS idx_entity_records_prize_gallery_user ON entity_records(entity_name, ((data->>'user_id'))) WHERE entity_name = 'UserPrizeGalleryItem'"
   );
   await pool.query(
+    "CREATE INDEX IF NOT EXISTS idx_entity_records_prize_gallery_source_ref ON entity_records(((data->>'source_ref_id'))) WHERE entity_name = 'UserPrizeGalleryItem'"
+  );
+  await pool.query(
     "CREATE INDEX IF NOT EXISTS idx_entity_records_app_settings_key ON entity_records(((data->>'key'))) WHERE entity_name = 'AppSettings'"
   );
   await pool.query(

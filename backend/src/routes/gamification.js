@@ -5308,18 +5308,20 @@ router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth,
     return res.status(400).json({ error: "userId e action (validate|annul) são obrigatórios." });
   }
 
-  const cycleResult = await pool.query("SELECT * FROM weekly_cycles WHERE id = $1 LIMIT 1", [cycleId]);
+  // Cycle and user lookups run in parallel
+  const [cycleResult, userResult] = await Promise.all([
+    pool.query("SELECT id, cycle_key, title, config_snapshot, metadata FROM weekly_cycles WHERE id = $1 LIMIT 1", [cycleId]),
+    pool.query("SELECT id, nick, full_name, email, phone, avatar_emoji, platform_id FROM users WHERE id = $1 LIMIT 1", [userId]),
+  ]);
   const cycleRow = cycleResult.rows[0];
   if (!cycleRow) return res.status(404).json({ error: "Ciclo não encontrado." });
+  const userRow = userResult.rows[0];
+  if (!userRow) return res.status(404).json({ error: "Usuário não encontrado." });
 
   const config = normalizeWeeklyConfig(cycleRow.config_snapshot || {});
   const winnersCount = Math.max(1, Number(config.winners_count || 10));
   const currentMeta = cycleRow.metadata || {};
   const validations = { ...(currentMeta.winner_validations || {}) };
-
-  const userResult = await pool.query("SELECT * FROM users WHERE id = $1 LIMIT 1", [userId]);
-  const userRow = userResult.rows[0];
-  if (!userRow) return res.status(404).json({ error: "Usuário não encontrado." });
 
   // Recomputa effective_position considerando anulações atuais
   const lbResult = await pool.query(
@@ -5450,7 +5452,11 @@ router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth,
       metadata: { source_type: "weekly_top", cycle_id: cycleId, effective_position: userEffectivePos, reward_label: rewardLabel },
     }).catch((err) => console.error("[weekly-top] notification failed", err?.message));
 
-    await appendAdminAudit({
+    emitEntityChanged(req, "UserPrizeGalleryItem", userId, "created");
+    emitEntityChanged(req, "ProfileNotification", userId, "created");
+    // Respond before writing the audit log (fire & forget — it's a non-critical append)
+    res.json({ ok: true, action: "validated", audit_id: audit.id, prize_gallery_item_id: prizeItemId });
+    appendAdminAudit({
       domain: "weekly_top",
       action: "validate_winner",
       targetKey: `${cycleId}:${userId}`,
@@ -5459,11 +5465,8 @@ router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth,
       metadata: { cycle_id: cycleId, user_id: userId, audit_id: audit.id },
       adminUserId: req.auth.sub,
       adminEmail: req.auth.email,
-    });
-
-    emitEntityChanged(req, "UserPrizeGalleryItem", userId, "created");
-    emitEntityChanged(req, "ProfileNotification", userId, "created");
-    return res.json({ ok: true, action: "validated", audit_id: audit.id, prize_gallery_item_id: prizeItemId });
+    }).catch((err) => console.error("[weekly-top] appendAdminAudit failed", err?.message));
+    return;
   }
 
   // action === "annul"
@@ -5489,7 +5492,9 @@ router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth,
     [cycleId, JSON.stringify(validations)]
   );
 
-  await appendAdminAudit({
+  emitEntityChanged(req, "UserPrizeGalleryItem", userId, "deleted");
+  res.json({ ok: true, action: "annulled" });
+  appendAdminAudit({
     domain: "weekly_top",
     action: "annul_winner",
     targetKey: `${cycleId}:${userId}`,
@@ -5498,10 +5503,8 @@ router.post("/admin/gamification/weekly-results/:cycleId/validate", requireAuth,
     metadata: { cycle_id: cycleId, user_id: userId },
     adminUserId: req.auth.sub,
     adminEmail: req.auth.email,
-  });
-
-  emitEntityChanged(req, "UserPrizeGalleryItem", userId, "deleted");
-  return res.json({ ok: true, action: "annulled" });
+  }).catch((err) => console.error("[weekly-top] appendAdminAudit failed", err?.message));
+  return;
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
