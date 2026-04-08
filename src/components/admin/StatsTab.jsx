@@ -52,7 +52,7 @@ function buildWarnings(data) {
 
 export default function StatsTab() {
   const { data } = useQuery({
-    queryKey: ["admin-gamification-overview-stats"],
+    queryKey: ["admin-gamification-overview"],
     queryFn: () => base44.adminGamification.overview(),
     staleTime: 10000,
   });

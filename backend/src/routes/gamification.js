@@ -2744,14 +2744,18 @@ async function listPointsBalancesMap() {
 }
 
 async function listLastActivityMap() {
+  // Limit to last 90 days to avoid full-table scans on large activity tables
   const result = await pool.query(
     `SELECT user_id, MAX(activity_at) AS last_activity_at
        FROM (
          SELECT user_id, occurred_at AS activity_at FROM user_metric_ledger
+          WHERE occurred_at >= NOW() - INTERVAL '90 days'
          UNION ALL
          SELECT user_id, created_at AS activity_at FROM points_ledger
+          WHERE created_at >= NOW() - INTERVAL '90 days'
          UNION ALL
          SELECT user_id, opened_at AS activity_at FROM daily_chest_openings
+          WHERE opened_at >= NOW() - INTERVAL '90 days'
        ) activities
       GROUP BY user_id`
   );
@@ -3019,11 +3023,11 @@ function sortAdminUsers(items, sortBy = "weekly_points") {
 }
 
 async function buildAdminUsersDataset() {
-  return getOrComputeCacheJson("admin:users:dataset", 10000, async () => {
+  return getOrComputeCacheJson("admin:users:dataset", 60000, async () => {
     const [state, users, balancesResult, pointsBalanceMap, lastActivityMap, recentAdjustments] = await Promise.all([
       buildGamificationState(),
       listEntity("User"),
-      pool.query("SELECT * FROM user_metric_balances"),
+      pool.query("SELECT user_id, metric_key, cycle_key, amount FROM user_metric_balances LIMIT 200000"),
       listPointsBalancesMap(),
       listLastActivityMap(),
       listRecentAdminAdjustments(200),
@@ -4679,9 +4683,9 @@ async function buildAdminGamificationOverviewPayload() {
   dayEnd.setDate(dayEnd.getDate() + 1);
   const chestDayKey = `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, "0")}-${String(dayStart.getDate()).padStart(2, "0")}`;
 
-  const [cycleRows, configAudits, chestRewards, xpTodayResult, ticketsTodayResult, weeklyPointsResult, prizeTypeRows, fallbackRows, todayTopRows] = await Promise.all([
-    pool.query("SELECT * FROM weekly_cycles ORDER BY starts_at DESC LIMIT 12"),
-    pool.query("SELECT * FROM admin_config_audit_logs ORDER BY created_at DESC LIMIT 20"),
+  const [cycleRows, configAudits, chestRewards, xpTodayResult, ticketsTodayResult, weeklyPointsResult, prizeTypeRows, fallbackRows, todayTopRows, totalUsersResult] = await Promise.all([
+    pool.query("SELECT id, cycle_key, title, status, starts_at, ends_at, closed_at, winners_snapshot FROM weekly_cycles ORDER BY starts_at DESC LIMIT 12"),
+    pool.query("SELECT id, domain, action, target_key, before_data, after_data, metadata, admin_user_id, admin_email, created_at FROM admin_config_audit_logs ORDER BY created_at DESC LIMIT 20"),
     listEntity("DailyChestRewardConfig", "-updated_date", 30),
     pool.query(
       `SELECT COALESCE(SUM(amount), 0) AS total
@@ -4757,6 +4761,7 @@ async function buildAdminGamificationOverviewPayload() {
         LIMIT 5`,
       [dayStart.toISOString(), dayEnd.toISOString()],
     ),
+    pool.query("SELECT COUNT(*)::int AS total FROM users"),
   ]);
 
   const dailyUsage = await listChestDailyUsage(chestDayKey);
@@ -4787,7 +4792,7 @@ async function buildAdminGamificationOverviewPayload() {
     activeCycle: state.cycle,
     topWeekly: state.leaderboardEntries.slice(0, 10),
     overview: {
-      users: Object.keys(state.snapshots).length,
+      users: Number(totalUsersResult.rows[0]?.total || 0),
       configuredRules: state.rules.length,
       activeRules: state.rules.filter((rule) => rule.active).length,
       chestRewards: chestRewards.length,
@@ -4835,7 +4840,7 @@ async function buildAdminGamificationOverviewPayload() {
 }
 
 router.get("/admin/gamification/overview", requireAuth, requireAdmin, async (_req, res) => {
-  const cached = await getOrComputeCacheJson("admin:gamification:overview", 10000, buildAdminGamificationOverviewPayload);
+  const cached = await getOrComputeCacheJson("admin:gamification:overview", 60000, buildAdminGamificationOverviewPayload);
   return res.json(cached);
 });
 
