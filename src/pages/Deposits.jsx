@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import DepositHistory from "@/components/DepositHistory";
+import PlatformSelector from "@/components/PlatformSelector";
 import TicketsProgressBox from "@/components/TicketsProgressBox";
 import TicketsDisplay from "@/components/TicketsDisplay";
 import TechLoader from "@/components/TechLoader";
@@ -261,6 +262,8 @@ export default function Deposits() {
           className="h-40 w-full object-cover object-top sm:h-48"
         />
       </Card>
+
+      <PlatformSelector />
 
       <TicketsProgressBox
         totalApproved={totalApproved}
