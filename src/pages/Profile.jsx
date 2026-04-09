@@ -2104,12 +2104,19 @@ export default function Profile() {
   }, [avatarSrcById, engagedProfiles, publicProfileBasicsMap]);
 
   useEffect(() => {
-    if (!simulatedProfiles.length) return;
+    const seenIds = new Set();
+    const allProfiles = [...simulatedProfiles, ...engagedProfiles].filter((profile) => {
+      const id = String(profile?.id || "");
+      if (!id || seenIds.has(id)) return false;
+      seenIds.add(id);
+      return true;
+    });
+    if (!allProfiles.length) return;
     const followingIds = new Set((myFollowingProfiles || []).map((profile) => String(profile?.id || "")));
     setSimState((prev) => {
       let changed = false;
       const next = { ...prev };
-      simulatedProfiles.forEach((profile) => {
+      allProfiles.forEach((profile) => {
         const profileId = String(profile.id || "");
         const current = next[profileId] || {};
         const computed = {
@@ -2144,7 +2151,7 @@ export default function Profile() {
       });
       return changed ? next : prev;
     });
-  }, [myFollowingProfiles, simulatedProfiles]);
+  }, [myFollowingProfiles, simulatedProfiles, engagedProfiles]);
 
   const currentCompetitionEntry = isCompetitionBoardPending
     ? null
@@ -3645,8 +3652,7 @@ export default function Profile() {
 
   const syncDiscoverCardState = React.useCallback((profileId, updater) => {
     setSimState((prev) => {
-      const current = prev[profileId];
-      if (!current) return prev;
+      const current = prev[profileId] || { isFollowing: false, isLiked: false, followers: 0, likes: 0 };
       const nextState = typeof updater === "function" ? updater(current) : { ...current, ...(updater || {}) };
       return {
         ...prev,
@@ -3661,8 +3667,8 @@ export default function Profile() {
       if (!targetUserId || targetUserId === String(user?.id || "")) return;
 
       const current = simState[targetUserId] || {
-        isFollowing: false,
-        isLiked: false,
+        isFollowing: Boolean(profile?.isFollowing),
+        isLiked: Boolean(profile?.isLiked),
         followers: Number(profile?.followers || 0),
         likes: Number(profile?.likes || 0),
       };
@@ -3867,8 +3873,8 @@ export default function Profile() {
       if (!targetUserId || targetUserId === String(user?.id || "")) return;
 
       const current = simState[targetUserId] || {
-        isFollowing: false,
-        isLiked: false,
+        isFollowing: Boolean(profile?.isFollowing),
+        isLiked: Boolean(profile?.isLiked),
         followers: Number(profile?.followers || 0),
         likes: Number(profile?.likes || 0),
       };
@@ -5973,8 +5979,8 @@ export default function Profile() {
                       <p className="text-xs font-bold text-indigo-200">{profile.totalWins}</p>
                     </div>
                     <div className="rounded-lg bg-slate-900 p-1.5">
-                      <p className="text-center text-[10px] text-slate-400 whitespace-nowrap">Top sem.</p>
-                      <p className="text-xs font-bold text-emerald-200">{getCompetitiveTopLabel(profile)}</p>
+                      <p className="text-center text-[10px] text-slate-400 whitespace-nowrap">Participou</p>
+                      <p className="text-xs font-bold text-emerald-200">{profile.participations > 0 ? profile.participations : "-"}</p>
                     </div>
                   </div>
 

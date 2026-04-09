@@ -382,12 +382,34 @@ async function buildSocialState(client, viewerUserId, targetUserId) {
 async function listRelationProfiles(client, type, userId, { limit = 24, offset = 0 } = {}) {
   const queryLimit = normalizeListLimit(limit, 24, 60);
   const queryOffset = normalizeListOffset(offset);
+  const commonJoins = `
+     LEFT JOIN user_metric_balances xp_bal
+       ON xp_bal.user_id = u.id
+      AND xp_bal.metric_key = 'xp_total'
+      AND xp_bal.cycle_key = ''
+     LEFT JOIN (
+       SELECT data->>'user_id' AS user_id, COUNT(*)::int AS total_wins
+         FROM entity_records
+        WHERE entity_name = 'UserPrizeGalleryItem'
+          AND LOWER(COALESCE(data->>'claim_status', 'validated')) IN ('validated', 'applied')
+        GROUP BY data->>'user_id'
+     ) wins ON wins.user_id = u.id::text
+     LEFT JOIN user_follows viewer_follow
+       ON viewer_follow.target_user_id = u.id
+      AND viewer_follow.follower_user_id = $1
+     LEFT JOIN profile_likes viewer_like
+       ON viewer_like.target_user_id = u.id
+      AND viewer_like.actor_user_id = $1`;
   const relationSql =
     type === "following"
       ? `SELECT u.*,
             COALESCE(followers.count, 0) AS followers,
             COALESCE(following.count, 0) AS following,
-            COALESCE(likes.count, 0) AS likes
+            COALESCE(likes.count, 0) AS likes,
+            COALESCE(xp_bal.amount, 0) AS xp_total,
+            COALESCE(wins.total_wins, 0) AS total_wins,
+            COALESCE(viewer_follow.active, false) AS is_following,
+            COALESCE(viewer_like.active, false) AS is_liked
          FROM user_follows rel
          JOIN users u ON u.id = rel.target_user_id
          LEFT JOIN (
@@ -408,6 +430,7 @@ async function listRelationProfiles(client, type, userId, { limit = 24, offset =
            WHERE active = true
            GROUP BY target_user_id
          ) likes ON likes.target_user_id = u.id
+         ${commonJoins}
          WHERE rel.follower_user_id = $1
            AND rel.active = true
          ORDER BY rel.followed_at DESC, rel.updated_at DESC
@@ -415,7 +438,11 @@ async function listRelationProfiles(client, type, userId, { limit = 24, offset =
       : `SELECT u.*,
             COALESCE(followers.count, 0) AS followers,
             COALESCE(following.count, 0) AS following,
-            COALESCE(likes.count, 0) AS likes
+            COALESCE(likes.count, 0) AS likes,
+            COALESCE(xp_bal.amount, 0) AS xp_total,
+            COALESCE(wins.total_wins, 0) AS total_wins,
+            COALESCE(viewer_follow.active, false) AS is_following,
+            COALESCE(viewer_like.active, false) AS is_liked
          FROM user_follows rel
          JOIN users u ON u.id = rel.follower_user_id
          LEFT JOIN (
@@ -436,6 +463,7 @@ async function listRelationProfiles(client, type, userId, { limit = 24, offset =
            WHERE active = true
            GROUP BY target_user_id
          ) likes ON likes.target_user_id = u.id
+         ${commonJoins}
          WHERE rel.target_user_id = $1
            AND rel.active = true
          ORDER BY rel.followed_at DESC, rel.updated_at DESC
