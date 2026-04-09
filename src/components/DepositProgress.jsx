@@ -182,8 +182,6 @@ export default function DepositProgress({
     return () => clearTimeout(timer);
   }, [submissionStatus]);
 
-  if (!shouldRenderCashback) return null;
-
   const handleSubmit = async () => {
     if (!depositsEnabled) {
       toast({
@@ -287,116 +285,118 @@ export default function DepositProgress({
 
   return (
     <>
-      <Card className={`relative overflow-hidden bg-gradient-to-br from-purple-900/50 to-pink-900/50 border-purple-700/50 ${!depositsEnabled ? "opacity-60" : ""}`}>
-        {promoEndDate ? (
-          <div className="absolute top-4 right-4 z-10">
-            <CountdownTimer endDateString={promoEndDate} />
-          </div>
-        ) : null}
+      {shouldRenderCashback ? (
+        <Card className={`relative overflow-hidden bg-gradient-to-br from-purple-900/50 to-pink-900/50 border-purple-700/50 ${!depositsEnabled ? "opacity-60" : ""}`}>
+          {promoEndDate ? (
+            <div className="absolute top-4 right-4 z-10">
+              <CountdownTimer endDateString={promoEndDate} />
+            </div>
+          ) : null}
 
-        <div className="relative p-5 pt-16">
-          <div className="flex items-center gap-2 mb-4">
-            <Gift className="w-6 h-6 text-yellow-400" />
-            <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-pink-300">
-              {isSecondPhase ? "Meta Final: 10% Cashback + 100 Bilhetes" : "Cashback + 50 Bilhetes"}
-            </h3>
-          </div>
-
-          <div className="mb-4 rounded-2xl border border-emerald-500/35 bg-gradient-to-br from-emerald-950/60 via-slate-950/45 to-cyan-950/25 p-4">
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-emerald-200/90">Progresso da meta</p>
-                <p className="text-2xl font-extrabold text-emerald-300">{progress.toFixed(0)}%</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-slate-300">R$ {totalApproved.toFixed(2)} depositados</p>
-                <p className="text-sm font-semibold text-yellow-300">Pendente: R$ {pendingAmount.toFixed(2)}</p>
-              </div>
+          <div className="relative p-5 pt-16">
+            <div className="flex items-center gap-2 mb-4">
+              <Gift className="w-6 h-6 text-yellow-400" />
+              <h3 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-pink-300">
+                {isSecondPhase ? "Meta Final: 10% Cashback + 100 Bilhetes" : "Cashback + 50 Bilhetes"}
+              </h3>
             </div>
 
-            <div className="mt-3">
-              <div className="relative h-3.5 w-full overflow-hidden rounded-full border border-emerald-500/40 bg-emerald-950/60">
-                <div
-                  className="h-full bg-gradient-to-r from-emerald-400 via-green-400 to-cyan-400 transition-all duration-500"
-                  style={{ width: `${Math.min(progress, 100)}%` }}
-                />
-              </div>
-              <div className="mt-2 flex items-center justify-between text-[11px] text-emerald-200/90">
-                <span>Início</span>
-                <span>{isSecondPhase ? "R$ 500" : "R$ 250"}</span>
-                <span>{isSecondPhase ? "R$ 1000" : "R$ 500"}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="w-full space-y-2 text-center">
-            {reachedSecondGoal ? (
-              <div className="px-3 py-3 bg-gradient-to-r from-yellow-600/30 to-orange-600/30 border border-yellow-500/50 rounded-lg">
-                <p className="text-lg font-bold text-yellow-300 mb-2">Meta final alcancada!</p>
-                <p className="text-sm text-yellow-200 mb-3">10% Cashback + 100 bilhetes extra liberados.</p>
-                <a href={cashbackRedeemLink} target="_blank" rel="noopener noreferrer">
-                  <Button className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700">
-                    Resgate aqui
-                  </Button>
-                </a>
-              </div>
-            ) : reachedFirstGoal && showFirstGoalMsg && !firstGoalClaimed ? (
-              <>
-                <div className="px-3 py-3 bg-gradient-to-r from-yellow-600/30 to-orange-600/30 border border-yellow-500/50 rounded-lg mb-2">
-                  <p className="text-lg font-bold text-yellow-300 mb-2">Primeira meta alcancada!</p>
-                  <p className="text-sm text-yellow-200 mb-3">50 bilhetes extra liberados.</p>
-                  <div className="flex gap-2">
-                    <a href={cashbackRedeemLink} target="_blank" rel="noopener noreferrer" className="flex-1">
-                      <Button className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700">
-                        Resgate aqui
-                      </Button>
-                    </a>
-                    <Button
-                      onClick={() => claimMutation.mutate("first_goal")}
-                      variant="outline"
-                      className="border-green-600 text-green-400 hover:bg-green-900/30"
-                    >
-                      <Check className="w-4 h-4 mr-1" />
-                      Ja resgatei
-                    </Button>
-                  </div>
+            <div className="mb-4 rounded-2xl border border-emerald-500/35 bg-gradient-to-br from-emerald-950/60 via-slate-950/45 to-cyan-950/25 p-4">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-emerald-200/90">Progresso da meta</p>
+                  <p className="text-2xl font-extrabold text-emerald-300">{progress.toFixed(0)}%</p>
                 </div>
-                <div className="px-3 py-3 bg-gradient-to-r from-blue-600/30 to-cyan-600/30 border border-blue-500/50 rounded-lg">
-                  <p className="text-base font-bold text-blue-200 mb-2">Segunda fase liberada</p>
-                  <p className="text-sm text-blue-300">
-                    Faltam R$ {remaining.toFixed(2)} para ganhar 10% de cashback + 100 bilhetes extras.
+                <div className="text-right">
+                  <p className="text-xs text-slate-300">R$ {totalApproved.toFixed(2)} depositados</p>
+                  <p className="text-sm font-semibold text-yellow-300">Pendente: R$ {pendingAmount.toFixed(2)}</p>
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <div className="relative h-3.5 w-full overflow-hidden rounded-full border border-emerald-500/40 bg-emerald-950/60">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-400 via-green-400 to-cyan-400 transition-all duration-500"
+                    style={{ width: `${Math.min(progress, 100)}%` }}
+                  />
+                </div>
+                <div className="mt-2 flex items-center justify-between text-[11px] text-emerald-200/90">
+                  <span>Início</span>
+                  <span>{isSecondPhase ? "R$ 500" : "R$ 250"}</span>
+                  <span>{isSecondPhase ? "R$ 1000" : "R$ 500"}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full space-y-2 text-center">
+              {reachedSecondGoal ? (
+                <div className="px-3 py-3 bg-gradient-to-r from-yellow-600/30 to-orange-600/30 border border-yellow-500/50 rounded-lg">
+                  <p className="text-lg font-bold text-yellow-300 mb-2">Meta final alcancada!</p>
+                  <p className="text-sm text-yellow-200 mb-3">10% Cashback + 100 bilhetes extra liberados.</p>
+                  <a href={cashbackRedeemLink} target="_blank" rel="noopener noreferrer">
+                    <Button className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700">
+                      Resgate aqui
+                    </Button>
+                  </a>
+                </div>
+              ) : reachedFirstGoal && showFirstGoalMsg && !firstGoalClaimed ? (
+                <>
+                  <div className="px-3 py-3 bg-gradient-to-r from-yellow-600/30 to-orange-600/30 border border-yellow-500/50 rounded-lg mb-2">
+                    <p className="text-lg font-bold text-yellow-300 mb-2">Primeira meta alcancada!</p>
+                    <p className="text-sm text-yellow-200 mb-3">50 bilhetes extra liberados.</p>
+                    <div className="flex gap-2">
+                      <a href={cashbackRedeemLink} target="_blank" rel="noopener noreferrer" className="flex-1">
+                        <Button className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700">
+                          Resgate aqui
+                        </Button>
+                      </a>
+                      <Button
+                        onClick={() => claimMutation.mutate("first_goal")}
+                        variant="outline"
+                        className="border-green-600 text-green-400 hover:bg-green-900/30"
+                      >
+                        <Check className="w-4 h-4 mr-1" />
+                        Ja resgatei
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="px-3 py-3 bg-gradient-to-r from-blue-600/30 to-cyan-600/30 border border-blue-500/50 rounded-lg">
+                    <p className="text-base font-bold text-blue-200 mb-2">Segunda fase liberada</p>
+                    <p className="text-sm text-blue-300">
+                      Faltam R$ {remaining.toFixed(2)} para ganhar 10% de cashback + 100 bilhetes extras.
+                    </p>
+                  </div>
+                </>
+              ) : isSecondPhase ? (
+                <div className="px-3 py-2 bg-orange-900/30 border border-orange-600/50 rounded-lg">
+                  <p className="text-sm font-bold text-orange-300">Faltam R$ {remaining.toFixed(2)}</p>
+                  <p className="text-xs text-orange-200">para ganhar 10% de cashback + 100 bilhetes extras.</p>
+                </div>
+              ) : (
+                <div className="px-3 py-2 bg-orange-900/30 border border-orange-600/50 rounded-lg">
+                  <p className="text-sm font-bold text-orange-300">Faltam R$ {(500 - totalApproved).toFixed(2)}</p>
+                  <p className="text-xs text-orange-200">para ganhar 50 bilhetes extras.</p>
+                </div>
+              )}
+
+              {pendingAmount > 0 ? (
+                <div className="px-3 py-2 bg-blue-900/30 border border-blue-600/50 rounded-lg">
+                  <p className="text-sm font-bold text-blue-300 flex items-center justify-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Aguardando liberação de R$ {pendingAmount.toFixed(2)}
                   </p>
                 </div>
-              </>
-            ) : isSecondPhase ? (
-              <div className="px-3 py-2 bg-orange-900/30 border border-orange-600/50 rounded-lg">
-                <p className="text-sm font-bold text-orange-300">Faltam R$ {remaining.toFixed(2)}</p>
-                <p className="text-xs text-orange-200">para ganhar 10% de cashback + 100 bilhetes extras.</p>
-              </div>
-            ) : (
-              <div className="px-3 py-2 bg-orange-900/30 border border-orange-600/50 rounded-lg">
-                <p className="text-sm font-bold text-orange-300">Faltam R$ {(500 - totalApproved).toFixed(2)}</p>
-                <p className="text-xs text-orange-200">para ganhar 50 bilhetes extras.</p>
-              </div>
-            )}
+              ) : null}
 
-            {pendingAmount > 0 ? (
-              <div className="px-3 py-2 bg-blue-900/30 border border-blue-600/50 rounded-lg">
-                <p className="text-sm font-bold text-blue-300 flex items-center justify-center gap-2">
-                  <AlertCircle className="w-4 h-4" />
-                  Aguardando liberação de R$ {pendingAmount.toFixed(2)}
-                </p>
-              </div>
-            ) : null}
-
-            {!depositsEnabled ? (
-              <div className="px-3 py-2 bg-red-900/30 border border-red-600/50 rounded-lg">
-                <p className="text-xs text-red-200">Novos depósitos temporariamente indisponíveis</p>
-              </div>
-            ) : null}
+              {!depositsEnabled ? (
+                <div className="px-3 py-2 bg-red-900/30 border border-red-600/50 rounded-lg">
+                  <p className="text-xs text-red-200">Novos depósitos temporariamente indisponíveis</p>
+                </div>
+              ) : null}
+            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      ) : null}
 
       <Card ref={formCardRef} className="relative bg-gradient-to-br from-slate-900/70 to-slate-800/70 border-slate-700/60 overflow-hidden">
         {submissionStatus !== "idle" ? (
