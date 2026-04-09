@@ -5,7 +5,6 @@ import { base44, resolveAssetUrl } from "@/api/base44Client";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import DepositProgress from "@/components/DepositProgress";
 import DepositHistory from "@/components/DepositHistory";
 import TicketsProgressBox from "@/components/TicketsProgressBox";
 import TicketsDisplay from "@/components/TicketsDisplay";
@@ -433,15 +432,6 @@ export default function Deposits() {
         )}
       </Card>
 
-      <DepositProgress
-        totalApproved={totalApproved}
-        pendingAmount={pendingAmount}
-        user={user}
-        onDepositSubmit={refetchDeposits}
-        promoEndDate={cashbackEndDate}
-        activeCycle={activeCycle}
-        settings={settings}
-      />
 
       {depositsLoading ? (
         <Card className="border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-400">
