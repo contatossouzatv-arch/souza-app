@@ -16,7 +16,7 @@ export default function PlatformSelector() {
         Vai jogar? Jogue com responsabilidade porque não existe ganhos garantidos!
       </p>
 
-      <div className={`grid gap-3 ${platforms.length >= 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+      <div className="grid grid-cols-2 gap-3">
         {platforms.map((platform) => (
           <a
             key={platform.id}
@@ -26,7 +26,7 @@ export default function PlatformSelector() {
             className="group"
           >
             <div
-              className="relative aspect-[0.95] overflow-hidden rounded-2xl border border-white/25 p-2.5 text-white transition hover:scale-[1.02] hover:border-white/50"
+              className="relative aspect-[2/1] overflow-hidden rounded-2xl border border-white/25 p-2.5 text-white transition hover:scale-[1.02] hover:border-white/50"
               style={{
                 background: `linear-gradient(135deg, ${platform.color_from} 0%, ${platform.color_to} 100%)`,
               }}
