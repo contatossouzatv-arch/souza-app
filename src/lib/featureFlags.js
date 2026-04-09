@@ -10,7 +10,7 @@ function readBooleanFlag(rawValue, fallback) {
 
 export const FEATURE_FLAGS = {
   GAME_MAIN_ENABLED: readBooleanFlag(import.meta.env.VITE_GAME_MAIN_ENABLED, false),
-  DAILY_CHEST_3D_ENABLED: readBooleanFlag(import.meta.env.VITE_DAILY_CHEST_3D_ENABLED, true),
+  DAILY_CHEST_3D_ENABLED: readBooleanFlag(import.meta.env.VITE_DAILY_CHEST_3D_ENABLED, false),
 };
 
 export const MAIN_GAME_PAGE_KEY = "DailyEvent";
