@@ -13,6 +13,8 @@ import DailyChestEntry from "./components/DailyChestEntry";
 import { DAILY_CHEST_ROUTE_PATH, FEATURE_FLAGS } from "@/lib/featureFlags";
 import mainMenuClickSound from "../assets-para-app/Songs/Song click menu principal.mp3";
 import { isMenuSoundEnabled } from "@/lib/soundPrefs";
+import { useQuery } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
 
 const routePreloaders = {
   [createPageUrl("Home")]: () => import("@/pages/Home"),
@@ -78,8 +80,20 @@ export default function Layout({ children }) {
       pathname === createPageUrl("Home").toLowerCase() ||
       pathname === createPageUrl("Dashboard").toLowerCase()
     );
+  const { data: chestStateForLayout } = useQuery({
+    queryKey: ["daily-chest-state"],
+    queryFn: () => base44.dailyChest.getState(),
+    enabled: FEATURE_FLAGS.DAILY_CHEST_3D_ENABLED && isAdminUser && Boolean(user?.id) && !isLoadingAuth,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
   const showDailyChestEntry =
-    FEATURE_FLAGS.DAILY_CHEST_3D_ENABLED && isAdminUser && !isAdminPanel && !isDailyChestPage;
+    FEATURE_FLAGS.DAILY_CHEST_3D_ENABLED &&
+    isAdminUser &&
+    !isAdminPanel &&
+    !isDailyChestPage &&
+    chestStateForLayout?.enabled !== false;
   const hideBottomNav = isDailyChestPage;
 
   React.useEffect(() => {

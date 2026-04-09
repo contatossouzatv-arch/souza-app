@@ -5934,49 +5934,9 @@ export default function Profile() {
           </div>
         </div>
 
-        <div className="mt-4">
-          {isProfileGamificationPending || isCompetitionBoardPending
-            ? renderSectionSkeleton({
-                title: "Top Semanal",
-                subtitle: "Preparando ranking, pontos e premiação do ciclo.",
-                rows: 4,
-              })
-            : isProfileGamificationUnavailable && !canRenderCompetitionFallback
-            ? renderGamificationUnavailableCard({
-                title: "Top Semanal",
-                subtitle: "Não foi possível carregar o ranking do ciclo agora.",
-              })
-            : renderCompetitionCard({
-                entry: currentCompetitionEntry,
-                titleSuffix: "Sua pontuacao atual na temporada.",
-              })}
-        </div>
-
       </Card>
 
-      <Card className="border-slate-800 bg-slate-900/70 p-2">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {PROFILE_PRIVATE_TABS.map((tab) => {
-            const isActive = activePrivateTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActivePrivateTab(tab.id)}
-                className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
-                  isActive
-                    ? "bg-cyan-500 text-slate-950"
-                    : "bg-slate-950/60 text-slate-300 hover:bg-slate-800 hover:text-white"
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      </Card>
-
-      {isEngagementTabActive ? (isProfileGamificationPending ? (
+      {isProfileGamificationPending ? (
         renderSectionSkeleton({
           title: "Mais Engajados",
           subtitle: "Carregando os perfis com maior nível, top semanal e engajamento.",
@@ -6144,59 +6104,9 @@ export default function Profile() {
             })}
           </div>
         </Card>
-      )) : null}
+      )}
 
-      {isOverviewTabActive ? (isProfileGamificationPending ? (
-        renderSectionSkeleton({
-          title: "Resumo Publico",
-          subtitle: "Buscando bilhetes, posição no top semanal e progresso geral.",
-          rows: 2,
-          compact: true,
-        })
-      ) : isProfileGamificationUnavailable && !canRenderProfileOverviewFallback ? (
-        renderGamificationUnavailableCard({
-          title: "Resumo Publico",
-          subtitle: "Não foi possível carregar o resumo do perfil agora.",
-        })
-      ) : (
-        <Card className="border-slate-800 bg-slate-900/70 p-4">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Resumo Publico</h2>
-          {isProfileGamificationUnavailable ? (
-            <p className="mb-3 text-xs text-amber-300">
-              Mostrando dados parciais enquanto o resumo completo estabiliza.
-            </p>
-          ) : null}
-          <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-              <p className="text-xs text-slate-400">Bilhetes</p>
-              <p className="text-xl font-black text-cyan-300">{metrics.totalTickets}</p>
-            </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-              <p className="text-xs text-slate-400">Top Semanal</p>
-                <p className="text-xl font-black text-emerald-300">#{summaryCompetitionPosition || "-"}</p>
-            </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-              <p className="text-xs text-slate-400">Prêmios Ganhos</p>
-              <p className="text-xl font-black text-yellow-300">{metrics.totalWins}</p>
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <div className="mb-1 flex items-center justify-between text-xs">
-              <span className="text-slate-400">Super Fã das Lives do SouzaTV</span>
-              <span className="text-cyan-300">{superFanProgress}%</span>
-            </div>
-            <div className="h-2 w-full rounded-full bg-slate-800">
-              <div
-                className="h-2 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-500"
-                style={{ width: `${superFanProgress}%` }}
-              />
-            </div>
-          </div>
-        </Card>
-      )) : null}
-
-      {isAchievementsTabActive ? (isProfileGamificationPending ? (
+      {isProfileGamificationPending ? (
         renderSectionSkeleton({
           title: "Selos e Conquistas",
           subtitle: "Carregando selos, níveis e progresso do perfil.",
@@ -6277,9 +6187,9 @@ export default function Profile() {
             ))}
           </div>
         </Card>
-      )) : null}
+      )}
 
-      {isPrizesTabActive ? (<Suspense
+      <Suspense
         fallback={renderSectionSkeleton({
           title: "Seus Prêmios",
           subtitle: "Montando sua galeria privada de prêmios.",
@@ -6296,7 +6206,7 @@ export default function Profile() {
           privateView={true}
           eagerPreview={true}
         />
-      </Suspense>) : null}
+      </Suspense>
 
       <Dialog open={isPointsHistoryOpen} onOpenChange={setIsPointsHistoryOpen}>
         <DialogContent className="border-cyan-500/30 bg-slate-950 text-white shadow-[0_0_45px_rgba(34,211,238,0.15)]">
