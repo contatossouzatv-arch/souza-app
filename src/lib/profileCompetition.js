@@ -17,7 +17,7 @@ export const DEFAULT_PROFILE_COMPETITION_CONFIG = {
   finished_subtitle: "Aguardando processamento do resultado e abertura do novo ciclo.",
   finished_cta_label: "Novo ciclo em breve",
   instructions:
-    "1) Some pontos concluindo tarefas ativas.\n2) O ranking considera apenas o ciclo atual.\n3) Ao final do contador, o ciclo fecha e reinicia.\n4) Top 10 recebe banca de R$20.",
+    "1) Some pontos concluindo tarefas ativas.\n2) O ranking considera apenas o ciclo atual.\n3) Ao final do contador, o ciclo fecha e reinicia.\n4) Top 10 recebe prêmio individual conforme desempenho.",
   tasks: [
     { id: "approved_deposit_count", label: "Deposito aprovado", enabled: true, points: 8, step_value: 1 },
     { id: "approved_deposit_amount_step", label: "Volume de depositos (a cada R$10)", enabled: true, points: 1, step_value: 10 },

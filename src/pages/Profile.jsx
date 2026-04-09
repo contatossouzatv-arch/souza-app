@@ -4664,7 +4664,6 @@ export default function Profile() {
     const isEntryInTop20 = Boolean(entry?.user_id) && topEntries.some((item) => item.user_id === entry.user_id);
     const showOwnEntryOutsideTop = Boolean(entry?.user_id) && Number(entry?.position || 0) > 20 && !isEntryInTop20;
     const winnersCount = Math.max(1, Number(competitionBoard.config.winners_count || 10));
-    const prizePerWinner = Number(competitionBoard.config.fallback_reward_value || 0);
     const rankedEntriesByPoints = [...competitionBoard.entries]
       .map((item) => ({
         ...item,
@@ -4826,8 +4825,7 @@ export default function Profile() {
                   <Trophy className="h-4 w-4 text-amber-400" />
                 </div>
                 <p className="mt-0.5 text-[11px] text-amber-100/80">
-                  Top {winnersCount} do ciclo
-                  {prizePerWinner > 0 ? ` · R$${prizePerWinner.toFixed(2)} por ganhador` : ""}
+                  Top {winnersCount} do ciclo · prêmio individual conforme desempenho
                 </p>
               </div>
 
@@ -7252,7 +7250,6 @@ export default function Profile() {
     </motion.div>
   );
 }
-
 
 
 
