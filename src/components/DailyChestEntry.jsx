@@ -16,7 +16,7 @@ export default function DailyChestEntry({ onPress, loadState = false }) {
   const { data: chestState } = useQuery({
     queryKey: ["daily-chest-state"],
     queryFn: () => base44.dailyChest.getState(),
-    enabled: loadState,
+    enabled: true,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     retry: false,
@@ -66,7 +66,7 @@ export default function DailyChestEntry({ onPress, loadState = false }) {
   };
 
   const remaining = Math.max(0, Number(chestState?.slots?.remaining || 0));
-  if (loadState && chestState?.enabled === false) {
+  if (chestState?.enabled === false) {
     return null;
   }
   const statusLabel = !loadState
