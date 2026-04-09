@@ -482,7 +482,8 @@ async function listRelationProfiles(client, type, userId, { limit = 24, offset =
 async function listDiscoverProfiles(client, viewerUserId, { limit = 12, offset = 0, sort = "recent" } = {}) {
   const queryLimit = Math.max(1, Number(limit || 12));
   const queryOffset = Math.max(0, Number(offset || 0));
-  const normalizedSort = String(sort || "recent").toLowerCase() === "priority" ? "priority" : "recent";
+  const rawSort = String(sort || "engagement").toLowerCase();
+  const normalizedSort = ["priority", "recent", "engagement"].includes(rawSort) ? rawSort : "engagement";
   const orderByClause =
     normalizedSort === "priority"
       ? `CASE
@@ -494,7 +495,12 @@ async function listDiscoverProfiles(client, viewerUserId, { limit = 12, offset =
            ELSE 2
          END ASC,
          u.created_at DESC`
-      : "u.created_at DESC";
+      : normalizedSort === "recent"
+        ? "u.created_at DESC"
+        : `(COALESCE(followers.count, 0) + COALESCE(likes.count, 0)) DESC,
+           COALESCE(xp_bal.amount, 0) DESC,
+           COALESCE(wins.total_wins, 0) DESC,
+           u.created_at DESC`;
   const result = await client.query(
     `SELECT u.*,
         COALESCE(followers.count, 0) AS followers,

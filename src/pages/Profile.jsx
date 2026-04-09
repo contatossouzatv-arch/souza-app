@@ -1054,7 +1054,7 @@ export default function Profile() {
 
   const { data: discoverProfilesData, isLoading: discoverProfilesLoading, isFetching: discoverProfilesFetching } = useQuery({
     queryKey: ["profile-discover-profiles", user?.id],
-    queryFn: () => base44.social.discover({ limit: 12, offset: 0 }),
+    queryFn: () => base44.social.discover({ limit: 20, offset: 0, sort: "engagement" }),
     enabled: !!user && hasResolvedAuthBootstrap && loadDiscoverProfiles,
     staleTime: 60000,
     refetchOnWindowFocus: false,
@@ -2108,22 +2108,19 @@ export default function Profile() {
       allProfiles.forEach((profile) => {
         const profileId = String(profile.id || "");
         const current = next[profileId] || {};
+        // Sempre atualiza isFollowing/isLiked se o valor da API for true (não deixa travar em false)
+        const apiIsFollowing = Boolean(profile.isFollowing) || followingIds.has(profileId);
+        const apiIsLiked = Boolean(profile.isLiked);
         const computed = {
           ...current,
-          isFollowing:
-            typeof current.isFollowing === "boolean"
-              ? current.isFollowing
-              : Boolean(profile.isFollowing) || followingIds.has(profileId),
-          isLiked:
-            typeof current.isLiked === "boolean"
-              ? current.isLiked
-              : Boolean(profile.isLiked),
+          isFollowing: current.isFollowing === true ? true : apiIsFollowing,
+          isLiked: current.isLiked === true ? true : apiIsLiked,
           followers:
-            typeof current.followers === "number"
+            typeof current.followers === "number" && current.followers > 0
               ? current.followers
               : Number(profile.followers || 0),
           likes:
-            typeof current.likes === "number"
+            typeof current.likes === "number" && current.likes > 0
               ? current.likes
               : Number(profile.likes || 0),
         };
