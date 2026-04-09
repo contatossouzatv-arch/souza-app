@@ -1429,12 +1429,11 @@ export default function Profile() {
   const canLoadDeferredPublicProfileQueries =
     Boolean(user) &&
     loadNonCriticalProfileData;
-  const shouldLoadEngagementProfiles = canLoadDeferredProfileQueries && isEngagementTabActive;
+  const shouldLoadEngagementProfiles = canLoadDeferredProfileQueries;
   const shouldLoadMySocialState =
     canLoadDeferredProfileQueries &&
     !isViewingPublicProfile &&
-    hasResolvedAuthBootstrap &&
-    (isSocialListOpen || isEngagementTabActive);
+    hasResolvedAuthBootstrap;
   const shouldLoadDailyCheckInState =
     canLoadDeferredProfileQueries &&
     !isViewingPublicProfile &&
@@ -1449,16 +1448,8 @@ export default function Profile() {
 
   useEffect(() => {
     setLoadDiscoverProfiles(false);
-    const shouldLoadForPrivateProfile = canLoadDeferredProfileQueries && isEngagementTabActive;
-    const shouldLoadForPublicProfile =
-      isViewingPublicProfile &&
-      isPublicEngagementTabActive;
-    if (!shouldLoadForPrivateProfile && !shouldLoadForPublicProfile) return undefined;
-
-    if (shouldLoadForPublicProfile) {
-      setLoadDiscoverProfiles(true);
-      return undefined;
-    }
+    const shouldLoad = canLoadDeferredProfileQueries || (isViewingPublicProfile && canLoadDeferredPublicProfileQueries);
+    if (!shouldLoad) return undefined;
 
     const timerId = window.setTimeout(() => {
       setLoadDiscoverProfiles(true);
@@ -1468,8 +1459,6 @@ export default function Profile() {
   }, [
     canLoadDeferredProfileQueries,
     canLoadDeferredPublicProfileQueries,
-    isEngagementTabActive,
-    isPublicEngagementTabActive,
     isViewingPublicProfile,
     location.pathname,
     location.search,
