@@ -240,7 +240,11 @@ function buildRankingQuery(whereClause) {
 export async function getWeeklyCompetitionContext() {
   const weeklyConfig = await loadWeeklyLeaderboardConfig();
   const cycle = await resolveLeaderboardCycle(weeklyConfig);
-  const resolvedConfig = normalizeWeeklyConfig(cycle?.config_snapshot || weeklyConfig);
+  const resolvedConfig = normalizeWeeklyConfig({
+    ...(cycle?.config_snapshot || weeklyConfig),
+    enabled: weeklyConfig.enabled,
+    active: weeklyConfig.active,
+  });
   const cycleMetrics = buildCompetitionBoard([], cycle, resolvedConfig).cycle;
   return {
     cycle: cycleMetrics,
