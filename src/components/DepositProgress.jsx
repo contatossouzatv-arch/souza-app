@@ -64,6 +64,7 @@ export default function DepositProgress({
   const depositsEnabled = safeFind(safeSettings, (s) => s.key === "deposits_enabled")?.value === "true";
   const cashbackActive = safeFind(safeSettings, (s) => s.key === "cashback_active")?.value === "true";
   const shouldRenderCashback = cashbackActive;
+  const showCashbackCard = false;
 
   const { data: cashbackClaims = [] } = useQuery({
     queryKey: ["my-cashback-claims", user?.id],
@@ -285,7 +286,7 @@ export default function DepositProgress({
 
   return (
     <>
-      {shouldRenderCashback ? (
+      {showCashbackCard ? (
         <Card className={`relative overflow-hidden bg-gradient-to-br from-purple-900/50 to-pink-900/50 border-purple-700/50 ${!depositsEnabled ? "opacity-60" : ""}`}>
           {promoEndDate ? (
             <div className="absolute top-4 right-4 z-10">
