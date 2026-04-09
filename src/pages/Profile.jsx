@@ -1080,7 +1080,8 @@ export default function Profile() {
           activityCount: Number(profile.followers || 0) + Number(profile.likes || 0),
           depositedAmount: 0,
           daysSinceJoin,
-          totalWins: 0,
+          totalWins: Number(profile.totalWins || 0),
+          xp_total: Number(profile.xp_total || 0),
           participations: 0,
           avatar_emoji: String(profile.avatar_emoji || ""),
           profile_avatar_id: String(profile.profile_avatar_id || ""),
@@ -5373,96 +5374,6 @@ export default function Profile() {
             </div>
           </Card>
 
-          <Card className="border-slate-800 bg-slate-900/70 p-2">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {PROFILE_PUBLIC_TABS.map((tab) => {
-                const isActive = activePublicTab === tab.id;
-                return (
-                  <button
-                    key={`public-tab-${tab.id}`}
-                    type="button"
-                    onClick={() => setActivePublicTab(tab.id)}
-                    className={`rounded-xl px-3 py-2 text-xs font-bold transition ${
-                      isActive
-                        ? "bg-cyan-500 text-slate-950"
-                        : "bg-slate-950/60 text-slate-300 hover:bg-slate-800 hover:text-white"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-
-          {isPublicOverviewTabActive ? renderCompetitionCard({
-            entry: publicCompetitionEntry,
-            titleSuffix: "Visivel para todos que abrirem este perfil.",
-          }) : null}
-
-          {isPublicOverviewTabActive ? (
-          <Card className="border-slate-800 bg-slate-900/70 p-4">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Resumo Publico</h2>
-            {isPublicSummaryPending ? (
-              <div className="space-y-3">
-                <p className="text-xs text-slate-400">Carregando dados oficiais deste perfil...</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {["Bilhetes", "Top Semanal", "Prêmios Ganhos"].map((label) => (
-                    <div key={label} className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-                      <p className="text-xs text-slate-400">{label}</p>
-                      <p className="text-xl font-black text-slate-500">...</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : isPublicSummaryUnavailable ? (
-              <div className="space-y-3">
-                <p className="text-xs text-amber-300">Não foi possível carregar o resumo oficial deste perfil agora.</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {["Bilhetes", "Top Semanal", "Prêmios Ganhos"].map((label) => (
-                    <div key={label} className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-                      <p className="text-xs text-slate-400">{label}</p>
-                      <p className="text-xl font-black text-slate-500">--</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-                  <p className="text-xs text-slate-400">Bilhetes</p>
-                  <p className="text-xl font-black text-cyan-300">{publicMetrics?.totalTickets ?? 0}</p>
-                </div>
-                <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-                  <p className="text-xs text-slate-400">Top Semanal</p>
-                  <p className="text-xl font-black text-emerald-300">#{publicMetrics?.position || "-"}</p>
-                </div>
-                <div className="rounded-xl border border-slate-800 bg-slate-900 p-3 text-center">
-                  <p className="text-xs text-slate-400">Prêmios Ganhos</p>
-                  <p className="text-xl font-black text-yellow-300">{publicMetrics?.totalWins}</p>
-                </div>
-              </div>
-            )}
-            <div className="mt-4">
-              <div className="mb-1 flex items-center justify-between text-xs">
-                <span className="text-slate-400">Super Fã das Lives do SouzaTV</span>
-                <span className="text-cyan-300">
-                  {isPublicSummaryPending ? "..." : isPublicSummaryUnavailable ? "--" : `${publicSuperFanProgress}%`}
-                </span>
-              </div>
-              <div className="h-2 w-full rounded-full bg-slate-800">
-                <div
-                  className="h-2 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-500"
-                  style={{
-                    width: isPublicSummaryPending || isPublicSummaryUnavailable ? "0%" : `${publicSuperFanProgress}%`,
-                  }}
-                />
-              </div>
-            </div>
-          </Card>
-          ) : null}
-
-          {isPublicAchievementsTabActive ? (
           <Card className="border-slate-800 bg-slate-900/70 p-4">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-300">Selos e Conquistas</h2>
             {isPublicSummaryPending ? (
@@ -5544,9 +5455,7 @@ export default function Profile() {
               </>
             )}
           </Card>
-          ) : null}
 
-          {isPublicPrizesTabActive ? (
           <Suspense fallback={null}>
             <PrizeGalleryCard
               userId={publicProfileResolvedUserId || publicProfile?.id}
@@ -5559,9 +5468,7 @@ export default function Profile() {
               eagerPreview
             />
           </Suspense>
-          ) : null}
 
-          {isPublicEngagementTabActive ? (
           <Card className="border-slate-800 bg-slate-900/70 p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Outros Perfis</h2>
@@ -5669,8 +5576,8 @@ export default function Profile() {
                         <p className="text-xs font-bold text-indigo-200">{profile.totalWins}</p>
                       </div>
                       <div className="rounded-lg bg-slate-900 p-1.5">
-                        <p className="text-center text-[10px] text-slate-400 whitespace-nowrap">Top sem.</p>
-                        <p className="text-xs font-bold text-emerald-200">{getCompetitiveTopLabel(profile)}</p>
+                        <p className="text-center text-[10px] text-slate-400 whitespace-nowrap">Participou</p>
+                        <p className="text-xs font-bold text-emerald-200">{profile.totalWins > 0 ? profile.totalWins : "-"}</p>
                       </div>
                     </div>
 
@@ -5716,7 +5623,6 @@ export default function Profile() {
               ) : null}
             </div>
           </Card>
-          ) : null}
 
           <Dialog open={isPublicPhotoViewerOpen} onOpenChange={setIsPublicPhotoViewerOpen}>
             <DialogContent className="rounded-3xl border border-slate-700/90 bg-slate-950/95 text-white shadow-2xl">

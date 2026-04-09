@@ -152,6 +152,8 @@ function mapSocialProfile(row) {
     isFollowing: Boolean(row.is_following),
     isLiked: Boolean(row.is_liked),
     created_at: row.created_at ? toIso(row.created_at) : null,
+    xp_total: Number(row.xp_total || 0),
+    totalWins: Number(row.total_wins || 0),
   };
 }
 
@@ -471,7 +473,9 @@ async function listDiscoverProfiles(client, viewerUserId, { limit = 12, offset =
         COALESCE(following.count, 0) AS following,
         COALESCE(likes.count, 0) AS likes,
         COALESCE(viewer_follow.active, false) AS is_following,
-        COALESCE(viewer_like.active, false) AS is_liked
+        COALESCE(viewer_like.active, false) AS is_liked,
+        COALESCE(xp_bal.amount, 0) AS xp_total,
+        COALESCE(wins.total_wins, 0) AS total_wins
      FROM users u
      LEFT JOIN (
        SELECT target_user_id, COUNT(*)::int AS count
@@ -497,6 +501,17 @@ async function listDiscoverProfiles(client, viewerUserId, { limit = 12, offset =
      LEFT JOIN profile_likes viewer_like
        ON viewer_like.target_user_id = u.id
        AND viewer_like.actor_user_id = $3
+     LEFT JOIN user_metric_balances xp_bal
+       ON xp_bal.user_id = u.id
+      AND xp_bal.metric_key = 'xp_total'
+      AND xp_bal.cycle_key = ''
+     LEFT JOIN (
+       SELECT data->>'user_id' AS user_id, COUNT(*)::int AS total_wins
+         FROM entity_records
+        WHERE entity_name = 'UserPrizeGalleryItem'
+          AND LOWER(COALESCE(data->>'claim_status', 'validated')) IN ('validated', 'applied')
+        GROUP BY data->>'user_id'
+     ) wins ON wins.user_id = u.id::text
        WHERE COALESCE(u.account_status, 'active') <> 'deactivated'
        ORDER BY ${orderByClause}
        LIMIT $1 OFFSET $2`,
