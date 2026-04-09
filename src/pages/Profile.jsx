@@ -5909,34 +5909,6 @@ export default function Profile() {
             </div>
           )}
 
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setPointsHistoryTab("weekly");
-                  setIsPointsHistoryOpen(true);
-                }}
-                className="inline-flex items-center justify-center rounded-2xl bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950 transition hover:bg-cyan-400"
-              >
-                Historico de Pontos
-              </button>
-              {isDailyCheckInEnabled ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHasRequestedDailyCheckInState(true);
-                    setIsCheckInCalendarOpen(true);
-                  }}
-                  className={`inline-flex items-center justify-center rounded-2xl px-3 py-2 text-xs font-bold transition ${
-                    dailyCheckInState?.checkedIn
-                      ? "bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/30"
-                      : "bg-emerald-500 text-slate-950 hover:bg-emerald-400"
-                  }`}
-                >
-                  Check-in diario
-                </button>
-              ) : null}
-            </div>
           </div>
 
         <div className="mt-4 grid grid-cols-3 gap-2 text-center text-white">
