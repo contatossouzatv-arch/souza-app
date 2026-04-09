@@ -325,7 +325,7 @@ export default function PrizeGalleryCard({
   eagerPreview = false,
 }) {
   const { user: viewer } = useAuth();
-  const previewBatchSize = 3;
+  const previewBatchSize = 2;
   const galleryBatchSize = 12;
   const [selectedItem, setSelectedItem] = React.useState(null);
   const [isGalleryOpen, setIsGalleryOpen] = React.useState(false);
@@ -476,7 +476,7 @@ export default function PrizeGalleryCard({
             <p className="mt-1 text-xs leading-5 text-slate-400">Os prêmios aparecem assim que esta seção entra em foco.</p>
           </div>
         ) : isLoadingPreview ? (
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="mt-4 grid grid-cols-2 gap-3">
             {Array.from({ length: previewBatchSize }).map((_, index) => (
               <div key={`prize-gallery-preview-skeleton-${index}`} className="overflow-hidden rounded-[1.45rem] border border-white/8 bg-slate-900/80">
                 <div className="h-24 animate-pulse bg-slate-800/90" />
@@ -498,7 +498,7 @@ export default function PrizeGalleryCard({
           </div>
         ) : (
           <>
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="mt-4 grid grid-cols-2 gap-3">
               {visibleItems.map(renderPrizeCard)}
             </div>
             {hiddenCount > 0 ? (
