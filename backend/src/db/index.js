@@ -12,6 +12,9 @@ export const pool = new Pool({
   idleTimeoutMillis: poolIdleTimeoutMs,
   connectionTimeoutMillis: poolConnectionTimeoutMs,
   keepAlive: true,
+  // Envia o primeiro keepalive TCP após 10s de inatividade, evitando que o
+  // Cloud SQL Proxy feche conexões idle antes do idleTimeoutMillis disparar.
+  keepAliveInitialDelayMillis: 10000,
   // Local postgres (docker-compose) não aceita SSL por padrão; habilite apenas se DB_SSL=true
   ssl: useSsl ? { rejectUnauthorized: false } : false,
 });
@@ -21,6 +24,24 @@ pool.on("error", (error) => {
     message: error?.message || "Unknown pool error",
   });
 });
+
+/**
+ * Verifica conectividade com o banco — usado pelo /health endpoint.
+ * Retorna true se o banco responder em até 3s, false caso contrário.
+ */
+export async function checkDbHealth() {
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query("SELECT 1");
+      return true;
+    } finally {
+      client.release();
+    }
+  } catch {
+    return false;
+  }
+}
 
 const SLOW_QUERY_THRESHOLD_MS = 200;
 

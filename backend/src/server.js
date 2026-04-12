@@ -70,6 +70,40 @@ function createFallbackApp(error, startedAt) {
   };
 }
 
+/**
+ * Corre uma promise com timeout. Lança erro se o timeout disparar primeiro.
+ */
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Tenta executar fn até maxAttempts vezes com delayMs entre tentativas.
+ */
+async function retryAsync(fn, { maxAttempts = 3, delayMs = 2000, label = "operation" } = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      console.warn(`[startup] ${label}:retry`, {
+        attempt,
+        maxAttempts,
+        message: error?.message || "unknown",
+      });
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  throw lastError;
+}
+
 async function bootstrapRuntime(io, runtime) {
   const { env, ensureDb, ensureDevAdmin, seedDefaults } = runtime;
 
@@ -79,7 +113,13 @@ async function bootstrapRuntime(io, runtime) {
     hasDatabaseUrl: Boolean(env.databaseUrl),
   });
 
-  await ensureDb();
+  // Retry ensureDb para lidar com cold start do Cloud SQL (scale-from-zero)
+  await retryAsync(() => ensureDb(), {
+    maxAttempts: 3,
+    delayMs: 3000,
+    label: "ensureDb",
+  });
+
   if (env.nodeEnv !== "production") {
     const adminPasswordHash = await bcrypt.hash(env.adminPassword, 10);
     await ensureDevAdmin({
@@ -97,9 +137,28 @@ async function bootstrapRuntime(io, runtime) {
       const pubClient = new Redis(env.redisUrl, {
         maxRetriesPerRequest: null,
         enableReadyCheck: false,
+        // Não bloqueia indefinidamente se Redis ainda não estiver pronto
+        connectTimeout: 5000,
+        lazyConnect: true,
       });
       const subClient = pubClient.duplicate();
-      await Promise.all([pubClient.ping(), subClient.ping()]);
+      // Timeout de 5s no ping para não travar o startup
+      await withTimeout(
+        Promise.all([pubClient.connect(), subClient.connect()]),
+        5000,
+        "redis-connect"
+      );
+      await withTimeout(
+        Promise.all([pubClient.ping(), subClient.ping()]),
+        5000,
+        "redis-ping"
+      );
+      pubClient.on("error", (err) =>
+        console.warn("[socket-adapter] redis pub error", { message: err?.message || "unknown" })
+      );
+      subClient.on("error", (err) =>
+        console.warn("[socket-adapter] redis sub error", { message: err?.message || "unknown" })
+      );
       io.adapter(createAdapter(pubClient, subClient));
       socketAdapterMode = "redis";
     } catch (error) {
@@ -192,8 +251,9 @@ async function bootstrap() {
     try {
       await bootstrapRuntime(io, runtime);
     } catch (error) {
-      startupError = error;
-      app = null;
+      // Não derruba o app: já inicializado, pode servir requests normalmente.
+      // Erros de DB/Redis durante bootstrap são transitórios no scale-from-zero;
+      // o /health retornará 503 até o banco estar acessível.
       logStartupError("runtime-bootstrap:failed", error);
     }
   } else if (startupError) {

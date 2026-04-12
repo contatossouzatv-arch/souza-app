@@ -8,8 +8,8 @@ spec:
   template:
     metadata:
       annotations:
-        # Mantém mínimo 1 instância sempre quente — elimina cold start e custo por "no available instance"
-        autoscaling.knative.dev/minScale: "1"
+        # 0 instâncias quando sem tráfego — economiza custo; cold start leva ~10-20s
+        autoscaling.knative.dev/minScale: "0"
         # Limita instâncias para não estourar o pool do Cloud SQL
         # 5 instâncias × DB_POOL_MAX=20 = 100 conexões máximas
         autoscaling.knative.dev/maxScale: "5"
@@ -18,6 +18,8 @@ spec:
         autoscaling.knative.dev/target: "40"
         # CPU sempre alocada (não apenas durante request) — elimina cold start de CPU
         run.googleapis.com/cpu-throttling: "false"
+        # CPU extra durante o startup para reduzir latência do cold start
+        run.googleapis.com/startup-cpu-boost: "true"
     spec:
       containerConcurrency: 80
       timeoutSeconds: 60
@@ -39,3 +41,21 @@ spec:
               value: "10000"
             - name: DB_CONNECTION_TIMEOUT_MS
               value: "15000"
+          # Startup probe: aguarda até 120s para o DB conectar antes de aceitar tráfego
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 12
+            timeoutSeconds: 5
+          # Liveness probe: reinicia a instância se o DB ficar inacessível por 90s
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 5

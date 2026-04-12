@@ -16,7 +16,7 @@ import socialRoutes from "./routes/social.js";
 import createEntitiesRouter from "./routes/entities.js";
 import pointsRoutes from "./routes/points.js";
 import uploadsRoutes from "./routes/uploads.js";
-import { appendNavigationLog } from "./db/index.js";
+import { appendNavigationLog, checkDbHealth } from "./db/index.js";
 import { getClientIp, getForwardedForChain, recordClientTraffic } from "./lib/clientTrafficMonitor.js";
 import { genericUploadsDir, uploadsDir } from "./lib/paths.js";
 import { getHttpMetricsSnapshot, recordHttpMetric } from "./lib/httpMetrics.js";
@@ -104,6 +104,12 @@ function buildRateLimiter({ windowMs, limit, prefix = "ratelimit:" } = {}) {
   const redisClient = new Redis(env.redisUrl, {
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
+    // Não bloqueia o startup se Redis ainda não estiver pronto
+    lazyConnect: true,
+    connectTimeout: 5000,
+  });
+  redisClient.on("error", (err) => {
+    console.warn("[ratelimit] redis error", { message: err?.message || "unknown" });
   });
 
   return rateLimit({
@@ -274,14 +280,17 @@ export function createApp(io) {
     res.type("text/plain").send("API SOUZA ONLINE");
   });
 
-  app.get("/health", (_req, res) => {
+  app.get("/health", async (_req, res) => {
+    const dbOk = await checkDbHealth();
+    const status = dbOk ? 200 : 503;
     res.setHeader("Cache-Control", "no-store");
-    res.json({
-      ok: true,
+    res.status(status).json({
+      ok: dbOk,
       service: "app-souza-cass-backend",
       timestamp: new Date().toISOString(),
       startedAt: app.locals.startedAt,
       uptimeSec: Math.round(process.uptime()),
+      db: dbOk,
       redis: Boolean(env.redisUrl),
       build: app.locals.buildInfo,
     });
