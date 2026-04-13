@@ -419,7 +419,7 @@ export default function TicketsProgressBox({
     setShowCheckMenu(false);
   };
 
-  if (!ticketsActive) return null;
+  if (!ticketsActive && !showFormCard) return null;
 
   return (
     <>

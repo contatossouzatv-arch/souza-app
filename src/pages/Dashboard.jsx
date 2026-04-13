@@ -14,7 +14,6 @@ import LegalLinksBar from "@/components/LegalLinksBar";
 import { useAuth } from "@/lib/AuthContext";
 
 const PrizeGalleryCard = React.lazy(() => import("@/components/profile/PrizeGalleryCard"));
-const WinnersHistoryBox = React.lazy(() => import("@/components/WinnersHistoryBox"));
 
 const HEAVY_SECTIONS_DELAY_MS = 150;
 
@@ -164,12 +163,6 @@ export default function Dashboard() {
 
             <motion.div variants={itemVariants}>
               <DeferredDashboardSection active={showHeavySections}>
-                <WinnersHistoryBox />
-              </DeferredDashboardSection>
-            </motion.div>
-
-            <motion.div variants={itemVariants}>
-              <DeferredDashboardSection active={showHeavySections}>
                 <PrizeGalleryCard
                   userId={user.id}
                   title="Seus Premios"
@@ -223,11 +216,6 @@ export default function Dashboard() {
                 />
               </DeferredDashboardSection>
 
-              <div className="mt-4">
-                <DeferredDashboardSection active={showHeavySections}>
-                  <WinnersHistoryBox />
-                </DeferredDashboardSection>
-              </div>
             </div>
           </motion.div>
         )}

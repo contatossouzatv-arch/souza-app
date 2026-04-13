@@ -1,12 +1,10 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { base44, resolveAssetUrl } from "@/api/base44Client";
+﻿import React, { useMemo, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BellRing, Heart, Megaphone, Trophy, Users } from "lucide-react";
-import { format } from "date-fns";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import RichTextMessage from "@/components/RichTextMessage";
+import { Megaphone, Users } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import LegalLinksBar from "@/components/LegalLinksBar";
 import { createPageUrl } from "@/utils";
 import { getProfileAvatarSrc } from "@/lib/profileMedia";
@@ -24,40 +22,11 @@ const avatarById = Object.entries(avatarModules).reduce((acc, [path, src]) => {
   return acc;
 }, {});
 
-const FEED_PAGE_SIZE = 8;
-
 export default function Home() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { user, isLoadingAuth } = useAuth();
-  const [visibleCount, setVisibleCount] = useState(FEED_PAGE_SIZE);
-  const loadMoreRef = useRef(null);
-  const postRefs = useRef({});
   const recentProfilesStripRef = useRef(null);
   const recentProfilesDragRef = useRef({ isDragging: false, startX: 0, startScrollLeft: 0, moved: false });
-  const [highlightPostId, setHighlightPostId] = useState("");
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const {
-    data: feedSummary = null,
-    isLoading: isLoadingFeedSummary,
-    isFetching: isFetchingFeedSummary,
-    error: feedSummaryError,
-  } = useQuery({
-    queryKey: ["inicio-feed-summary"],
-    queryFn: () => base44.home.feedSummary(),
-    enabled: Boolean(user?.id) && !isLoadingAuth,
-    staleTime: 120000,
-    gcTime: 30 * 60 * 1000,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    retry: false,
-  });
-
-  const posts = feedSummary?.posts || [];
-  const winnerFeed = feedSummary?.winnerFeed || { items: [] };
-  const feedLikes = feedSummary?.feedLikes || { counts: {}, likedPostIds: [] };
 
   const {
     data: homeSummary,
@@ -74,58 +43,7 @@ export default function Home() {
     retry: false,
   });
 
-  const winnerUserIds = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          (winnerFeed?.items || [])
-            .map((item) => String(item?.user_id || "").trim())
-            .filter(Boolean)
-        )
-      ),
-    [winnerFeed?.items]
-  );
-
-  const { data: winnerUsersPayload } = useQuery({
-    queryKey: ["inicio-winner-users", winnerUserIds.join(",")],
-    queryFn: () => base44.profile.publicBasics(winnerUserIds),
-    enabled: winnerUserIds.length > 0,
-    staleTime: 600000,
-    gcTime: 30 * 60 * 1000,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    retry: false,
-  });
-
   const formattedMembersCount = Number(homeSummary?.totalMembers || 0);
-
-  const publishedPosts = useMemo(() => {
-    return posts.slice(0, 30);
-  }, [posts]);
-
-  const usersById = useMemo(() => {
-    const map = new Map();
-    (winnerUsersPayload?.items || []).forEach((item) => map.set(item.id, item));
-    return map;
-  }, [winnerUsersPayload?.items]);
-
-  const creatorProfile = useMemo(() => {
-    const admin = homeSummary?.creator || null;
-    if (!admin) return null;
-    const creatorPhoto =
-      admin.profile_image_status === "approved" &&
-      admin.profile_image_url
-        ? resolveAssetUrl(admin.profile_image_url)
-        : null;
-    return {
-      id: admin.id,
-      name: admin.full_name || admin.nick || "Souza",
-      nick: admin.nick || "souza",
-      avatarEmoji: admin.avatar_emoji || "S",
-      avatarUrl: creatorPhoto || getProfileAvatarSrc(admin, avatarById, defaultAvatar) || defaultAvatar,
-    };
-  }, [homeSummary?.creator]);
 
   const recentProfiles = useMemo(() => {
     return (homeSummary?.recentProfiles || []).map((profile) => {
@@ -138,150 +56,6 @@ export default function Home() {
       };
     });
   }, [homeSummary?.recentProfiles]);
-
-  const winnerPosts = useMemo(() => {
-    return (winnerFeed?.items || [])
-      .slice(0, 40)
-      .map((item) => {
-        const profile = usersById.get(item.user_id);
-        const resolvedWinnerProfile = {
-          ...(profile || {}),
-          id: item.user_id || profile?.id || "",
-          avatar_emoji: item.user_avatar || profile?.avatar_emoji || "",
-          profile_avatar_id: item.profile_avatar_id || profile?.profile_avatar_id || "",
-          profile_image_mode: item.profile_image_mode || profile?.profile_image_mode || "avatar",
-          profile_image_status: item.profile_image_status || profile?.profile_image_status || "",
-          profile_image_url: item.profile_image_url || profile?.profile_image_url || "",
-        };
-
-        return {
-          id: `winner-${item.id}`,
-          authorId: creatorProfile?.id || "",
-          authorName: creatorProfile?.name || "Souza",
-          authorNick: creatorProfile?.nick || "souza",
-          authorAvatarEmoji: creatorProfile?.avatarEmoji || "S",
-          authorAvatarUrl: creatorProfile?.avatarUrl || null,
-          userId: item.user_id || profile?.id || "",
-          userName: item.user_name || profile?.full_name || "Participante",
-          userNick: item.user_nick || profile?.nick || "",
-          avatarEmoji: item.user_avatar || profile?.avatar_emoji || "U",
-          avatarUrl: getProfileAvatarSrc(resolvedWinnerProfile, avatarById, "") || "",
-          prizeTitle: item.source_label || "Premiação do app",
-          rewardLabel: item.reward_label || item.title || "Prêmio",
-          prizeAmount: Number(item.reward_amount) || 0,
-          rewardUnit: item.reward_unit || "",
-          createdAt: item.claimed_at,
-        };
-      });
-  }, [winnerFeed?.items, usersById, creatorProfile]);
-
-  const feedItems = useMemo(() => {
-    const winnerFeed = winnerPosts.map((item) => ({
-      ...item,
-      type: "winner",
-      createdAtTs: item.createdAt ? new Date(item.createdAt).getTime() : 0,
-    }));
-
-    const noticeFeed = publishedPosts.map((post) => ({
-      type: "notice",
-      id: `notice-${post.id}`,
-      authorId: creatorProfile?.id || "",
-      authorName: creatorProfile?.name || "Souza",
-      authorNick: creatorProfile?.nick || "souza",
-      authorAvatarUrl: creatorProfile?.avatarUrl || defaultAvatar,
-      title: post.title || "Aviso",
-      message: post.message || "",
-      createdAt: post.sent_at || post.created_date,
-      createdAtTs: post.sent_at || post.created_date ? new Date(post.sent_at || post.created_date).getTime() : 0,
-    }));
-
-    return [...winnerFeed, ...noticeFeed].sort((a, b) => b.createdAtTs - a.createdAtTs);
-  }, [winnerPosts, publishedPosts, creatorProfile]);
-
-  useEffect(() => {
-    setVisibleCount(FEED_PAGE_SIZE);
-  }, [feedItems.length]);
-
-  useEffect(() => {
-    const target = loadMoreRef.current;
-    if (!target) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const first = entries[0];
-        if (!first?.isIntersecting) return;
-        setVisibleCount((prev) => Math.min(prev + FEED_PAGE_SIZE, feedItems.length));
-      },
-      { rootMargin: "140px 0px" }
-    );
-
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [feedItems.length]);
-
-  useEffect(() => {
-    const targetPostId = searchParams.get("post");
-    if (!targetPostId) return;
-
-    const targetIndex = feedItems.findIndex((item) => item.id === targetPostId);
-    if (targetIndex >= 0) {
-      setVisibleCount((prev) => Math.max(prev, targetIndex + 1));
-    }
-
-    const timeout = setTimeout(() => {
-      const element = postRefs.current[targetPostId];
-      if (!element) return;
-      element.scrollIntoView({ behavior: "smooth", block: "center" });
-      setHighlightPostId(targetPostId);
-      setTimeout(() => setHighlightPostId(""), 2400);
-      setSearchParams({}, { replace: true });
-    }, 200);
-
-    return () => clearTimeout(timeout);
-  }, [searchParams, setSearchParams, feedItems]);
-
-  const likePostMutation = useMutation({
-    mutationFn: (postId) => base44.gamification.likeFeedPost(postId),
-    onMutate: async (postId) => {
-      await queryClient.cancelQueries({ queryKey: ["inicio-feed-summary"] });
-      const previous = queryClient.getQueryData(["inicio-feed-summary"]);
-      queryClient.setQueryData(["inicio-feed-summary"], (current) => {
-        const safeCurrent = current && typeof current === "object" ? current : {};
-        const currentFeedLikes = safeCurrent.feedLikes && typeof safeCurrent.feedLikes === "object"
-          ? safeCurrent.feedLikes
-          : { counts: {}, likedPostIds: [] };
-        const likedPostIds = Array.isArray(currentFeedLikes.likedPostIds) ? currentFeedLikes.likedPostIds : [];
-        if (likedPostIds.includes(postId)) return safeCurrent;
-        return {
-          ...safeCurrent,
-          feedLikes: {
-            counts: {
-              ...(currentFeedLikes.counts || {}),
-              [postId]: Number(currentFeedLikes.counts?.[postId] || 0) + 1,
-            },
-            likedPostIds: [...likedPostIds, postId],
-          },
-        };
-      });
-      return { previous };
-    },
-    onError: (_error, _postId, context) => {
-      queryClient.setQueryData(["inicio-feed-summary"], context?.previous ?? null);
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["inicio-feed-summary"] });
-    },
-  });
-
-  const handleLike = (postId) => {
-    const likedPostIds = Array.isArray(feedLikes?.likedPostIds) ? feedLikes.likedPostIds : [];
-    if (!postId || likedPostIds.includes(postId) || likePostMutation.isPending) return;
-    likePostMutation.mutate(postId);
-  };
-
-  const openProfilePage = () => {
-    navigate(createPageUrl("Profile"));
-  };
 
   const openPublicProfile = (profileId) => {
     if (!profileId) return;
@@ -350,7 +124,7 @@ export default function Home() {
   if (isLoadingAuth) {
     return (
       <div className="space-y-3">
-        <Card className="border-slate-800 bg-slate-900/70 p-5 text-slate-300">Carregando avisos...</Card>
+        <Card className="border-slate-800 bg-slate-900/70 p-5 text-slate-300">Carregando...</Card>
       </div>
     );
   }
@@ -364,7 +138,7 @@ export default function Home() {
           </div>
           <div>
             <h1 className="text-lg font-bold text-white">Início</h1>
-            <p className="text-sm text-slate-400">Avisos e posts para a galera acompanhar e interagir.</p>
+            <p className="text-sm text-slate-400">Bem-vindo ao app! Veja os últimos membros cadastrados.</p>
           </div>
         </div>
       </Card>
@@ -438,181 +212,6 @@ export default function Home() {
           </div>
         )}
       </Card>
-
-      {feedItems.length === 0 ? (
-        <Card className="border-slate-800 bg-slate-900/70 p-6 text-center">
-          <BellRing className="mx-auto mb-2 h-6 w-6 text-cyan-300" />
-          {isLoadingFeedSummary || isFetchingFeedSummary ? (
-            <>
-              <p className="font-semibold text-white">Carregando avisos...</p>
-              <p className="text-sm text-slate-400 mt-1">O feed inicial ainda está sincronizando.</p>
-            </>
-          ) : feedSummaryError ? (
-            <>
-              <p className="font-semibold text-white">Não foi possível carregar os avisos agora</p>
-              <p className="text-sm text-slate-400 mt-1">Tente novamente em instantes.</p>
-            </>
-          ) : (
-            <>
-              <p className="font-semibold text-white">Sem avisos publicados</p>
-              <p className="text-sm text-slate-400 mt-1">
-                Quando você enviar post/aviso no admin, eles aparecem aqui automaticamente.
-              </p>
-            </>
-          )}
-        </Card>
-      ) : (
-        <>
-          {feedItems.slice(0, visibleCount).map((item) => {
-            const likesCount = Number(feedLikes?.counts?.[item.id] || 0);
-            const isLiked = Array.isArray(feedLikes?.likedPostIds) && feedLikes.likedPostIds.includes(item.id);
-
-            if (item.type === "winner") {
-              return (
-                <Card
-                  key={item.id}
-                  ref={(node) => {
-                    if (node) postRefs.current[item.id] = node;
-                  }}
-                  className={`border-emerald-700/40 bg-gradient-to-br from-emerald-950/35 to-slate-900/80 p-4 ${
-                    highlightPostId === item.id ? "ring-2 ring-cyan-400/80" : ""
-                  }`}
-                >
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <button type="button" onClick={() => openPublicProfile(item.authorId)} className="rounded-full">
-                        <img
-                          src={item.authorAvatarUrl || defaultAvatar}
-                          alt={item.authorName}
-                          className="h-11 w-11 rounded-full border border-emerald-300/60 object-cover transition hover:opacity-90"
-                          onError={(event) => {
-                            event.currentTarget.src = defaultAvatar;
-                          }}
-                        />
-                      </button>
-                      <div>
-                        <p className="text-sm font-bold text-emerald-100">{item.authorName}</p>
-                        <button
-                          type="button"
-                          onClick={() => openPublicProfile(item.authorId)}
-                          className="text-xs text-emerald-200/80 transition hover:text-emerald-100 hover:underline"
-                        >
-                          {item.authorNick ? `@${item.authorNick}` : "@souza"}
-                        </button>
-                      </div>
-                    </div>
-                    <span className="text-xs text-slate-400">
-                      {item.createdAt ? format(new Date(item.createdAt), "dd/MM HH:mm") : "Agora"}
-                    </span>
-                  </div>
-
-                  <div className="rounded-lg border border-emerald-700/40 bg-emerald-900/20 px-3 py-2">
-                    <p className="text-sm font-semibold text-emerald-100">Parabéns! Novo ganhador no app 🎉</p>
-                    <p className="mt-1 text-sm text-slate-200">
-                      <button
-                        type="button"
-                        onClick={() => openPublicProfile(item.userId)}
-                        className="font-semibold text-emerald-100 transition hover:text-emerald-50 hover:underline"
-                      >
-                        {item.userNick ? `@${item.userNick}` : item.userName}
-                      </button>{" "}
-                      ganhou no{" "}
-                      <span className="font-semibold text-emerald-200">{item.prizeTitle}</span>
-                    </p>
-                    <p className="mt-1 text-sm font-bold text-yellow-300">{item.rewardLabel}</p>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1 text-xs text-emerald-300">
-                      <Trophy className="h-3.5 w-3.5" />
-                      Post automático de ganhador
-                    </span>
-                    <Button
-                      onClick={() => handleLike(item.id)}
-                      variant="outline"
-                      disabled={isLiked}
-                      className="h-8 border-emerald-700/50 bg-emerald-950/30 px-3 text-xs text-emerald-100 hover:bg-emerald-900/40 disabled:cursor-default disabled:opacity-100"
-                    >
-                      <Heart className="mr-1 h-3.5 w-3.5" />
-                      {isLiked ? `Curtido (${likesCount})` : `Curtir (${likesCount})`}
-                    </Button>
-                  </div>
-                </Card>
-              );
-            }
-
-            return (
-              <Card
-                key={item.id}
-                ref={(node) => {
-                  if (node) postRefs.current[item.id] = node;
-                }}
-                className={`border-slate-800 bg-slate-900/70 p-4 ${
-                  highlightPostId === item.id ? "ring-2 ring-cyan-400/80" : ""
-                }`}
-              >
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <button type="button" onClick={() => openPublicProfile(item.authorId)} className="rounded-full">
-                      <img
-                        src={item.authorAvatarUrl || defaultAvatar}
-                        alt={item.authorName}
-                        className="h-11 w-11 rounded-full border border-cyan-300/50 object-cover transition hover:opacity-90"
-                        onError={(event) => {
-                          event.currentTarget.src = defaultAvatar;
-                        }}
-                      />
-                    </button>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-white">{item.authorName}</p>
-                      <button
-                        type="button"
-                        onClick={() => openPublicProfile(item.authorId)}
-                        className="truncate text-xs text-cyan-200/80 transition hover:text-cyan-100 hover:underline"
-                      >
-                        {item.authorNick ? `@${item.authorNick}` : "@souza"}
-                      </button>
-                    </div>
-                  </div>
-                  <span className="shrink-0 text-xs text-slate-500">
-                    {item.createdAt ? format(new Date(item.createdAt), "dd/MM HH:mm") : "Agora"}
-                  </span>
-                </div>
-
-                <div className="mb-2">
-                  <h3 className="text-base font-bold text-white">{item.title || "Aviso"}</h3>
-                </div>
-
-                <RichTextMessage
-                  text={item.message}
-                  className="text-sm leading-relaxed text-slate-300 break-words whitespace-pre-wrap"
-                />
-
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="text-xs text-slate-500">Post da administração</span>
-                  <Button
-                    onClick={() => handleLike(item.id)}
-                    variant="outline"
-                    disabled={isLiked}
-                    className="h-8 border-slate-700 bg-slate-800/60 px-3 text-xs text-slate-200 hover:bg-slate-700 disabled:cursor-default disabled:opacity-100"
-                  >
-                    <Heart className="mr-1 h-3.5 w-3.5" />
-                    {isLiked ? `Curtido (${likesCount})` : `Curtir (${likesCount})`}
-                  </Button>
-                </div>
-              </Card>
-            );
-          })}
-
-          {visibleCount < feedItems.length ? (
-            <div ref={loadMoreRef} className="py-3 text-center text-xs text-slate-500">
-              Carregando mais posts...
-            </div>
-          ) : (
-            <div className="py-2 text-center text-xs text-slate-600">Você chegou ao fim dos posts.</div>
-          )}
-        </>
-      )}
 
       <LegalLinksBar />
     </div>
