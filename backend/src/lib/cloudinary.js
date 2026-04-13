@@ -120,15 +120,20 @@ export async function uploadToCloudinary({ buffer, originalName = "", mimetype =
   });
 
   const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message = payload?.error?.message || "Cloudinary upload failed";
+  if (!response.ok || !payload) {
+    const message = payload?.error?.message || `Cloudinary upload failed (HTTP ${response.status})`;
     const error = new Error(message);
     error.status = response.status || 500;
     throw error;
   }
 
+  const url = String(payload?.secure_url || payload?.url || "").trim();
+  if (!url) {
+    throw Object.assign(new Error("Cloudinary upload returned no URL"), { status: 500 });
+  }
+
   return {
-    url: String(payload?.secure_url || payload?.url || "").trim(),
+    url,
     publicId: String(payload?.public_id || "").trim(),
     resourceType: String(payload?.resource_type || resourceType).trim(),
     originalFilename: String(payload?.original_filename || "").trim(),

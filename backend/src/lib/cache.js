@@ -1,6 +1,25 @@
 import Redis from "ioredis";
 import { env } from "../config/env.js";
 
+const REDIS_OP_TIMEOUT_MS = 2000;
+
+/**
+ * Executa uma operação Redis com timeout para evitar que um Redis congelado
+ * trave rotas indefinidamente.
+ */
+function withRedisTimeout(promise) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`Redis operation timed out after ${REDIS_OP_TIMEOUT_MS}ms`)),
+      REDIS_OP_TIMEOUT_MS
+    );
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); }
+    );
+  });
+}
+
 const memoryStore = new Map();
 const inflight = new Map();
 const MISS = Symbol("cache-miss");
@@ -83,9 +102,16 @@ export async function getCacheJson(key) {
       // Evita bloquear a rota quando o Redis está lento/indisponível
       return readMemory(key);
     }
-    const raw = await client.get(key);
+    const raw = await withRedisTimeout(client.get(key));
     if (!raw) return MISS;
-    const parsed = JSON.parse(raw);
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      console.warn("[cache] invalid JSON in cache, removing key", { key });
+      client.del(key).catch(() => {});
+      return MISS;
+    }
     return Object.prototype.hasOwnProperty.call(parsed || {}, "value") ? parsed.value : MISS;
   } catch (error) {
     console.warn("[cache] redis get failed, using memory", {
@@ -107,7 +133,7 @@ export async function setCacheJson(key, value, ttlMs) {
       client.connect().catch(() => {});
       return value;
     }
-    await client.set(key, JSON.stringify({ value }), "PX", Math.max(1, Number(ttlMs || 1)));
+    await withRedisTimeout(client.set(key, JSON.stringify({ value }), "PX", Math.max(1, Number(ttlMs || 1))));
   } catch (error) {
     console.warn("[cache] redis set failed, keeping memory cache", {
       key,
@@ -127,7 +153,7 @@ export async function deleteCacheKey(key) {
       client.connect().catch(() => {});
       return;
     }
-    await client.del(key);
+    await withRedisTimeout(client.del(key));
   } catch (error) {
     console.warn("[cache] redis delete failed", {
       key,

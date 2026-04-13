@@ -338,7 +338,9 @@ function removePublicFileByUrl(url) {
   const value = String(url || "");
   if (!value) return;
   if (isExternalHttpUrl(value)) {
-    Promise.resolve(deleteFromCloudinaryByUrl(value)).catch(() => {});
+    Promise.resolve(deleteFromCloudinaryByUrl(value)).catch((err) => {
+      console.warn("[auth] cloudinary delete failed", { url: value, message: err?.message || "unknown" });
+    });
     return;
   }
   const marker = "/uploads/profile/";
@@ -347,7 +349,11 @@ function removePublicFileByUrl(url) {
   const filename = value.slice(idx + marker.length);
   if (!filename) return;
   const filePath = path.resolve(profilePublicDir, filename);
-  fs.promises.unlink(filePath).catch(() => {});
+  fs.promises.unlink(filePath).catch((err) => {
+    if (err?.code !== "ENOENT") {
+      console.warn("[auth] file delete failed", { filePath, message: err?.message || "unknown" });
+    }
+  });
 }
 
 function removePendingFileByName(name) {
@@ -356,7 +362,11 @@ function removePendingFileByName(name) {
   if (safeName.includes("/") || safeName.includes("\\")) return;
 
   const filePath = path.resolve(profilePendingDir, safeName);
-  fs.promises.unlink(filePath).catch(() => {});
+  fs.promises.unlink(filePath).catch((err) => {
+    if (err?.code !== "ENOENT") {
+      console.warn("[auth] pending file delete failed", { filePath, message: err?.message || "unknown" });
+    }
+  });
 }
 
 function canAccessPendingFile(fileName) {
@@ -1148,7 +1158,11 @@ router.delete("/me", requireAuth, async (req, res) => {
 
   if (canAccessPendingFile(user.profile_image_pending_name)) {
     const pendingPath = path.resolve(profilePendingDir, user.profile_image_pending_name);
-    await fs.promises.unlink(pendingPath).catch(() => {});
+    await fs.promises.unlink(pendingPath).catch((err) => {
+      if (err?.code !== "ENOENT") {
+        console.warn("[auth] pending file delete failed", { message: err?.message || "unknown" });
+      }
+    });
   }
 
   removePublicFileByUrl(user.profile_image_url);
@@ -1252,7 +1266,11 @@ router.delete("/me/profile-image/pending", requireAuth, async (req, res) => {
 
   if (canAccessPendingFile(user.profile_image_pending_name)) {
     const pendingPath = path.resolve(profilePendingDir, user.profile_image_pending_name);
-    await fs.promises.unlink(pendingPath).catch(() => {});
+    await fs.promises.unlink(pendingPath).catch((err) => {
+      if (err?.code !== "ENOENT") {
+        console.warn("[auth] pending file delete failed", { message: err?.message || "unknown" });
+      }
+    });
   }
   await upsertUserProfileImages(req.auth.sub, {
     pending_mime_type: null,
@@ -1479,7 +1497,11 @@ router.post("/admin/profile-images/:userId/reject", requireAuth, requireAdmin, a
 
   if (canAccessPendingFile(user.profile_image_pending_name)) {
     const pendingPath = path.resolve(profilePendingDir, user.profile_image_pending_name);
-    await fs.promises.unlink(pendingPath).catch(() => {});
+    await fs.promises.unlink(pendingPath).catch((err) => {
+      if (err?.code !== "ENOENT") {
+        console.warn("[auth] pending file delete failed", { message: err?.message || "unknown" });
+      }
+    });
   }
   await upsertUserProfileImages(user.id, {
     pending_mime_type: null,

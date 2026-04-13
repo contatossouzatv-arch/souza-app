@@ -741,12 +741,11 @@ export async function findUserByGoogleId(googleId) {
 }
 
 export async function findOrCreateUserByEmail(email, defaults = {}) {
-  const existing = await findUserRowByEmail(email);
-  if (existing) return normalizeUser(existing);
-
+  // INSERT ... ON CONFLICT garante atomicidade: sem race condition entre SELECT e INSERT
   const inserted = await pool.query(
     `INSERT INTO users (email, password_hash, google_id, full_name, nick, phone, role, terms_accepted, privacy_accepted, onboarding_completed, avatar_emoji)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     ON CONFLICT (email) DO NOTHING
      RETURNING *`,
     [
       email,
@@ -763,11 +762,37 @@ export async function findOrCreateUserByEmail(email, defaults = {}) {
     ]
   );
 
-  return normalizeUser(inserted.rows[0]);
+  if (inserted.rows[0]) return normalizeUser(inserted.rows[0]);
+
+  // Conflito: usuário já existia — busca o registro existente
+  const existing = await findUserRowByEmail(email);
+  return normalizeUser(existing);
 }
 
+// Colunas que podem ser atualizadas via updateUserById.
+// Whitelist explícita evita SQL injection por nomes de coluna arbitrários.
+const UPDATABLE_USER_COLUMNS = new Set([
+  "account_status",
+  "deactivated_at",
+  "two_factor_secret",
+  "two_factor_enabled",
+  "password_hash",
+  "profile_image_status",
+  "profile_image_url",
+  "profile_image_pending_name",
+  "profile_image_reject_reason",
+  "profile_image_moderation_score",
+  "profile_image_uploaded_at",
+  "profile_avatar_id",
+  "avatar_emoji",
+  "profile_image_mode",
+  "full_name",
+  "nick",
+  "phone",
+]);
+
 export async function updateUserById(userId, payload) {
-  const keys = Object.keys(payload || {});
+  const keys = Object.keys(payload || {}).filter((k) => UPDATABLE_USER_COLUMNS.has(k));
   if (keys.length === 0) {
     return findUserById(userId);
   }
