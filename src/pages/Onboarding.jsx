@@ -32,7 +32,7 @@ function formatPhone(value) {
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const { checkAppState, applyAuthenticatedUser, user } = useAuth();
+  const { applyAuthenticatedUser, user } = useAuth();
   const [step, setStep] = useState(1);
   const [hasAccount, setHasAccount] = useState(null);
   const [platformId, setPlatformId] = useState("");
@@ -107,8 +107,6 @@ export default function Onboarding() {
       }
 
       navigate("/", { replace: true });
-      // Sincroniza com o servidor em background sem mostrar loading
-      checkAppState({ background: true });
     } catch (_error) {
       alert("Erro ao salvar. Tente novamente.");
     }

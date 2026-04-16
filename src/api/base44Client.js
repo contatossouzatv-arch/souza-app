@@ -818,11 +818,13 @@ export const base44 = {
     },
 
     async updateMe(payload = {}) {
-      return request("/api/auth/me", {
+      const result = await request("/api/auth/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      clearMeCache();
+      return result;
     },
 
     async checkAvailability({ nick = "", phone = "" } = {}) {
