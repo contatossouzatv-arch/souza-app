@@ -680,6 +680,17 @@ export async function findUserById(id) {
   return normalizeUser(result.rows[0]);
 }
 
+export async function findUsersByIds(ids = []) {
+  const normalized = [...new Set(ids.map((id) => String(id || "").trim()).filter(Boolean))];
+  if (normalized.length === 0) return [];
+  const placeholders = normalized.map((_, i) => `$${i + 1}`).join(", ");
+  const result = await pool.query(
+    `SELECT * FROM users WHERE id IN (${placeholders})`,
+    normalized
+  );
+  return result.rows.map((row) => normalizeUser(row)).filter(Boolean);
+}
+
 export async function findUserPrivateById(id) {
   const result = await pool.query("SELECT * FROM users WHERE id = $1 LIMIT 1", [id]);
   const row = result.rows[0];

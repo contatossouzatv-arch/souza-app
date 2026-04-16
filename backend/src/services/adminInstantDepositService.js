@@ -4,6 +4,7 @@ import {
   createEntityRecordData,
   findEngagementProcessingEventByRequestId,
   findEntityRecordByNameAndIdForUpdate,
+  findUsersByIds,
   getEntityById,
   getEntityRecordData,
   listEntityRecordsForUpdate,
@@ -633,7 +634,7 @@ export const depositDrawAdmin = {
     const cycleIds = cycles.map((cycle) => cycle.id);
     const deposits = await listDepositsForCycles(cycleIds);
     const userIds = [...new Set(deposits.map((item) => String(item?.user_id || "").trim()).filter(Boolean))];
-    const users = await listEntityRecordsByIds("User", userIds);
+    const users = await findUsersByIds(userIds);
 
     const usersById = buildUsersById(users);
     const depositsByCycleId = deposits.reduce((acc, deposit) => {
@@ -672,7 +673,7 @@ export const depositDrawAdmin = {
     ]);
     const approvedDeposits = deposits.filter((deposit) => String(deposit?.status || "").toLowerCase() === "approved");
     const userIds = [...new Set(approvedDeposits.map((deposit) => String(deposit?.user_id || "").trim()).filter(Boolean))];
-    const users = await listEntityRecordsByIds("User", userIds);
+    const users = await findUsersByIds(userIds);
     return {
       cycle: cycles[0] || null,
       totals: buildDepositParticipantStats(approvedDeposits, buildUsersById(users)),
@@ -754,7 +755,7 @@ export const depositDrawAdmin = {
       const cycle = getEntityRecordData(lockedCycle);
       const deposits = await listEntityRecordsForUpdate(client, "Deposit", { cycle_id: cycleId, status: "approved" });
       const userIds = [...new Set(deposits.map((item) => String(item?.user_id || "").trim()).filter(Boolean))];
-      const users = await listEntityRecordsByIds("User", userIds);
+      const users = await findUsersByIds(userIds);
       const totals = buildDepositParticipantStats(deposits, buildUsersById(users));
       const top3 = totals.slice(0, 3);
       const now = new Date().toISOString();
