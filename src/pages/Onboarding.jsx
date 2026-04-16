@@ -32,7 +32,7 @@ function formatPhone(value) {
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const { checkAppState, user } = useAuth();
+  const { checkAppState, applyAuthenticatedUser, user } = useAuth();
   const [step, setStep] = useState(1);
   const [hasAccount, setHasAccount] = useState(null);
   const [platformId, setPlatformId] = useState("");
@@ -82,6 +82,18 @@ export default function Onboarding() {
         onboarding_completed: true,
       });
 
+      // Atualiza o contexto diretamente para evitar tela de loading e dados
+      // desatualizados que fariam o app redirecionar de volta para o onboarding.
+      applyAuthenticatedUser({
+        ...user,
+        platform_id: platformId.trim(),
+        has_platform_account: hasAccount,
+        phone: phoneMissing ? phone.trim() : user?.phone,
+        terms_accepted: true,
+        privacy_accepted: true,
+        onboarding_completed: true,
+      });
+
       try {
         if (!user?.id) throw new Error("missing_user_id");
         await base44.entities.PlatformHistory.create({
@@ -94,8 +106,9 @@ export default function Onboarding() {
         console.log("Erro ao salvar histórico:", error);
       }
 
-      await checkAppState();
       navigate("/", { replace: true });
+      // Sincroniza com o servidor em background sem mostrar loading
+      checkAppState({ background: true });
     } catch (_error) {
       alert("Erro ao salvar. Tente novamente.");
     }
