@@ -11,8 +11,8 @@ spec:
         # 0 instâncias quando sem tráfego — economiza custo; cold start leva ~10-20s
         autoscaling.knative.dev/minScale: "0"
         # Limita instâncias para não estourar o pool do Cloud SQL
-        # 5 instâncias × DB_POOL_MAX=20 = 100 conexões máximas
-        autoscaling.knative.dev/maxScale: "5"
+        # 4 instâncias × DB_POOL_MAX=20 = 80 conexões máximas
+        autoscaling.knative.dev/maxScale: "4"
         # Quantas requisições simultâneas por instância antes de escalar
         # Valor baixo = escala mais rápido mas custa mais; 40 é equilibrado
         autoscaling.knative.dev/target: "40"
