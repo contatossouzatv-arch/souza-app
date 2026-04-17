@@ -8,13 +8,8 @@ import Redis from "ioredis";
 import { env, isAllowedOrigin } from "./config/env.js";
 import authRoutes from "./routes/auth.js";
 import adminEventsRoutes from "./routes/adminEvents.js";
-import dailyChestRoutes from "./routes/dailyChest.js";
 import depositsRoutes from "./routes/deposits.js";
-import engagementRoutes from "./routes/engagement.js";
-import gamificationRoutes from "./routes/gamification.js";
-import socialRoutes from "./routes/social.js";
 import createEntitiesRouter from "./routes/entities.js";
-import pointsRoutes from "./routes/points.js";
 import uploadsRoutes from "./routes/uploads.js";
 import { appendNavigationLog, checkDbHealth } from "./db/index.js";
 import { getClientIp, getForwardedForChain, recordClientTraffic } from "./lib/clientTrafficMonitor.js";
@@ -264,18 +259,6 @@ export function createApp(io) {
     limit: 180,
     prefix: "ratelimit:admin:",
   });
-  const engagementMutationRateLimiter = buildRateLimiter({
-    windowMs: 60 * 1000,
-    limit: 120,
-    prefix: "ratelimit:engagement:",
-  });
-  const engagementMutationOnly = (req, res, next) => {
-    if (!["POST", "PATCH", "PUT", "DELETE"].includes(String(req.method || "").toUpperCase())) {
-      return next();
-    }
-    return engagementMutationRateLimiter(req, res, next);
-  };
-
   app.get("/", (_req, res) => {
     res.type("text/plain").send("API SOUZA ONLINE");
   });
@@ -340,22 +323,7 @@ export function createApp(io) {
   app.use("/api", apiRateLimiter);
   app.use("/api/admin", adminRateLimiter);
   app.use("/api", adminEventsRoutes);
-  app.use("/api/daily-chest", dailyChestRoutes);
   app.use("/api", depositsRoutes);
-  app.use(
-    [
-      "/api/live-draws",
-      "/api/game-call",
-      "/api/instant-raffles",
-      "/api/winnings",
-      "/api/cashback",
-    ],
-    engagementMutationOnly
-  );
-  app.use("/api", engagementRoutes);
-  app.use("/api", gamificationRoutes);
-  app.use("/api", socialRoutes);
-  app.use("/api/points", pointsRoutes);
   app.use("/api/entities", createEntitiesRouter(io));
   app.use("/api/uploads", uploadRateLimiter, uploadsRoutes);
 

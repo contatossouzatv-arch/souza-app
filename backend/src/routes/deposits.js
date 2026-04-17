@@ -19,7 +19,6 @@ import {
 import { deleteCacheByPrefix, deleteCacheKey, getOrComputeCacheJson } from "../lib/cache.js";
 import { emitLegacyEntityChanged } from "../lib/realtimeEvents.js";
 import { projectDepositMutation } from "../services/depositProjectionService.js";
-import { scheduleGamificationRefresh } from "./gamification.js";
 
 const router = Router();
 const DEPOSIT_LEADERBOARD_TTL_MS = 15000;
@@ -144,14 +143,8 @@ async function invalidateDepositReadCaches({ userId = "", includeAdmin = false }
   });
 }
 
-async function runDepositProjection(req, deposit, action, { refreshGamification = false } = {}) {
-  await projectDepositMutation({
-    io: req,
-    action,
-    deposit,
-    refreshGamification,
-    scheduleGamificationRefresh,
-  });
+async function runDepositProjection(req, deposit, action) {
+  await projectDepositMutation({ io: req, action, deposit });
 }
 
 async function listDepositCycles() {
@@ -355,13 +348,7 @@ router.post("/admin/deposits/:id/approve", requireAuth, requireAdmin, asyncHandl
     status: result?.deposit?.status || "approved",
     tickets_granted: result?.processing_event?.tickets_granted || 0,
   });
-  emitEntityChanged(req, "Gamification", "refresh", {
-    user_id: result?.deposit?.user_id || "",
-    reason: "deposit_approved",
-  });
-  await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "approve-idempotent" : "approve", {
-    refreshGamification: true,
-  });
+  await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "approve-idempotent" : "approve");
   await invalidateDepositReadCaches({
     userId: result?.deposit?.user_id || "",
     includeAdmin: true,
@@ -448,13 +435,7 @@ router.post("/admin/deposits/:id/adjust-tickets", requireAuth, requireAdmin, asy
     user_id: result?.deposit?.user_id || "",
     status: result?.deposit?.status || "",
   });
-  emitEntityChanged(req, "Gamification", "refresh", {
-    user_id: result?.deposit?.user_id || "",
-    reason: "deposit_tickets_adjusted",
-  });
-  await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "adjust-idempotent" : "adjust-tickets", {
-    refreshGamification: true,
-  });
+  await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "adjust-idempotent" : "adjust-tickets");
   await invalidateDepositReadCaches({
     userId: result?.deposit?.user_id || "",
     includeAdmin: true,
@@ -538,13 +519,7 @@ router.post("/admin/deposits/:id/invalidate", requireAuth, requireAdmin, asyncHa
     user_id: result?.deposit?.user_id || "",
     status: result?.deposit?.status || "invalidated",
   });
-  emitEntityChanged(req, "Gamification", "refresh", {
-    user_id: result?.deposit?.user_id || "",
-    reason: "deposit_invalidated",
-  });
-  await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "invalidate-idempotent" : "invalidate", {
-    refreshGamification: true,
-  });
+  await runDepositProjection(req, result?.deposit || {}, result.idempotent ? "invalidate-idempotent" : "invalidate");
   await invalidateDepositReadCaches({
     userId: result?.deposit?.user_id || "",
     includeAdmin: true,
@@ -586,13 +561,7 @@ router.delete("/admin/deposits/:id", requireAuth, requireAdmin, asyncHandler(asy
     user_id: result?.deposit?.user_id || "",
     status: "deleted",
   });
-  emitEntityChanged(req, "Gamification", "refresh", {
-    user_id: result?.deposit?.user_id || "",
-    reason: "deposit_deleted",
-  });
-  await runDepositProjection(req, result?.deposit || {}, "delete", {
-    refreshGamification: true,
-  });
+  await runDepositProjection(req, result?.deposit || {}, "delete");
   await invalidateDepositReadCaches({
     userId: result?.deposit?.user_id || "",
     includeAdmin: true,
