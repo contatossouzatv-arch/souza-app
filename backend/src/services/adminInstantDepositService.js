@@ -215,13 +215,30 @@ async function listDepositsForCycles(cycleIds = []) {
   const normalized = [...new Set(cycleIds.map((item) => String(item || "").trim()).filter(Boolean))];
   if (normalized.length === 0) return [];
   const result = await pool.query(
-    `SELECT id, data, created_at, updated_at
-     FROM entity_records
-     WHERE entity_name = 'Deposit'
-       AND data->>'cycle_id' = ANY($1::text[])`,
+    `SELECT
+       er.id, er.data, er.created_at, er.updated_at,
+       u.full_name AS user_full_name,
+       u.email AS user_email_fallback,
+       u.platform_id AS user_platform_id_fallback
+     FROM entity_records er
+     LEFT JOIN users u ON u.id::text = er.data->>'user_id'
+     WHERE er.entity_name = 'Deposit'
+       AND er.data->>'cycle_id' = ANY($1::text[])`,
     [normalized]
   );
-  return result.rows.map(normalizeRecord);
+  return result.rows.map((row) => {
+    const record = normalizeRecord(row);
+    return {
+      ...record,
+      user_name: record.user_name || String(row.user_full_name || "").trim() || record.user_name,
+      user_email: record.user_email || String(row.user_email_fallback || "").trim() || record.user_email,
+      user_platform_id:
+        record.user_platform_id ||
+        record.platform_id ||
+        String(row.user_platform_id_fallback || "").trim() ||
+        record.user_platform_id,
+    };
+  });
 }
 
 async function listDepositWinnersForCycles(cycleIds = []) {
