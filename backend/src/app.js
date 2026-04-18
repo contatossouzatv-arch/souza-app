@@ -9,6 +9,7 @@ import { env, isAllowedOrigin } from "./config/env.js";
 import authRoutes from "./routes/auth.js";
 import adminEventsRoutes from "./routes/adminEvents.js";
 import depositsRoutes from "./routes/deposits.js";
+import gamificationRoutes from "./routes/gamification.js";
 import createEntitiesRouter from "./routes/entities.js";
 import uploadsRoutes from "./routes/uploads.js";
 import { appendNavigationLog, checkDbHealth } from "./db/index.js";
@@ -324,6 +325,7 @@ export function createApp(io) {
   app.use("/api/admin", adminRateLimiter);
   app.use("/api", adminEventsRoutes);
   app.use("/api", depositsRoutes);
+  app.use("/api", gamificationRoutes);
   app.use("/api/entities", createEntitiesRouter(io));
   app.use("/api/uploads", uploadRateLimiter, uploadsRoutes);
 
