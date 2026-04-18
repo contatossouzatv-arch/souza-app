@@ -49,6 +49,7 @@ export default function TicketsProgressBox({
   settings: initialSettings = null,
   showProgressCard = true,
   showFormCard = true,
+  isLoadingCycle = false,
 }) {
   const ADD_NEW_PLATFORM_VALUE = "__add_new_platform__";
   const queryClient = useQueryClient();
@@ -535,7 +536,7 @@ export default function TicketsProgressBox({
           </div>
           <ChevronDown className={`w-5 h-5 text-slate-300 transition-transform ${formExpanded ? "rotate-180" : ""}`} />
         </button>
-        {!activeCycle ? (
+        {!activeCycle && !isLoadingCycle ? (
           <div className="mx-4 mb-4 rounded-lg border border-amber-600/50 bg-amber-900/30 px-3 py-2">
             <p className="text-xs font-medium text-amber-200">
               Sem ciclo ativo no momento. O preenchimento de novos depósitos foi bloqueado.

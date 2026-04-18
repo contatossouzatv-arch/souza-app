@@ -72,12 +72,12 @@ export default function Deposits() {
     queryKey: ["deposits-dashboard-summary"],
     queryFn: ({ signal }) => base44.deposits.dashboardSummary({ signal }),
     enabled: !!user?.id && !isLoadingAuth,
-    staleTime: 180000,
+    staleTime: 60000,
     gcTime: 30 * 60 * 1000,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    retry: false,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    retry: 2,
   });
 
   const { data: settings = [], isLoading: settingsLoading } = useAppSettings({
@@ -274,6 +274,7 @@ export default function Deposits() {
         activeCycle={activeCycle}
         settings={settings}
         showProgressCard={false}
+        isLoadingCycle={depositsDashboardLoading}
       />
 
       <Card className="border-cyan-500/40 bg-gradient-to-br from-cyan-950/45 via-slate-900 to-indigo-950/35 p-4 shadow-[0_10px_30px_rgba(6,182,212,0.18)]">
