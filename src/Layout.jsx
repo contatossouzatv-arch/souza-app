@@ -93,7 +93,7 @@ export default function Layout({ children }) {
     isAdminUser &&
     !isAdminPanel &&
     !isDailyChestPage &&
-    chestStateForLayout?.enabled !== false;
+    chestStateForLayout?.enabled === true;
   const hideBottomNav = isDailyChestPage;
 
   React.useEffect(() => {
