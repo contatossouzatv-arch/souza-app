@@ -300,7 +300,9 @@ export default function Deposits() {
         ) : (
           <>
             <div className="mb-4 space-y-2">
-              <h4 className="text-center text-xs font-bold uppercase tracking-wide text-slate-300">Top 3 Atual</h4>
+              <h4 className="text-center text-xs font-bold uppercase tracking-wide text-slate-300">
+                {activeCycle?.active ? "Top 3 Atual" : "Top 3 Final do Ciclo"}
+              </h4>
               {leaderboardLoading ? (
                 <div className="grid grid-cols-3 gap-2">
                   {Array.from({ length: 3 }).map((_, index) => (

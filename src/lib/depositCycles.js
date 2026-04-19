@@ -13,6 +13,5 @@ export function resolveCurrentDepositCycle(cycles = []) {
 
 export function resolveEndedDepositCycles(cycles = []) {
   const safeCycles = Array.isArray(cycles) ? cycles : [];
-  const currentCycle = resolveCurrentDepositCycle(safeCycles);
-  return safeCycles.filter((cycle) => String(cycle?.id || "") !== String(currentCycle?.id || ""));
+  return safeCycles.filter((cycle) => !Boolean(cycle?.active));
 }

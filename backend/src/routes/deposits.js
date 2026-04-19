@@ -154,7 +154,14 @@ async function listDepositCycles() {
      WHERE entity_name = 'DepositantDrawCycle'
      ORDER BY created_at DESC`
   );
-  return result.rows.map(normalizeRecord);
+  return result.rows.map(normalizeRecord).map((cycle) => ({
+    ...cycle,
+    top_participants: [
+      cycle.first_place_user_id ? { user_id: cycle.first_place_user_id, user_name: cycle.first_place_user_name, total: Number(cycle.first_place_amount || 0) } : null,
+      cycle.second_place_user_id ? { user_id: cycle.second_place_user_id, user_name: cycle.second_place_user_name, total: Number(cycle.second_place_amount || 0) } : null,
+      cycle.third_place_user_id ? { user_id: cycle.third_place_user_id, user_name: cycle.third_place_user_name, total: Number(cycle.third_place_amount || 0) } : null,
+    ].filter(Boolean),
+  }));
 }
 
 async function listDepositDrawWinners(limit = 200) {
@@ -209,6 +216,15 @@ router.post("/deposits", requireAuth, asyncHandler(async (req, res) => {
   const payload = normalizeCreatePayload(req.body || {});
   if (!payload.platformName || !payload.userPlatformId || !payload.cycleId || !Number.isFinite(payload.amount) || payload.amount <= 0) {
     return res.status(400).json({ error: "Campos obrigatórios: amount, platformName, userPlatformId e cycleId." });
+  }
+
+  const cycles = await listDepositCycles();
+  const targetCycle = cycles.find((c) => String(c.id) === String(payload.cycleId));
+  if (!targetCycle) {
+    return res.status(400).json({ error: "Ciclo não encontrado." });
+  }
+  if (!targetCycle.active) {
+    return res.status(400).json({ error: "Este ciclo foi encerrado. Novos depósitos não são permitidos." });
   }
 
   const result = await withRouteTiming("create", {

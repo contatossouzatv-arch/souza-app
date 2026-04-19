@@ -147,7 +147,7 @@ export default function TicketsProgressBox({
 
   const ticketsBoxTitle = getSettingValue("tickets_box_title", "Ganhe Bilhetes Extras");
   const ticketsGoalAmount = parseFloat(getSettingValue("tickets_goal_amount", "100"));
-  const canFillDeposits = depositsEnabled && !!activeCycle;
+  const canFillDeposits = depositsEnabled && !!activeCycle?.active;
 
   const marcos50 = Math.floor(totalApproved / 50);
   const marcos100 = Math.floor(totalApproved / 100);
@@ -306,11 +306,13 @@ export default function TicketsProgressBox({
       return;
     }
 
-    if (!activeCycle) {
+    if (!activeCycle?.active) {
       toast({
         variant: "destructive",
-        title: "Sem ciclo ativo",
-        description: "Aguarde a abertura de um novo ciclo de sorteio.",
+        title: activeCycle ? "Ciclo encerrado" : "Sem ciclo ativo",
+        description: activeCycle
+          ? "O ciclo atual foi encerrado e está aguardando o sorteio dos bilhetes. Novos depósitos não são permitidos."
+          : "Aguarde a abertura de um novo ciclo de sorteio.",
       });
       return;
     }
@@ -536,7 +538,13 @@ export default function TicketsProgressBox({
           </div>
           <ChevronDown className={`w-5 h-5 text-slate-300 transition-transform ${formExpanded ? "rotate-180" : ""}`} />
         </button>
-        {!activeCycle && !isLoadingCycle ? (
+        {!isLoadingCycle && activeCycle && !activeCycle.active ? (
+          <div className="mx-4 mb-4 rounded-lg border border-amber-600/50 bg-amber-900/30 px-3 py-2">
+            <p className="text-xs font-medium text-amber-200">
+              O ciclo atual foi encerrado e está aguardando o sorteio dos bilhetes. Novos depósitos estão bloqueados.
+            </p>
+          </div>
+        ) : !activeCycle && !isLoadingCycle ? (
           <div className="mx-4 mb-4 rounded-lg border border-amber-600/50 bg-amber-900/30 px-3 py-2">
             <p className="text-xs font-medium text-amber-200">
               Sem ciclo ativo no momento. O preenchimento de novos depósitos foi bloqueado.
@@ -736,7 +744,7 @@ export default function TicketsProgressBox({
             <div className="flex gap-2">
               <Button
                 onClick={handleSubmit}
-                disabled={loading || !depositsEnabled || !activeCycle}
+                disabled={loading || !depositsEnabled || !activeCycle?.active}
                 className="flex-1 bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700"
               >
                 <Upload className="w-4 h-4 mr-2" />
