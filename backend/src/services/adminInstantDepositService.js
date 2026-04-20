@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import {
   createEngagementProcessingEvent,
+  createEntity,
   createEntityRecordData,
   findEngagementProcessingEventByRequestId,
   findEntityRecordByNameAndIdForUpdate,
@@ -957,26 +958,68 @@ export const depositDrawAdmin = {
       const cycleLocked = await findEntityRecordByNameAndIdForUpdate(client, "DepositantDrawCycle", cycleId);
       if (!cycleLocked) return await client.query("ROLLBACK").then(() => null);
       const deposits = await listEntityRecordsForUpdate(client, "Deposit", { cycle_id: cycleId, status: "approved" });
-      const ticketPool = [];
+
+      // Identify users with real deposits (amount > 0 and not bau-only)
+      const userRealDepositMap = {};
+      const userDepositMap = {};
       deposits.forEach((deposit) => {
-        (Array.isArray(deposit.ticket_numbers) ? deposit.ticket_numbers : []).forEach((ticketNumber) => {
-          ticketPool.push({ deposit, ticketNumber: String(ticketNumber) });
-        });
+        const uid = String(deposit.user_id || "").trim();
+        if (!uid) return;
+        if (!userDepositMap[uid]) userDepositMap[uid] = [];
+        userDepositMap[uid].push(deposit);
+        const isBauTicket = String(deposit.source_type || "") === "daily_chest_ticket_reward";
+        const hasAmount = Number(deposit.amount || 0) > 0;
+        if (!isBauTicket && hasAmount) userRealDepositMap[uid] = true;
+      });
+
+      // Build ticket pool: bau-only users get at most 1 ticket (very low probability)
+      const ticketPool = [];
+      const bauOnlyUserSeen = new Set();
+      deposits.forEach((deposit) => {
+        const uid = String(deposit.user_id || "").trim();
+        const isRealDepositor = !!userRealDepositMap[uid];
+        const tickets = Array.isArray(deposit.ticket_numbers) ? deposit.ticket_numbers : [];
+        if (isRealDepositor) {
+          tickets.forEach((ticketNumber) => ticketPool.push({ deposit, ticketNumber: String(ticketNumber) }));
+        } else if (!bauOnlyUserSeen.has(uid) && tickets.length > 0) {
+          // Bau-only user: include exactly 1 ticket in the pool
+          bauOnlyUserSeen.add(uid);
+          ticketPool.push({ deposit, ticketNumber: String(tickets[0]) });
+        }
       });
       if (ticketPool.length === 0) throw httpError("Não há bilhetes para sortear.", 409);
+
+      // Fetch user phone numbers
+      const uniqueUserIds = [...new Set(deposits.map((d) => String(d.user_id || "").trim()).filter(Boolean))];
+      const usersData = await findUsersByIds(uniqueUserIds);
+      const userPhoneMap = {};
+      usersData.forEach((u) => { userPhoneMap[String(u.id || "")] = String(u.phone || ""); });
+
+      // Build per-user aggregated deposit totals for winner record
+      const userTotalsMap = {};
+      deposits.forEach((deposit) => {
+        const uid = String(deposit.user_id || "").trim();
+        if (!userTotalsMap[uid]) userTotalsMap[uid] = { total_deposited: 0, tickets_count: 0 };
+        userTotalsMap[uid].total_deposited += Number(deposit.amount || 0);
+        userTotalsMap[uid].tickets_count += Array.isArray(deposit.ticket_numbers) ? deposit.ticket_numbers.length : 0;
+      });
+
       const selected = shuffle(ticketPool).slice(0, Math.min(Math.max(1, Number(winnerCount || 1)), ticketPool.length));
       const winners = [];
       for (const entry of selected) {
+        const uid = String(entry.deposit.user_id || "").trim();
+        const totals = userTotalsMap[uid] || { total_deposited: 0, tickets_count: 0 };
         winners.push(await createEntityRecordData(client, "DepositantDrawWinner", {
           user_id: entry.deposit.user_id,
           user_name: entry.deposit.user_name,
           user_email: entry.deposit.user_email,
           user_nick: entry.deposit.user_name,
           user_avatar: "",
+          user_phone: userPhoneMap[uid] || "",
           prize_type: "raffle",
           prize_amount: Math.max(0, Number(prizeAmount || 0)),
-          total_deposited: Number(entry.deposit.amount || 0),
-          tickets_count: Array.isArray(entry.deposit.ticket_numbers) ? entry.deposit.ticket_numbers.length : 0,
+          total_deposited: totals.total_deposited,
+          tickets_count: totals.tickets_count,
           ticket_numbers: [entry.ticketNumber],
           draw_date: new Date().toISOString(),
           cycle_id: cycleId,
@@ -1027,6 +1070,27 @@ export const depositDrawAdmin = {
       await syncDepositPrizeGalleryItem(client, { winner: updated, cycle, active: true });
       const processingEvent = await createEvent(client, { domain: "admin_deposit_draw_validate", action: "validate_winner", requestId, entityName: "DepositantDrawWinner", entityId: winnerId, userId: winner.user_id, metadata: { cycle_id: winner.cycle_id }, adminUserId, adminEmail });
       await client.query("COMMIT");
+
+      // Fire & forget: notifica o ganhador no app
+      const prizeLabel = `R$ ${Number(winner.prize_amount || 0).toFixed(2).replace(".", ",")}`;
+      createEntity("ProfileNotification", {
+        user_id: winner.user_id,
+        actor_user_id: "system:deposit_draw",
+        actor_name: "SouzaTV",
+        actor_nick: "admin",
+        actor_avatar_emoji: "🏆",
+        actor_profile_avatar_id: "",
+        actor_profile_image_mode: "avatar",
+        actor_profile_image_status: "none",
+        actor_profile_image_url: "",
+        type: "deposit_draw_winner",
+        title: "🏆 Você ganhou no Sorteio Geral!",
+        message: `Parabéns! Você foi sorteado no Ciclo #${cycle?.cycle_number || ""} e ganhou ${prizeLabel}. O prêmio já está na sua galeria.`,
+        status: "unread",
+        read_at: null,
+        metadata: { source_type: "deposit_draw", cycle_id: winner.cycle_id, cycle_number: cycle?.cycle_number || null, winner_id: winnerId, prize_amount: winner.prize_amount },
+      }).catch((err) => console.error("[deposit-draw] notification failed", err?.message));
+
       return { winner: updated, processing_event: processingEvent, idempotent: false };
     } catch (error) {
       await client.query("ROLLBACK");

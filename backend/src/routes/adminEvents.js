@@ -400,6 +400,10 @@ router.post("/admin/deposit-draws/winners/:id/validate", requireAuth, requireAdm
   await invalidateDepositReadCaches();
   emitEntityChanged(req, "DepositantDrawWinner", "updated", result?.winner || null);
   emitDepositLeaderboardUpdated(req.app?.locals?.io, { cycleId: result?.winner?.cycle_id || "", reason: "winner_validated" });
+  if (!result?.idempotent && result?.winner?.user_id) {
+    emitEntityChanged(req, "ProfileNotification", "created", { user_id: result.winner.user_id });
+    emitEntityChanged(req, "UserPrizeGalleryItem", "created", { user_id: result.winner.user_id });
+  }
   res.status(result?.idempotent ? 200 : 201).json(result);
 });
 

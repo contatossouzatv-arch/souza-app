@@ -133,6 +133,13 @@ export default function DepositantDrawTab() {
     return `****${lastFour}`;
   };
 
+  const maskPhone = (phone) => {
+    if (!phone) return null;
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 4) return null;
+    return `****${digits.slice(-4)}`;
+  };
+
   const handleDraw = async (prizeAmount, drawCount = 1) => {
     if (totalTickets === 0) {
       alert("Não há bilhetes para sortear!");
@@ -430,9 +437,9 @@ export default function DepositantDrawTab() {
                       <div>
                         <div className="font-bold text-yellow-200">{winner.user_name}</div>
                         <div className="text-sm text-yellow-300">@{winner.user_nick} • ID: {maskPlatformId(winner.user_platform_id)}</div>
-                        <div className="text-xs text-yellow-400">
-                          R$ {winner.total_deposited?.toFixed(2)} depositado
-                        </div>
+                        {maskPhone(winner.user_phone) && (
+                          <div className="text-xs text-yellow-400">Tel: {maskPhone(winner.user_phone)}</div>
+                        )}
                         <div className="text-sm font-bold text-green-400 mt-1">
                           Premio: R$ {winner.prize_amount?.toFixed(2)}
                         </div>
@@ -479,9 +486,9 @@ export default function DepositantDrawTab() {
                       <div>
                         <div className="font-bold text-green-200">{winner.user_name}</div>
                         <div className="text-sm text-green-300">@{winner.user_nick} • ID: {maskPlatformId(winner.user_platform_id)}</div>
-                        <div className="text-xs text-green-400">
-                          R$ {winner.total_deposited?.toFixed(2)} depositado
-                        </div>
+                        {maskPhone(winner.user_phone) && (
+                          <div className="text-xs text-green-400">Tel: {maskPhone(winner.user_phone)}</div>
+                        )}
                         <div className="text-sm font-bold text-yellow-400 mt-1">
                           Premio: R$ {winner.prize_amount?.toFixed(2)}
                         </div>
@@ -733,7 +740,9 @@ export default function DepositantDrawTab() {
                   </div>
 
                   <div className="text-sm text-yellow-300 mb-4">
-                    <p>Total depositado: R$ {drawnWinner.total_deposited?.toFixed(2)}</p>
+                    {maskPhone(drawnWinner.user_phone) && (
+                      <p>Tel: {maskPhone(drawnWinner.user_phone)}</p>
+                    )}
                     <p>Bilhetes: {drawnWinner.tickets_count}</p>
                   </div>
                 </motion.div>
