@@ -123,7 +123,10 @@ function resolveTimeoutMs(path = "", timeoutMs) {
     normalizedPath === "/api/entities/InstantRaffleParticipant/filter" ||
     normalizedPath === "/api/entities/LiveDrawParticipant/filter" ||
     normalizedPath === "/api/entities/GameCallParticipant/filter" ||
-    (normalizedPath.includes("/api/admin/instant-raffles/") && normalizedPath.includes("/participants"))
+    (normalizedPath.includes("/api/admin/instant-raffles/") && normalizedPath.includes("/participants")) ||
+    normalizedPath.includes("/api/game-call/") ||
+    normalizedPath.includes("/api/live-draws/") ||
+    normalizedPath.includes("/api/instant-raffles/")
   ) {
     return RAFFLE_PARTICIPANT_TIMEOUT_MS;
   }

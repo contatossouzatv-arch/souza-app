@@ -58,19 +58,11 @@ router.post("/live-draws/:id/join", requireAuth, async (req, res) => {
     requestId: String(req.body?.requestId || "").trim(),
   });
 
-  await logSecurityEvent(req, "LIVE_DRAW_JOINED", {
-    raffle_id: raffleId,
-    participant_id: result.participation?.id || "",
-    idempotent: result.idempotent,
-  });
-  await invalidateDashboardDynamicsSummary(req.auth.sub);
-  emitDashboardLiveUpdated(req.app?.locals?.io, {
-    raffleId,
-    userId: req.auth.sub,
-    reason: "participant_joined",
-  });
+  res.status(result.idempotent ? 200 : 201).json(result);
 
-  return res.status(result.idempotent ? 200 : 201).json(result);
+  emitDashboardLiveUpdated(req.app?.locals?.io, { raffleId, userId: req.auth.sub, reason: "participant_joined" });
+  invalidateDashboardDynamicsSummary(req.auth.sub).catch(() => {});
+  logSecurityEvent(req, "LIVE_DRAW_JOINED", { raffle_id: raffleId, participant_id: result.participation?.id || "", idempotent: result.idempotent }).catch(() => {});
 });
 
 router.get("/dynamics/summary", requireAuth, async (req, res) => {
@@ -125,19 +117,11 @@ router.post("/game-call/:id/join", requireAuth, async (req, res) => {
     requestId: String(req.body?.requestId || "").trim(),
   });
 
-  await logSecurityEvent(req, "GAME_CALL_JOINED", {
-    raffle_id: raffleId,
-    participant_id: result.participation?.id || "",
-    idempotent: result.idempotent,
-  });
-  await invalidateDashboardDynamicsSummary(req.auth.sub);
-  emitDashboardGamecallUpdated(req.app?.locals?.io, {
-    raffleId,
-    userId: req.auth.sub,
-    reason: "participant_joined",
-  });
+  res.status(result.idempotent ? 200 : 201).json(result);
 
-  return res.status(result.idempotent ? 200 : 201).json(result);
+  emitDashboardGamecallUpdated(req.app?.locals?.io, { raffleId, userId: req.auth.sub, reason: "participant_joined" });
+  invalidateDashboardDynamicsSummary(req.auth.sub).catch(() => {});
+  logSecurityEvent(req, "GAME_CALL_JOINED", { raffle_id: raffleId, participant_id: result.participation?.id || "", idempotent: result.idempotent }).catch(() => {});
 });
 
 router.post("/game-call/:id/submit", requireAuth, async (req, res) => {
@@ -153,19 +137,11 @@ router.post("/game-call/:id/submit", requireAuth, async (req, res) => {
     requestId: String(req.body?.requestId || "").trim(),
   });
 
-  await logSecurityEvent(req, "GAME_CALL_SUBMITTED", {
-    raffle_id: raffleId,
-    participant_id: result.participation?.id || "",
-    idempotent: result.idempotent,
-  });
-  await invalidateDashboardDynamicsSummary(req.auth.sub);
-  emitDashboardGamecallUpdated(req.app?.locals?.io, {
-    raffleId,
-    userId: req.auth.sub,
-    reason: "participant_submitted",
-  });
+  res.status(result.idempotent ? 200 : 201).json(result);
 
-  return res.status(result.idempotent ? 200 : 201).json(result);
+  emitDashboardGamecallUpdated(req.app?.locals?.io, { raffleId, userId: req.auth.sub, reason: "participant_submitted" });
+  invalidateDashboardDynamicsSummary(req.auth.sub).catch(() => {});
+  logSecurityEvent(req, "GAME_CALL_SUBMITTED", { raffle_id: raffleId, participant_id: result.participation?.id || "", idempotent: result.idempotent }).catch(() => {});
 });
 
 router.post("/instant-raffles/:id/join", requireAuth, async (req, res) => {
@@ -180,19 +156,11 @@ router.post("/instant-raffles/:id/join", requireAuth, async (req, res) => {
     requestId: String(req.body?.requestId || "").trim(),
   });
 
-  await logSecurityEvent(req, "INSTANT_RAFFLE_JOINED", {
-    raffle_id: raffleId,
-    participant_id: result.participation?.id || "",
-    idempotent: result.idempotent,
-  });
-  await invalidateDashboardDynamicsSummary(req.auth.sub);
-  emitDashboardInstantUpdated(req.app?.locals?.io, {
-    raffleId,
-    userId: req.auth.sub,
-    reason: "participant_joined",
-  });
+  res.status(result.idempotent ? 200 : 201).json(result);
 
-  return res.status(result.idempotent ? 200 : 201).json(result);
+  emitDashboardInstantUpdated(req.app?.locals?.io, { raffleId, userId: req.auth.sub, reason: "participant_joined" });
+  invalidateDashboardDynamicsSummary(req.auth.sub).catch(() => {});
+  logSecurityEvent(req, "INSTANT_RAFFLE_JOINED", { raffle_id: raffleId, participant_id: result.participation?.id || "", idempotent: result.idempotent }).catch(() => {});
 });
 
 router.post("/instant-raffles/:id/dismiss", requireAuth, async (req, res) => {
@@ -205,19 +173,11 @@ router.post("/instant-raffles/:id/dismiss", requireAuth, async (req, res) => {
     requestId: String(req.body?.requestId || "").trim(),
   });
 
-  await logSecurityEvent(req, "INSTANT_RAFFLE_DISMISSED", {
-    raffle_id: raffleId,
-    participant_id: result.participation?.id || "",
-    idempotent: result.idempotent,
-  });
-  await invalidateDashboardDynamicsSummary(req.auth.sub);
-  emitDashboardInstantUpdated(req.app?.locals?.io, {
-    raffleId,
-    userId: req.auth.sub,
-    reason: "participant_dismissed",
-  });
+  res.status(result.idempotent ? 200 : 201).json(result);
 
-  return res.status(result.idempotent ? 200 : 201).json(result);
+  emitDashboardInstantUpdated(req.app?.locals?.io, { raffleId, userId: req.auth.sub, reason: "participant_dismissed" });
+  invalidateDashboardDynamicsSummary(req.auth.sub).catch(() => {});
+  logSecurityEvent(req, "INSTANT_RAFFLE_DISMISSED", { raffle_id: raffleId, participant_id: result.participation?.id || "", idempotent: result.idempotent }).catch(() => {});
 });
 
 router.post("/winnings/:kind/:id/claim", requireAuth, async (req, res) => {
