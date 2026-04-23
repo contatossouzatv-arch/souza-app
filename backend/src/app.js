@@ -10,6 +10,10 @@ import authRoutes from "./routes/auth.js";
 import adminEventsRoutes from "./routes/adminEvents.js";
 import depositsRoutes from "./routes/deposits.js";
 import gamificationRoutes from "./routes/gamification.js";
+import engagementRoutes from "./routes/engagement.js";
+import socialRoutes from "./routes/social.js";
+import pointsRoutes from "./routes/points.js";
+import dailyChestRoutes from "./routes/dailyChest.js";
 import createEntitiesRouter from "./routes/entities.js";
 import uploadsRoutes from "./routes/uploads.js";
 import { appendNavigationLog, checkDbHealth } from "./db/index.js";
@@ -326,6 +330,10 @@ export function createApp(io) {
   app.use("/api", adminEventsRoutes);
   app.use("/api", depositsRoutes);
   app.use("/api", gamificationRoutes);
+  app.use("/api", engagementRoutes);
+  app.use("/api", socialRoutes);
+  app.use("/api/points", pointsRoutes);
+  app.use("/api/daily-chest", dailyChestRoutes);
   app.use("/api/entities", createEntitiesRouter(io));
   app.use("/api/uploads", uploadRateLimiter, uploadsRoutes);
 
